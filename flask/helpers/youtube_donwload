@@ -1,0 +1,5 @@
+#!/bin/bash
+
+yt-dlp -f 'bestvideo[height=720]+bestaudio[ext=m4a]/best[height=720]' --merge-output-format mp4 "$1"
+
+

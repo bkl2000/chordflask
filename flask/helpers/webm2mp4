@@ -1,0 +1,10 @@
+#!/bin/bash
+
+for i in *.webm; do
+
+   s=$(basename "$i"  .${i##*.})
+   echo ffmpeg -fflags +genpts -i "$i" -r 24 "${s}.mp4"
+   ffmpeg -fflags +genpts -i "$i" -r 24 "${s}.mp4"
+
+done
+

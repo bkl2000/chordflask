@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg \
+            pkg-config \
+            vamp-plugin-sdk \
+            python3-venv \
+            python3-dev \
+            build-essential \
+            libasound2-dev \
+            libcairo2-dev
+
+      - name: Set up Python
+        run: |
+          python3 -m venv ~/.venvs/chordifier
+          ~/.venvs/chordifier/bin/python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install dependencies
+        run: |
+          CHORDIFIER_VENV=~/.venvs/chordifier bash scripts/setup_venv.sh --dev
+
+      - name: Install Vamp plugins
+        run: |
+          CHORDIFIER_VENV=~/.venvs/chordifier \
+            bash flask/install_vamp.sh --dest "${RUNNER_TEMP}/vamp"
+
+      - name: Check
+        env:
+          CHORDIFIER_REQUIRE_VAMP: "1"
+          CHORDIFIER_TEST_VAMP_PATH: ${{ runner.temp }}/vamp
+          VAMP_PATH: ${{ runner.temp }}/vamp
+        run: |
+          CHORDIFIER_VENV=~/.venvs/chordifier make check

@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local configuration
+.venv/
+venv/
+env/
+*.env
+.env*
+
+# Build and packaging outputs
+build/
+dist/
+*.egg-info/
+*.spec
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+
+# Local logs and temporary files
+*.log
+scripts/error.txt
+*.tmp
+*.bak
+*~
+*.ok
+*.pdf
+*.py.[0-9]*
+flask/tmp/
+flask/tmp1/
+flask/old/
+flask/a
+flask/aa
+flask/grillinguxo/
+backups/
+/vamp/
+
+# Generated media and analysis data
+videos/**/*.mp3
+videos/**/*.json
+videos/**/*.json.before-*
+videos/**/*.xml
+videos/**/*.mid
+videos/**/*.song
+videos/**/*.wav
+videos/*.mp4
+videos/*.webm
+videos/**/*.mp4
+videos/**/*.webm
+videos/.chordflask/
+!videos/README.md
+
+# Local standalone binary output
+flask/dist/
+flask/templates/home.html.*
+flask/templates/home_* 
+
+# Platform-specific plugin binaries and archives.
+# Runtime downloads stay local; selected vendor binaries under vendor/ are tracked.
+vamp_plugins/**/*.so
+vamp_plugins/**/*.cat
+vamp_plugins/**/*.tar.gz
+vamp_plugins/**/*.tar.bz2
+flask/vamp_plugins/**/*.so
+flask/vamp_plugins/**/*.tar.gz
+flask/vamp_plugins/**/*.tar.bz2
+!vendor/vamp/linux-x86_64/*.so
+!vendor/vamp/linux-x86_64/*.cat
+!vendor/vamp/linux-x86_64/*.n3
