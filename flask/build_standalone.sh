@@ -34,7 +34,11 @@ if grep -Eiq "imageio_ffmpeg/binaries/[^']*ffmpeg|vamp_plugins/[^']*\.so|vendor/
     exit 1
 fi
 
-cat > "${SCRIPT_DIR}/dist/chordflask.sh" <<'EOF'
+rm -rf "${RELEASE_DIR}"
+mkdir -p "${RELEASE_DIR}"
+cp "${SCRIPT_DIR}/dist/chordflask" "${RELEASE_DIR}/"
+
+cat > "${RELEASE_DIR}/chordflask.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -43,14 +47,8 @@ CHORDFLASK_BIN="${SCRIPT_DIR}/chordflask"
 exec "${CHORDFLASK_BIN}" "$@"
 EOF
 
-chmod +x "${SCRIPT_DIR}/dist/chordflask.sh"
-
-rm -rf "${RELEASE_DIR}"
-mkdir -p "${RELEASE_DIR}"
-cp "${SCRIPT_DIR}/dist/chordflask" "${RELEASE_DIR}/"
-cp "${SCRIPT_DIR}/dist/chordflask.sh" "${RELEASE_DIR}/"
 cp "${SCRIPT_DIR}/install_vamp.sh" "${RELEASE_DIR}/"
-cp "${SCRIPT_DIR}/VAMP_INSTALL.md" "${RELEASE_DIR}/"
+cp "${PROJECT_ROOT}/docs/STANDALONE.md" "${RELEASE_DIR}/README.md"
 cp "${PROJECT_ROOT}/THIRD_PARTY_NOTICES.md" "${RELEASE_DIR}/"
 semver="$(head -n1 "${PROJECT_ROOT}/VERSION")"
 printf '%s %s %s\n' "$semver" "$(date -u +'%Y-%m-%d %H:%M')" "$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD)" \
@@ -59,9 +57,9 @@ chmod +x "${RELEASE_DIR}/chordflask" "${RELEASE_DIR}/chordflask.sh" "${RELEASE_D
 tar -C "${SCRIPT_DIR}/dist" -czf "${RELEASE_ARCHIVE}" "${RELEASE_NAME}"
 
 printf '\n'
-printf 'Standalone: %s\n' "${SCRIPT_DIR}/dist/chordflask"
+printf 'Standalone: %s\n' "${RELEASE_DIR}/chordflask"
 printf 'Archive:    %s\n' "${RELEASE_ARCHIVE}"
-printf 'Start:      %s\n' "${SCRIPT_DIR}/dist/chordflask.sh"
+printf 'Start:      %s\n' "${RELEASE_DIR}/chordflask.sh"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
     printf 'MISSING: ffmpeg — sudo apt install ffmpeg\n'

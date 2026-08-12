@@ -1,194 +1,103 @@
 # ChordFlask
 
-ChordFlask extracts chords and beat timing from MP4/WebM media and displays
-them during browser playback. It is an independent project and is not
-affiliated with or endorsed by the Pallets project, which maintains Flask.
+ChordFlask analyzes chords and beats in MP4/WebM files and shows them alongside
+browser playback. It runs locally; media and analysis data are not uploaded.
 
-## Requirements
+ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
+13+. CPython 3.12 is the release-tested Python version. GitHub releases contain
+source code only, not a ready-made executable.
 
-ChordFlask currently targets Linux x86_64 with CPython 3.12. Install the
-required system tools on Ubuntu, Linux Mint, or Debian:
+## Quick start from source
+
+This is the recommended installation method. Install the system packages:
 
 ```bash
-sudo apt install ffmpeg pkg-config vamp-plugin-sdk python3-venv python3-dev build-essential libasound2-dev libcairo2-dev
+sudo apt update
+sudo apt install --no-install-recommends \
+  git curl ffmpeg pkg-config vamp-plugin-sdk python3-venv python3-dev \
+  build-essential libasound2-dev libcairo2-dev
 ```
 
-The supported platform family is Ubuntu 24.04 or newer, Linux Mint 22 or newer
-in the corresponding Ubuntu generation, and Debian 13 or newer. CPython 3.12
-is the release-validated Python version. See `docs/COMPATIBILITY.md` for the
-compatibility policy and the additional checks required before claiming a new
-distribution or Python version as supported.
+Download ChordFlask, create its private Python environment, install the two
+required audio-analysis plugins, and start it:
 
-FFmpeg and these Vamp plugins are external runtime requirements and are not
-included in the source release:
+```bash
+git clone https://github.com/bkl2000/chordflask.git
+cd chordflask
+make setup-runtime
+make plugins
+make run
+```
 
-- `nnls-chroma:chordino` for chord extraction
-- `qm-vamp-plugins:qm-barbeattracker` for beat and downbeat tracking
+Open <http://localhost:5000>. Stop ChordFlask with `Ctrl+C` in the terminal.
+The Make targets use `~/.venvs/chordifier` automatically; you do not need to
+activate that environment.
 
-## Installation
+## First use
 
-Create the standard virtual environment and install the Python dependencies:
+1. Enter the absolute path to a directory containing MP4 or WebM files.
+2. Select **Load**, then select a file from the list.
+3. ChordFlask queues missing analysis automatically. The status above the chord
+   grid shows whether analysis is running, waiting, or failed.
+4. Use **Previous**, **Next**, **Repeat**, **Continue**, and **Transpose** while
+   playing the file.
+
+Generated JSON, MusicXML, MIDI, and temporary audio are stored in a
+`.chordflask` directory beside the media. Your user therefore needs write
+permission for the media directory. Existing media files are not modified.
+
+## Build a portable Linux bundle
+
+This advanced workflow builds ChordFlask on your machine for use on a compatible
+Linux x86_64 machine. It is not required for normal use.
 
 ```bash
 make setup
-source ~/.venvs/chordifier/bin/activate
-```
-
-Install the pinned Vamp plugins into `~/.vamp`:
-
-```bash
-scripts/install_vamp_plugins.sh
-```
-
-The installer verifies the downloaded archives and can install into another
-user-writable directory with `--dest`. Set `VAMP_PATH` to that directory before
-starting ChordFlask. See `docs/VAMP.md` for versions, checksums, and discovery
-details.
-
-Runtime dependencies are listed in `requirements-core.txt`; developer/test and
-local standalone-build dependencies are separated into `requirements-dev.txt`
-and `requirements-build.txt`. CPython 3.12 uses the reviewed constraints in
-`constraints-python312.txt`. Optional audio-playback dependencies can be
-installed with:
-
-```bash
-CHORDIFIER_OPTIONAL=1 make setup
-```
-
-The legacy `madmom` analysis path is optional and is not part of the standard
-CPython 3.12 setup.
-
-## Running ChordFlask
-
-Start the web application and its automatically managed analysis worker:
-
-```bash
-make run
-```
-
-Open `http://localhost:5000`. ChordFlask listens on `127.0.0.1` by default.
-
-The file browser loads MP4 and WebM files. When a file has no analysis yet,
-ChordFlask queues it without interrupting current playback. The worker analyzes
-one file at a time and stores generated JSON, MusicXML, MIDI, and intermediate
-audio in a media-side `.chordflask` directory. The chord header reports whether
-analysis is running, waiting, failed, or unavailable because no worker is
-active.
-
-With `Continue On`, an unanalyzed next song waits at the end of the current
-song and starts automatically when its analysis succeeds. A failure stops
-automatic continuation and remains visible in the chord header. The small `↻`
-control queues a fresh Chordino/QM analysis of the loaded file while playback
-and browsing remain available.
-
-For deliberately separate process management:
-
-```bash
-cd flask
-python3 chordflask.py --worker
-python3 chordflask.py --no-worker
-```
-
-The compatibility launcher `scripts/chordflask.sh` starts the normal managed
-worker configuration.
-
-## Local security boundary
-
-ChordFlask is a local-first trusted-user application. It has no authentication,
-TLS, or CSRF protection. Do not expose it to an untrusted network or the public
-internet.
-
-Trusted-LAN use requires an explicit non-loopback listener and one or more
-allowed media roots:
-
-```bash
-CHORDIFIER_LISTEN=0.0.0.0 \
-CHORDIFIER_MEDIA_ROOTS=/path/to/videos:/another/media/root \
-make run
-```
-
-LAN startup is rejected without configured media roots. On supported Linux
-systems the root list uses `:` as its separator. See `SECURITY.md` for the full
-deployment boundary and vulnerability-reporting process.
-
-## Analysis tracks and schema v3
-
-ChordFlask stores independent named analysis tracks per media file:
-
-- Chord tracks contain timestamped chord labels. Built-in analysis produces a
-  `chordino` track; the optional `madmom` path can provide another track.
-- Rhythm tracks contain tempo, meter, beats, and downbeats. Built-in analysis
-  produces `qm_barbeattracker`.
-- Beat-to-chord alignment is derived from the active chord/rhythm combination
-  and is not persisted.
-- Track selectors appear in the chord header when multiple choices exist and
-  rebuild the grid without reloading the video.
-- Schema v1, v2, and unversioned files remain readable; the next normal save
-  writes schema v3.
-
-Reanalysis validates a replacement in an isolated directory, preserves
-`user_data`, display preferences, and unrelated tracks, then atomically
-replaces the JSON only after success. Optional MusicXML and MIDI replacements
-are best effort and do not delete a working older file when generation fails.
-
-ChordFlask has no PyTorch dependency or inference model.
-
-## Metric-aware chords
-
-The browser uses rhythm-aware chord display by default. On a sufficiently
-regular beat grid it removes only short isolated `A-B-A` detections on weak
-beats. This affects display only: raw timestamps, analysis JSON, and exports do
-not change.
-
-Use nearest-beat display instead with:
-
-```bash
-python3 flask/chordflask.py --no-metric-chords
-```
-
-The former explicit `--metric-chords` option remains accepted. A read-only
-diagnostic shows rhythm classification and each displayed beat that differs:
-
-```bash
-python3 scripts/metric_chords_diff.py path/to/chords.json
-```
-
-The chord grid repeats held chords at each two-measure row boundary. Video,
-grid, and controls share the available viewport proportionally so the layout
-remains usable across different window sizes.
-
-## Development and tests
-
-Run `make` without arguments to list the project commands. The usual workflows
-are:
-
-```bash
-make setup
-make check
-make run
-```
-
-`make check` runs pytest, Ruff, Python compilation, and `git diff --check`.
-Tests cover the Flask API, schema compatibility, queue/worker behavior,
-analysis boundaries, playback mapping, and setup scripts. Real FFmpeg and Vamp
-checks are available when those external tools are installed.
-
-## Local standalone build
-
-A local Linux x86_64 standalone executable can be built with:
-
-```bash
 make standalone
-make standalone-run
 ```
 
-The build deliberately excludes FFmpeg and Vamp plugin binaries. Target
-machines must provide system FFmpeg and install the required plugins into
-`~/.vamp` or a directory named by `VAMP_PATH`. The v0.5.0 GitHub release is
-source-only and does not attach a standalone binary.
+The transferable archive is:
+
+```text
+flask/dist/chordflask-linux-x86_64.tar.gz
+```
+
+Test the unpackaged build locally with `make standalone-run`. The archive does
+not contain FFmpeg or Vamp plugin binaries. After copying it to the target
+machine, follow [the complete standalone guide](docs/STANDALONE.md). The same
+guide is included as `README.md` inside the archive.
+
+## Troubleshooting
+
+- **`ffmpeg` was not found:** run `sudo apt install ffmpeg` and restart.
+- **Vamp plugins are missing:** run `make plugins` from the source directory and
+  restart. In an unpacked portable bundle, run `./install_vamp.sh` instead.
+- **No files appear:** load an existing directory and check that its files end
+  in `.mp4` or `.webm`.
+- **Analysis cannot write files:** give your user write permission for the media
+  directory so ChordFlask can create `.chordflask`.
+- **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 make run` and open
+  <http://localhost:5050>.
+
+## Security
+
+ChordFlask has no authentication, TLS, or CSRF protection. Keep the default
+`127.0.0.1` listener unless every device on the network is trusted. Read
+[SECURITY.md](SECURITY.md) before enabling LAN access.
+
+## More documentation
+
+- [Playback, analysis tracks, and chord display](docs/ANALYSIS.md)
+- [Vamp plugin installation and verification](docs/VAMP.md)
+- [Portable bundle guide](docs/STANDALONE.md)
+- [Platform and Python compatibility](docs/COMPATIBILITY.md)
+- [Development and tests](CONTRIBUTING.md)
 
 ## License
 
 ChordFlask-owned source is available under the MIT License. FFmpeg, Vamp
-plugins, and Python dependencies retain their own licenses. See `LICENSE` and
-`THIRD_PARTY_NOTICES.md`.
+plugins, and Python dependencies retain their own licenses. See [LICENSE](LICENSE)
+and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+ChordFlask is independent of and not endorsed by the Pallets project, which
+maintains Flask.

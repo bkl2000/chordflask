@@ -62,7 +62,7 @@ def test_index_contains_file_autoload_logic():
     assert "openDirectory" in body
     assert "continueButton" in body
     assert "playNextFileIfContinue" in body
-    assert "loadSelectedFile({ autoplay: true })" in body
+    assert "navigateFile(1, 'continue')" in body
     assert "queueStatus" in body
     assert "showQueueStatus" in body
     assert "localStorage" in body
@@ -88,11 +88,12 @@ def test_continue_waits_for_missing_analysis_then_autoplays_new_song():
         body.index("semitonesInput.value = 0;")
     ]
 
-    assert "let continueAfterAnalysis = null;" in body
-    assert "function waitForAnalysis(dirname, filename, path)" in body
+    assert "let pendingAnalysisLoad = null;" in body
+    assert "function waitForAnalysis(dirname, filename, path, reason)" in body
     assert "function resumeAfterAnalysis(currentPaths, failed)" in body
-    assert "waitForAnalysis(dirname, filename, queuedPath);" in queue_branch
+    assert "analysisWaitReason || 'continue'" in queue_branch
     assert "setContinue(false);" not in queue_branch
+    assert "waiting.reason === 'continue' && !isContinuing" in body
     assert "if (currentPaths.has(waiting.path))" in body
     assert "loadSelectedFile({" in body
     assert "autoplay: true," in body
@@ -113,6 +114,83 @@ def test_continue_stops_instead_of_skipping_failed_analysis():
     assert "setContinue(false);" in resume_function
     assert "Analysis failed: ${waiting.filename}" in resume_function
     assert "playNextFileIfContinue" not in resume_function
+
+
+def test_index_contains_accessible_previous_and_next_controls():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'class="playback-navigation" aria-label="Playlist navigation"' in body
+    assert 'id="previousFileButton"' in body
+    assert 'onclick="navigateFile(-1)"' in body
+    assert 'title="Previous file" aria-label="Previous file" disabled' in body
+    assert 'id="nextFileButton"' in body
+    assert 'onclick="navigateFile(1)"' in body
+    assert 'title="Next file" aria-label="Next file" disabled' in body
+    assert ".playback-navigation button:disabled" in body
+    assert "width: 32px" in body
+    assert "height: 28px" in body
+
+
+def test_manual_navigation_uses_visible_order_and_waits_for_analysis():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    navigate_function = body[
+        body.index("function navigateFile"):
+        body.index("function playNextFileIfContinue")
+    ]
+    queue_start = body.index("if (data.status === 'queued'")
+    queue_branch = body[queue_start:body.index("semitonesInput.value = 0;", queue_start)]
+
+    assert "file => file.name === navigationAnchorName()" in navigate_function
+    assert "currentFiles[currentIndex + offset]" in navigate_function
+    assert "pendingAnalysisLoad = null;" in navigate_function
+    assert "selectedFileName = targetFile.name" in navigate_function
+    assert "autoplay: true, analysisWaitReason: reason" in navigate_function
+    assert "analysisWaitReason || isContinuing" in queue_branch
+    assert "waitForAnalysis(" in queue_branch
+    assert "pendingAnalysisLoad = { dirname, filename, path, reason };" in body
+    continue_start = body.index("function playNextFileIfContinue")
+    continue_function = body[
+        continue_start:
+        body.index("video.addEventListener", continue_start)
+    ]
+    assert "isRepeating || pendingAnalysisLoad" in continue_function
+
+
+def test_navigation_buttons_follow_anchor_boundaries_and_loading_state():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    update_function = body[
+        body.index("function updateNavigationButtons"):
+        body.index("function waitForAnalysis")
+    ]
+
+    assert "pendingAnalysisLoad?.filename || loadedFileName" in body
+    assert "currentFiles.findIndex" in update_function
+    assert "loadRequestInFlight || currentIndex <= 0" in update_function
+    assert "currentIndex >= currentFiles.length - 1" in update_function
+    assert "updateNavigationButtons();" in body[
+        body.index("function renderBrowserTable"):
+        body.index("function renderDirectoryRow")
+    ]
+
+
+def test_playlist_navigation_does_not_add_height_to_control_bar():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    topbar = body[body.index(".topbar {"):body.index(".status {")]
+    controls = body[body.index(".controls {"):body.index(".control {")]
+
+    assert "display: flex" in topbar
+    assert "flex: 1" in topbar
+    assert "text-overflow: ellipsis" in topbar
+    assert ".playback-navigation" in topbar
+    assert "grid-template-columns: minmax(230px, 0.48fr) minmax(0, 2fr) 128px" in controls
 
 
 def test_repeated_position_returns_complete_player_payload():

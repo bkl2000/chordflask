@@ -96,14 +96,14 @@ standalone: check
 	@PATH="$(VENV_DIR)/bin:$$PATH" bash "$(ROOT_DIR)/flask/build_standalone.sh"
 
 standalone-run:
-	@if [[ ! -x "$(ROOT_DIR)/flask/dist/chordflask.sh" ]]; then \
+	@if [[ ! -x "$(ROOT_DIR)/flask/dist/chordflask-linux-x86_64/chordflask.sh" ]]; then \
 		echo 'Standalone build not found. Run: make standalone' >&2; \
 		exit 1; \
 	fi
-	@cd "$(ROOT_DIR)" && flask/dist/chordflask.sh
+	@cd "$(ROOT_DIR)" && flask/dist/chordflask-linux-x86_64/chordflask.sh
 
 plugins:
-	@bash "$(ROOT_DIR)/scripts/install_vamp_plugins.sh"
+	@CHORDIFIER_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/install_vamp_plugins.sh"
 
 status:
 	@git -C "$(ROOT_DIR)" status --short

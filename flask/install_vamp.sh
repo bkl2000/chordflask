@@ -39,7 +39,7 @@ Options:
 Environment:
   NNLS_URL      Direct download URL for ${NNLS_ARCHIVE}.
   QM_URL        Direct download URL for ${QM_ARCHIVE}.
-  CHORDIFIER_VENV  Source-install venv used for plugin verification.
+  CHORDIFIER_VENV  Source-install environment used for plugin verification.
 
 The script never invokes sudo.
 USAGE

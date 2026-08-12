@@ -28,8 +28,7 @@ from mp4playerflask import MP4PlayerFlask  # Import the MP4PlayerFlask class
 def _load_version():
     """Read VERSION semver and append git date+hash when available."""
     if getattr(sys, "frozen", False):
-        base = os.path.dirname(sys._MEIPASS) if hasattr(sys, "_MEIPASS") else os.path.dirname(sys.executable)
-        frozen_version = os.path.join(base, "VERSION")
+        frozen_version = os.path.join(os.path.dirname(sys.executable), "VERSION")
         if os.path.isfile(frozen_version):
             return open(frozen_version).read().strip()
         return "unknown"

@@ -46,7 +46,7 @@ jobs:
       - name: Install Vamp plugins
         run: |
           CHORDIFIER_VENV=~/.venvs/chordifier \
-            bash flask/install_vamp.sh --dest "${RUNNER_TEMP}/vamp"
+            bash scripts/install_vamp_plugins.sh --dest "${RUNNER_TEMP}/vamp"
 
       - name: Check
         env:

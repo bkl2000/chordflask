@@ -108,6 +108,13 @@ def test_installer_help_shows_usage():
     assert "--from" in result.stdout
 
 
+def test_source_installer_delegates_to_verified_installer():
+    wrapper = (REPO_ROOT / "scripts" / "install_vamp_plugins.sh").read_text()
+
+    assert 'flask/install_vamp.sh' in wrapper
+    assert 'exec bash "${ROOT_DIR}/flask/install_vamp.sh" "$@"' in wrapper
+
+
 def test_installer_reports_missing_network_when_unreachable(tmp_path, monkeypatch):
     monkeypatch.setenv("NNLS_URL", "http://127.0.0.1:1/nonexistent")
     monkeypatch.setenv("QM_URL", "http://127.0.0.1:1/nonexistent")
@@ -137,7 +144,7 @@ def test_build_script_bundles_installer():
     content = build_script.read_text()
 
     assert "install_vamp.sh" in content
-    assert "VAMP_INSTALL.md" in content
+    assert 'docs/STANDALONE.md" "${RELEASE_DIR}/README.md' in content
     assert "THIRD_PARTY_NOTICES.md" in content
 
 

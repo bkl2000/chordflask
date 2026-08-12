@@ -63,8 +63,8 @@ ChordFlask requires two Vamp plugin identifiers at runtime:
 
 The pinned versions are NNLS Chroma 1.1 and QM Vamp Plugins 1.8.0. Plugin
 binaries are not supplied in the source release or standalone build. The
-standalone ships an installer (`install_vamp.sh`) and guide (`VAMP_INSTALL.md`)
-for the target machine.
+standalone ships an installer (`install_vamp.sh`) and complete target guide
+(`README.md`).
 
 The Python `vamp==1.1.0` host package has been validated on CPython 3.12.3,
 Linux x86_64. Plugin discovery and in-memory analysis are tested with real

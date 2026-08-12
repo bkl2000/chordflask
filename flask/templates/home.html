@@ -47,14 +47,43 @@
     }
 
     h1 {
+      flex: 1;
+      min-width: 0;
       margin: 0;
+      overflow: hidden;
       font-size: 19px;
       font-weight: 700;
       color: var(--text);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .playback-navigation {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 6px;
+    }
+
+    .playback-navigation button {
+      width: 32px;
+      min-width: 32px;
+      height: 28px;
+      padding: 0;
+      font-size: 15px;
+      line-height: 26px;
+    }
+
+    .playback-navigation button:disabled,
+    .playback-navigation button:disabled:hover {
+      cursor: default;
+      border-color: #9ca8b4;
+      background: #b3bdc7;
+      opacity: 0.65;
     }
 
     .status {
       display: flex;
+      flex: 0 0 auto;
       align-items: center;
       gap: 14px;
       color: var(--muted);
@@ -567,6 +596,12 @@
   <main class="app">
     <header class="topbar">
       <h1 id="pageTitle">ChordFlask</h1>
+      <nav class="playback-navigation" aria-label="Playlist navigation">
+        <button id="previousFileButton" type="button" onclick="navigateFile(-1)"
+                title="Previous file" aria-label="Previous file" disabled>&#x23EE;</button>
+        <button id="nextFileButton" type="button" onclick="navigateFile(1)"
+                title="Next file" aria-label="Next file" disabled>&#x23ED;</button>
+      </nav>
       <div class="status">
         <span id="currentPosition">Position: 0.00s</span>
         <span id="bpmStatus">BPM: --</span>
@@ -680,6 +715,8 @@
     let reanalyzeButton = document.getElementById('reanalyzeButton');
     let chordTrackSelect = document.getElementById('chordTrackSelect');
     let rhythmTrackSelect = document.getElementById('rhythmTrackSelect');
+    let previousFileButton = document.getElementById('previousFileButton');
+    let nextFileButton = document.getElementById('nextFileButton');
 
     let isRepeating = false;
     let isContinuing = false;
@@ -695,7 +732,7 @@
     let loadedMediaPath = '';
     let loadedAnalysisValid = false;
     let loadRequestInFlight = false;
-    let continueAfterAnalysis = null;
+    let pendingAnalysisLoad = null;
     let queuedAnalysisPaths = new Set();
     let previousQueuePaths = new Set();
     let queueStatusInitialized = false;
@@ -812,23 +849,48 @@
       return path.split('/').pop() || path;
     }
 
-    function waitForAnalysis(dirname, filename, path) {
-      if (!isContinuing) {
+    function navigationAnchorName() {
+      return pendingAnalysisLoad?.filename || loadedFileName;
+    }
+
+    function updateNavigationButtons() {
+      const anchor = navigationAnchorName();
+      const currentIndex = currentFiles.findIndex(file => file.name === anchor);
+      previousFileButton.disabled = loadRequestInFlight || currentIndex <= 0;
+      nextFileButton.disabled = (
+        loadRequestInFlight || currentIndex < 0 || currentIndex >= currentFiles.length - 1
+      );
+    }
+
+    function waitForAnalysis(dirname, filename, path, reason) {
+      if (reason === 'continue' && !isContinuing) {
         return;
       }
-      continueAfterAnalysis = { dirname, filename, path };
+      pendingAnalysisLoad = { dirname, filename, path, reason };
       fileStatus.innerText = `Waiting for analysis: ${filename}`;
+      updateNavigationButtons();
     }
 
     function resumeAfterAnalysis(currentPaths, failed) {
-      if (!continueAfterAnalysis || !isContinuing || loadRequestInFlight) {
+      if (!pendingAnalysisLoad || loadRequestInFlight) {
         return;
       }
 
-      const waiting = continueAfterAnalysis;
+      const waiting = pendingAnalysisLoad;
+      if (waiting.reason === 'continue' && !isContinuing) {
+        pendingAnalysisLoad = null;
+        updateNavigationButtons();
+        return;
+      }
       const failedItem = failed.find(item => item.path === waiting.path);
       if (failedItem) {
-        setContinue(false);
+        if (waiting.reason === 'continue') {
+          setContinue(false);
+        } else {
+          pendingAnalysisLoad = null;
+          selectedFileName = loadedFileName;
+          renderBrowserTable(currentDirectories, currentFiles);
+        }
         fileStatus.innerText = `Analysis failed: ${waiting.filename}`;
         return;
       }
@@ -836,8 +898,9 @@
         return;
       }
 
-      continueAfterAnalysis = null;
+      pendingAnalysisLoad = null;
       selectedFileName = waiting.filename;
+      renderBrowserTable(currentDirectories, currentFiles);
       loadSelectedFile({
         autoplay: true,
         dirname: waiting.dirname,
@@ -1107,6 +1170,7 @@
         cell.textContent = 'No subdirectories or media files found';
         row.appendChild(cell);
         fileTableBody.appendChild(row);
+        updateNavigationButtons();
         return;
       }
 
@@ -1143,6 +1207,7 @@
         row.appendChild(dateCell);
         fileTableBody.appendChild(row);
       });
+      updateNavigationButtons();
     }
 
     function renderDirectoryRow(name, path, title, mtime = '') {
@@ -1170,6 +1235,7 @@
 
     function loadSelectedFile(options = {}) {
       const autoplay = options.autoplay === true;
+      const analysisWaitReason = options.analysisWaitReason || '';
       const filename = options.filename || selectedFileName;
       const dirname = options.dirname || dirnameInput.value.trim();
 
@@ -1184,7 +1250,11 @@
       }
       if (queuedAnalysisPaths.has(requestedPath)) {
         showQueueStatus(`Already queued: ${filename}`);
-        waitForAnalysis(dirname, filename, requestedPath);
+        if (analysisWaitReason || isContinuing) {
+          waitForAnalysis(
+            dirname, filename, requestedPath, analysisWaitReason || 'continue'
+          );
+        }
         return;
       }
 
@@ -1192,6 +1262,7 @@
       localStorage.setItem(storageKeys.filter, document.getElementById('matchstring').value.trim());
       fileStatus.innerText = 'Checking analysis...';
       loadRequestInFlight = true;
+      updateNavigationButtons();
 
       fetch('/load_file', {
         method: 'POST',
@@ -1223,14 +1294,16 @@
           const queuedPath = data.mp4_file || requestedPath;
           queuedAnalysisPaths.add(queuedPath);
           showQueueStatus(data.message || 'Added to analysis queue');
-          if (isContinuing) {
-            waitForAnalysis(dirname, filename, queuedPath);
+          if (analysisWaitReason || isContinuing) {
+            waitForAnalysis(
+              dirname, filename, queuedPath, analysisWaitReason || 'continue'
+            );
           } else {
             fileStatus.innerText = loadedFileName || 'No file loaded';
           }
           return;
         }
-        continueAfterAnalysis = null;
+        pendingAnalysisLoad = null;
         semitonesInput.value = 0;
         localStorage.setItem(storageKeys.file, filename);
         callbackOutput.innerText = '';
@@ -1265,6 +1338,7 @@
       .finally(() => {
         loadRequestInFlight = false;
         updateReanalyzeButton();
+        updateNavigationButtons();
       });
     }
 
@@ -1485,12 +1559,20 @@
 
     function setContinue(enabled) {
       isContinuing = enabled;
-      if (!isContinuing) {
-        continueAfterAnalysis = null;
+      let cancelledPendingLoad = false;
+      if (!isContinuing && pendingAnalysisLoad?.reason === 'continue') {
+        pendingAnalysisLoad = null;
+        selectedFileName = loadedFileName;
+        cancelledPendingLoad = true;
       }
       const continueButton = document.getElementById('continueButton');
       continueButton.textContent = isContinuing ? 'Continue On' : 'Continue Off';
       continueButton.classList.toggle('continue-on', isContinuing);
+      if (cancelledPendingLoad) {
+        renderBrowserTable(currentDirectories, currentFiles);
+      } else {
+        updateNavigationButtons();
+      }
     }
 
     function toggleContinue() {
@@ -1500,22 +1582,35 @@
       }
     }
 
-    function playNextFileIfContinue() {
-      if (!isContinuing || isRepeating || !currentFiles.length) {
+    function navigateFile(offset, reason = 'manual') {
+      if (loadRequestInFlight || !currentFiles.length || ![-1, 1].includes(offset)) {
         return;
       }
 
-      const currentIndex = currentFiles.findIndex(file => file.name === selectedFileName);
-      const nextFile = currentIndex >= 0 ? currentFiles[currentIndex + 1] : currentFiles[0];
-      if (!nextFile) {
-        fileStatus.innerText = 'End of directory';
-        setContinue(false);
+      const currentIndex = currentFiles.findIndex(
+        file => file.name === navigationAnchorName()
+      );
+      const targetFile = currentIndex >= 0 ? currentFiles[currentIndex + offset] : null;
+      if (!targetFile) {
+        if (reason === 'continue') {
+          fileStatus.innerText = 'End of directory';
+          setContinue(false);
+        }
+        updateNavigationButtons();
         return;
       }
 
-      selectedFileName = nextFile.name;
+      pendingAnalysisLoad = null;
+      selectedFileName = targetFile.name;
       renderBrowserTable(currentDirectories, currentFiles);
-      loadSelectedFile({ autoplay: true });
+      loadSelectedFile({ autoplay: true, analysisWaitReason: reason });
+    }
+
+    function playNextFileIfContinue() {
+      if (!isContinuing || isRepeating || pendingAnalysisLoad) {
+        return;
+      }
+      navigateFile(1, 'continue');
     }
 
     video.addEventListener('ended', playNextFileIfContinue);

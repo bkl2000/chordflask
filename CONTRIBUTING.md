@@ -18,7 +18,7 @@ sudo apt install ffmpeg pkg-config vamp-plugin-sdk python3-venv python3-dev buil
 Required Vamp plugins:
 
 ```bash
-scripts/install_vamp_plugins.sh
+make plugins
 ```
 
 ## Development workflow

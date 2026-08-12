@@ -94,6 +94,15 @@ def test_make_setup_runtime_has_no_dev_flag():
     assert "setup_venv.sh" in runtime
 
 
+def test_make_plugins_uses_configured_environment():
+    output = run_make(
+        "--no-print-directory", "-n", "plugins", "VENV_DIR=/tmp/chordflask-plugins"
+    )
+
+    assert 'CHORDIFIER_VENV="/tmp/chordflask-plugins"' in output
+    assert "scripts/install_vamp_plugins.sh" in output
+
+
 def test_make_setup_dev_is_alias_for_setup():
     setup = run_make("--no-print-directory", "-n", "setup")
     setup_dev = run_make("--no-print-directory", "-n", "setup-dev")
@@ -219,6 +228,7 @@ def test_standalone_run_does_not_implicitly_build():
 
     assert "build_standalone.sh" not in output
     assert "make standalone" in output
+    assert "chordflask-linux-x86_64/chordflask.sh" in output
 
 
 def test_make_all_runs_fix_permissions_before_setup_before_check():
@@ -242,7 +252,6 @@ def test_permission_contract_matches_repair_targets():
         "scripts/metric_chords_diff.py",
         "scripts/compare_chord_json.py",
         "flask/build_standalone.sh",
-        "flask/install_standalone.sh",
         "flask/helpers/webm2mp4",
         "flask/helpers/youtube_donwload",
     )
@@ -259,6 +268,7 @@ def test_public_ci_installs_vamp_plugins_outside_repository():
     workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text()
 
     assert '--dest "${RUNNER_TEMP}/vamp"' in workflow
+    assert "bash scripts/install_vamp_plugins.sh" in workflow
     assert "--dest vendor/vamp/linux-x86_64" not in workflow
     assert 'CHORDIFIER_REQUIRE_VAMP: "1"' in workflow
     assert "CHORDIFIER_TEST_VAMP_PATH: ${{ runner.temp }}/vamp" in workflow

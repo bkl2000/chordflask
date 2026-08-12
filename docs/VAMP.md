@@ -22,16 +22,16 @@ The installer pins versions because plugin changes can alter analysis results:
 | NNLS Chroma/Chordino | **1.1** | `877964bce86027d1c73c9210fcb3446b1da10dc40bba36b1bf04a61a60ad1d7f` |
 | QM Vamp Plugins | **1.8.0** | `53f9e0e24d938507c01cb368e098cb321346b91594695aa877e7f67f17841ffa` |
 
-These values are defined in `scripts/install_vamp_plugins.sh`. The installer
-also checks the legacy MD5 values published by the upstream projects. It may
-warn when a newer version is available but never upgrades automatically.
+These values are defined by the installer behind `make plugins` and packaged as
+`install_vamp.sh` with the portable bundle. The installer also checks the legacy
+MD5 values published by the upstream projects and never upgrades automatically.
 
 ## Installation
 
 Install into the standard user plugin directory:
 
 ```bash
-scripts/install_vamp_plugins.sh
+make plugins
 ```
 
 The expected files are:
@@ -49,9 +49,9 @@ export VAMP_PATH=/path/to/vamp/plugins
 make run
 ```
 
-The script downloads into ignored `vamp/` working directories, verifies the
-archives, and installs only into the selected destination. ChordFlask never
-copies plugin binaries at application startup.
+The script uses a temporary download directory, verifies the archives, and
+installs only into the selected destination. ChordFlask never copies plugin
+binaries at application startup.
 
 ## Downloads and overrides
 
@@ -61,8 +61,8 @@ Upstream project pages:
 - QM Vamp Plugins: https://code.soundsoftware.ac.uk/projects/qm-vamp-plugins/files
 
 The installer tries upstream downloads first and checksum-matched Internet
-Archive captures if the old SoundSoftware host is unavailable. Explicit URL
-overrides are supported:
+Archive captures if an old upstream host is unavailable. Explicit URL overrides
+are supported:
 
 ```bash
 NNLS_URL=https://example.invalid/nnls.tar.bz2 \
@@ -93,7 +93,7 @@ when a plugin installation changes.
 the two required plugins into `~/.vamp`, or set `VAMP_PATH`, before starting a
 local standalone build.
 
-The generated directory includes `install_vamp.sh`, `VAMP_INSTALL.md`, and
+The generated directory includes `install_vamp.sh`, `README.md`, and
 `THIRD_PARTY_NOTICES.md`. The installer verifies discovery through the bundled
 `chordflask --check-vamp` command, so the target needs no separate Python
-environment.
+environment. See [STANDALONE.md](STANDALONE.md) for the complete workflow.
