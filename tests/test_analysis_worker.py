@@ -158,6 +158,14 @@ def test_forced_reanalysis_replaces_builtins_and_preserves_other_tracks(tmp_path
         "pytorch", [{"timestamp": 0.0, "chord": "Em"}],
         metadata={"model": "future"},
     )
+    current.set_chord_track(
+        "pytorch_v2", [{"timestamp": 0.0, "chord": "F"}],
+        metadata={"display_name": "PyTorch V2 (experimental)"},
+    )
+    current.set_chord_track(
+        "reference", [{"timestamp": 0.0, "chord": "X"}],
+        metadata={"display_name": "Reference", "source": "trusted-midi"},
+    )
     current.set_rhythm_track(
         "qm_barbeattracker", bpm=100, beat_times=[0.0]
     )
@@ -194,6 +202,19 @@ def test_forced_reanalysis_replaces_builtins_and_preserves_other_tracks(tmp_path
     assert loaded.chord_track_chords("pytorch") == [
         {"timestamp": 0.0, "chord": "Em"}
     ]
+    assert loaded.chord_track_chords("pytorch_v2") == [
+        {"timestamp": 0.0, "chord": "F"}
+    ]
+    assert loaded.chord_track_metadata("pytorch_v2") == {
+        "display_name": "PyTorch V2 (experimental)"
+    }
+    assert loaded.chord_track_chords("reference") == [
+        {"timestamp": 0.0, "chord": "X"}
+    ]
+    assert loaded.chord_track_metadata("reference") == {
+        "display_name": "Reference",
+        "source": "trusted-midi",
+    }
     assert loaded.rhythm_track_data("pytorch")["bpm"] == 90
     assert loaded.user_data == {"notes": "keep"}
     assert loaded.transpose_semitones == 2

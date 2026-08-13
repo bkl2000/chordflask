@@ -1,19 +1,14 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-
-VIDEO_SUFFIXES = (".mp4", ".webm")
+from media_library import preferred_media_files
 
 
 def find_media_files(media_dir):
     root = Path(media_dir)
     if not root.is_dir():
         raise FileNotFoundError(f"Media directory does not exist: {media_dir}")
-    files = [
-        path
-        for path in root.iterdir()
-        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
-    ]
+    files = preferred_media_files(root)
     return sorted(files, key=lambda path: (path.stat().st_size, path.name.lower()))
 
 

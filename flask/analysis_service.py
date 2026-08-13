@@ -31,10 +31,10 @@ class ChordAnalysisService:
             chord_data.load_from_file(file_repr.get("json"))
             return chord_data
 
-        self.converter.ensure_mp3(file_repr)
-        chord_data = self.analyzer.analyze(file_repr.get("mp3"), use_madmom=use_madmom)
-        chord_data.save_to_file(file_repr.get("json"))
-        print(f"Chord data saved to {file_repr.get('json')}")
+        analysis_audio = self.converter.ensure_mp3(file_repr)
+        chord_data = self.analyzer.analyze(analysis_audio, use_madmom=use_madmom)
         if export_midi:
             self.exporter.write_midi_and_musicxml(chord_data, file_repr)
+        chord_data.save_to_file(file_repr.get("json"))
+        print(f"Chord data saved to {file_repr.get('json')}")
         return chord_data

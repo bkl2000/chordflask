@@ -45,6 +45,10 @@ cd chordflask-linux-x86_64
 
 Open <http://localhost:5000>. Stop ChordFlask with `Ctrl+C`.
 
+The standalone includes the same persistent worker and **Queue next** batch
+control as the source run. Its default batch size is 50 (configurable from 1 to
+500), and interrupted queue work is retried after the launcher restarts.
+
 `install_vamp.sh` requires no root access. It downloads checksum-pinned
 Chordino and QM plugin archives, installs them into `~/.vamp`, and verifies both
 plugin identifiers using the bundled ChordFlask runtime.

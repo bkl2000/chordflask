@@ -17,6 +17,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 STALE_PROCESSING_MINUTES = 10
+MAX_BATCH_SIZE = 500
 
 
 class AnalysisQueue:
@@ -68,6 +69,55 @@ class AnalysisQueue:
                 "added_at": self._now(),
             })
             return "queued"
+
+    def enqueue_many(self, media_paths, limit):
+        """Atomically enqueue at most ``limit`` new jobs in caller order.
+
+        Paths already pending do not consume the limit. A matching failed job is
+        cleared when its path is selected for retry.
+        """
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or not 1 <= limit <= MAX_BATCH_SIZE
+        ):
+            raise ValueError(f"limit must be an integer from 1 to {MAX_BATCH_SIZE}")
+
+        normalized = []
+        seen = set()
+        for media_path in media_paths:
+            path = str(Path(media_path).expanduser().resolve())
+            if path not in seen:
+                seen.add(path)
+                normalized.append(path)
+
+        with self._locked_data() as data:
+            pending = data.setdefault("pending", [])
+            failed = data.setdefault("failed", [])
+            pending_paths = {item.get("path") for item in pending}
+            queued = []
+            already_queued = []
+            deferred = []
+
+            for media_path in normalized:
+                if media_path in pending_paths:
+                    already_queued.append(media_path)
+                    continue
+                if len(queued) >= limit:
+                    deferred.append(media_path)
+                    continue
+
+                failed = [item for item in failed if item.get("path") != media_path]
+                pending.append(self._new_job(media_path))
+                pending_paths.add(media_path)
+                queued.append(media_path)
+
+            data["failed"] = failed
+            return {
+                "queued": queued,
+                "already_queued": already_queued,
+                "deferred": deferred,
+            }
 
     def peek(self):
         with self._locked_data() as data:
@@ -238,6 +288,17 @@ class AnalysisQueue:
                     pass
 
     @staticmethod
+    def _new_job(media_path, force=False):
+        return {
+            "job_id": uuid.uuid4().hex,
+            "path": media_path,
+            "status": "pending",
+            "force": force,
+            "attempt_count": 0,
+            "added_at": AnalysisQueue._now(),
+        }
+
+    @staticmethod
     def _migrate_items(items, default_status):
         if not isinstance(items, list):
             raise ValueError("queue pending/failed fields must be lists")
@@ -285,5 +346,6 @@ class AnalysisQueue:
         if recovered:
             logger.info("Recovered %d stale processing job(s)", recovered)
 
-    def _now(self):
+    @staticmethod
+    def _now():
         return datetime.now(timezone.utc).isoformat(timespec="seconds")

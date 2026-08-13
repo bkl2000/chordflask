@@ -7,6 +7,7 @@ Single-worker chord analysis queue consumer.
 import fcntl
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -92,8 +93,9 @@ class AnalysisWorker:
             create=not analysis_dir.exists() and legacy_dir.is_dir(),
         )
         json_path = file_repr.get("json")
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        self.__cleanup_interrupted_work(analysis_dir, media.stem)
         if force:
-            analysis_dir.mkdir(parents=True, exist_ok=True)
             self.__reanalyze(media, file_repr)
             return
         if os.path.exists(json_path):
@@ -107,6 +109,12 @@ class AnalysisWorker:
                 f"preserved as {backup} before reanalysis."
             )
 
+        for suffix in ("mp3", "xml", "mid"):
+            try:
+                os.unlink(file_repr.get(suffix))
+            except FileNotFoundError:
+                pass
+
         _worker_log(f"Analyzing queued file: {media_path}")
         analyzer_cls = self.analyzer_cls
         if analyzer_cls is None:
@@ -114,18 +122,42 @@ class AnalysisWorker:
 
             analyzer_cls = ChordAnalyzer
 
-        analyzer = analyzer_cls(str(media), str(analysis_dir))
-        analyzer.process()
-        if not os.path.exists(json_path):
-            raise RuntimeError(f"Analysis did not create {json_path}")
-        validation_error = self._json_validation_error(json_path)
-        if validation_error is not None:
-            backup = self._preserve_corrupt_json(json_path)
-            raise RuntimeError(
-                f"Analysis created invalid chord data ({validation_error}); "
-                f"preserved as {backup}"
-            )
+        prefix = f".{media.stem}.analyze-"
+        with tempfile.TemporaryDirectory(
+            prefix=prefix,
+            dir=analysis_dir,
+            ignore_cleanup_errors=True,
+        ) as temp_name:
+            temp_dir = Path(temp_name)
+            temporary_file_repr = FileRepr(str(media), datapath=str(temp_dir))
+            analyzer = analyzer_cls(str(media), str(temp_dir))
+            analyzer.process()
+            temporary_json = temporary_file_repr.get("json")
+            if not os.path.exists(temporary_json):
+                raise RuntimeError(f"Analysis did not create {temporary_json}")
+            validation_error = self._json_validation_error(temporary_json)
+            if validation_error is not None:
+                backup = self._preserve_corrupt_json(
+                    temporary_json, destination_dir=analysis_dir
+                )
+                raise RuntimeError(
+                    f"Analysis created invalid chord data ({validation_error}); "
+                    f"preserved as {backup}"
+                )
+            for suffix in ("mp3", "xml", "mid"):
+                self.__replace_best_effort_artifact(
+                    temporary_file_repr.get(suffix), file_repr.get(suffix)
+                )
+            os.replace(temporary_json, json_path)
+            self.__fsync_directory(analysis_dir)
         _worker_log(f"Finished analysis: {json_path}")
+
+    @staticmethod
+    def __cleanup_interrupted_work(analysis_dir, stem):
+        for kind in ("analyze", "reanalyze"):
+            for candidate in analysis_dir.glob(f".{stem}.{kind}-*"):
+                if candidate.is_dir() and not candidate.is_symlink():
+                    shutil.rmtree(candidate)
 
     def __reanalyze(self, media, current_file_repr):
         current_json = current_file_repr.get("json")
@@ -258,10 +290,11 @@ class AnalysisWorker:
             return error
 
     @staticmethod
-    def _preserve_corrupt_json(json_path):
+    def _preserve_corrupt_json(json_path, destination_dir=None):
         source = Path(json_path)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        backup = source.with_name(
+        backup_dir = Path(destination_dir) if destination_dir is not None else source.parent
+        backup = backup_dir / (
             f"{source.stem}.corrupt-{timestamp}-{uuid.uuid4().hex[:8]}{source.suffix}"
         )
         os.replace(source, backup)

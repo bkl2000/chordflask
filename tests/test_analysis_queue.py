@@ -82,6 +82,49 @@ def test_enqueue_clears_previous_failure(tmp_path):
     assert len(q.status()["failed"]) == 0
 
 
+def test_enqueue_many_uses_limit_only_for_new_jobs_and_preserves_order(tmp_path):
+    q = AnalysisQueue(queue_dir=tmp_path)
+    q.enqueue("/tmp/already.mp4")
+
+    result = q.enqueue_many([
+        "/tmp/first.mp4",
+        "/tmp/already.mp4",
+        "/tmp/second.mp3",
+        "/tmp/third.webm",
+    ], limit=2)
+
+    assert result == {
+        "queued": ["/tmp/first.mp4", "/tmp/second.mp3"],
+        "already_queued": ["/tmp/already.mp4"],
+        "deferred": ["/tmp/third.webm"],
+    }
+    assert [item["path"] for item in q.status()["pending"]] == [
+        "/tmp/already.mp4",
+        "/tmp/first.mp4",
+        "/tmp/second.mp3",
+    ]
+
+
+def test_enqueue_many_retries_failed_job_and_deduplicates_input(tmp_path):
+    q = AnalysisQueue(queue_dir=tmp_path)
+    q.enqueue("/tmp/retry.mp4")
+    q.fail("/tmp/retry.mp4", "broken")
+
+    result = q.enqueue_many(["/tmp/retry.mp4", "/tmp/retry.mp4"], limit=1)
+
+    assert result["queued"] == ["/tmp/retry.mp4"]
+    assert q.status()["failed"] == []
+    assert len(q.status()["pending"]) == 1
+
+
+@pytest.mark.parametrize("limit", [True, 0, 501, 1.5, "50"])
+def test_enqueue_many_rejects_invalid_limit(tmp_path, limit):
+    q = AnalysisQueue(queue_dir=tmp_path)
+
+    with pytest.raises(ValueError, match="limit must be an integer from 1 to 500"):
+        q.enqueue_many(["/tmp/song.mp4"], limit=limit)
+
+
 def test_peek_marks_as_processing(tmp_path):
     q = AnalysisQueue(queue_dir=str(tmp_path))
     q.enqueue("/tmp/test.mp4")

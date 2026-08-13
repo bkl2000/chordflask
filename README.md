@@ -1,7 +1,9 @@
 # ChordFlask
 
-ChordFlask analyzes chords and beats in MP4/WebM files and shows them alongside
-browser playback. It runs locally; media and analysis data are not uploaded.
+ChordFlask analyzes chords and beats in MP3 audio and MP4/WebM video files and
+shows them alongside browser playback. MP3 files play in the built-in audio
+player and are analyzed directly without video conversion. Everything runs
+locally; media and analysis data are not uploaded.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+. CPython 3.12 is the release-tested Python version. GitHub releases contain
@@ -35,16 +37,24 @@ activate that environment.
 
 ## First use
 
-1. Enter the absolute path to a directory containing MP4 or WebM files.
-2. Select **Load**, then select a file from the list.
+1. Select **Browse** and navigate to a directory containing MP3, MP4, or WebM
+   files. You can still enter an absolute path directly.
+2. Select a file from the list. MP3 files use the compact audio player; videos
+   use the video player.
 3. ChordFlask queues missing analysis automatically. The status above the chord
    grid shows whether analysis is running, waiting, or failed.
-4. Use **Previous**, **Next**, **Repeat**, **Continue**, and **Transpose** while
+4. To prepare several files, set **Next** to the desired batch size (50 by
+   default) and select **Queue next**. Each click adds that many new,
+   unanalysed files from the currently filtered and sorted list; files already
+   analysed or queued do not consume the limit.
+5. Use **Previous**, **Next**, **Repeat**, **Continue**, and **Transpose** while
    playing the file.
 
 Generated JSON, MusicXML, MIDI, and temporary audio are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
 permission for the media directory. Existing media files are not modified.
+The queue survives an application restart; interrupted work is returned to the
+queue and incomplete temporary output is discarded on retry.
 
 ## Build a portable Linux bundle
 
@@ -73,7 +83,7 @@ guide is included as `README.md` inside the archive.
 - **Vamp plugins are missing:** run `make plugins` from the source directory and
   restart. In an unpacked portable bundle, run `./install_vamp.sh` instead.
 - **No files appear:** load an existing directory and check that its files end
-  in `.mp4` or `.webm`.
+  in `.mp3`, `.mp4`, or `.webm`.
 - **Analysis cannot write files:** give your user write permission for the media
   directory so ChordFlask can create `.chordflask`.
 - **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 make run` and open

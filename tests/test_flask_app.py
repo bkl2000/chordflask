@@ -155,12 +155,15 @@ def test_manual_navigation_uses_visible_order_and_waits_for_analysis():
     continue_start = body.index("function playNextFileIfContinue")
     continue_function = body[
         continue_start:
-        body.index("video.addEventListener", continue_start)
+        body.index("document.addEventListener", continue_start)
     ]
-    assert "isRepeating || pendingAnalysisLoad" in continue_function
+    assert "|| isRepeating" in continue_function
+    assert "|| pendingAnalysisLoad" in continue_function
+    assert "|| loadRequestInFlight" in continue_function
+    assert "|| loadIntentQueue.length" in continue_function
 
 
-def test_navigation_buttons_follow_anchor_boundaries_and_loading_state():
+def test_navigation_buttons_follow_selected_anchor_while_loading():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
@@ -169,14 +172,58 @@ def test_navigation_buttons_follow_anchor_boundaries_and_loading_state():
         body.index("function waitForAnalysis")
     ]
 
-    assert "pendingAnalysisLoad?.filename || loadedFileName" in body
+    assert "selectedFileName || pendingAnalysisLoad?.filename || loadedFileName" in body
     assert "currentFiles.findIndex" in update_function
-    assert "loadRequestInFlight || currentIndex <= 0" in update_function
+    assert "previousFileButton.disabled = currentIndex <= 0" in update_function
     assert "currentIndex >= currentFiles.length - 1" in update_function
+    assert "loadRequestInFlight" not in update_function
     assert "updateNavigationButtons();" in body[
         body.index("function renderBrowserTable"):
         body.index("function renderDirectoryRow")
     ]
+
+
+def test_navigation_buffers_distinct_clicks_and_coalesces_identical_targets():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    queue_function = body[
+        body.index("function loadSelectedFile"):
+        body.index("function reanalyzeCurrentFile")
+    ]
+    processor = body[
+        body.index("function processNextLoadIntent"):
+        body.index("function loadSelectedFile")
+    ]
+    navigate_function = body[
+        body.index("function navigateFile"):
+        body.index("function playNextFileIfContinue")
+    ]
+
+    assert "let activeLoadIntent = null;" in body
+    assert "let loadIntentQueue = [];" in body
+    assert "const previousIntent = lastQueuedIntent || activeLoadIntent" in queue_function
+    assert "sameLoadIntent(intent, previousIntent)" in queue_function
+    assert "loadIntentQueue.push(intent);" in queue_function
+    assert "const intent = loadIntentQueue.shift();" in processor
+    assert "processNextLoadIntent();" in processor
+    assert "loadRequestInFlight || !loadIntentQueue.length" in processor
+    assert "loadRequestInFlight" not in navigate_function
+
+
+def test_file_rows_autoplay_and_wait_without_duplicate_analysis_jobs():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    file_rows = body[
+        body.index("files.forEach(file =>"):
+        body.index("function renderDirectoryRow")
+    ]
+
+    assert "selectedFileName = file.name" in file_rows
+    assert "loadSelectedFile({ autoplay: true, analysisWaitReason: 'manual' })" in file_rows
+    assert "queuedAnalysisPaths.has(intent.requestedPath)" in body
+    assert "Already queued: ${intent.filename}" in body
 
 
 def test_playlist_navigation_does_not_add_height_to_control_bar():
@@ -280,10 +327,32 @@ def test_index_contains_analysis_track_switching_contract():
     assert "localStorage.setItem(storageKey, newId)" in body
 
 
-def test_list_files_returns_mp4_and_webm_entries(tmp_path):
+def test_index_contains_audio_player_and_web_directory_browser():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'id="audioPlayerPanel" class="audio-player-panel" hidden' in body
+    assert 'id="audioPlayer" controls' in body
+    assert 'id="audioFileName"' in body
+    assert 'onclick="browseDirectories()"' in body
+    assert "fetch('/browse_roots'" in body
+    assert "function selectMediaPlayer(mediaKind, filename)" in body
+    assert "mediaKind === 'audio' ? audioPlayer : videoPlayer" in body
+    assert "selectMediaPlayer(data.media_kind, filename)" in body
+    assert "[videoPlayer, audioPlayer].forEach" in body
+    assert 'id="batchLimit" type="number" min="1" max="500"' in body
+    assert 'id="queueNextButton"' in body
+    assert "function queueNextBatch()" in body
+    assert "filenames: currentFiles.map(file => file.name)" in body
+    assert "chordflask.batchLimit" in body
+
+
+def test_list_files_returns_mp3_mp4_and_webm_entries(tmp_path):
     app_wrapper, client = make_client()
     (tmp_path / "alpha.mp4").write_bytes(b"")
     (tmp_path / "beta.webm").write_bytes(b"")
+    (tmp_path / "gamma.mp3").write_bytes(b"")
     (tmp_path / "notes.txt").write_text("ignored")
 
     response = client.post(
@@ -292,7 +361,7 @@ def test_list_files_returns_mp4_and_webm_entries(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.get_json() == ["alpha.mp4 | 0M", "beta.webm | 0M"]
+    assert response.get_json() == ["alpha.mp4 | 0M", "beta.webm | 0M", "gamma.mp3 | 0M"]
     assert str(tmp_path) in app_wrapper.stored_directories
 
 
@@ -304,7 +373,7 @@ def test_list_files_can_return_structured_entries(tmp_path):
     subdir.mkdir()
     hidden_analysis_dir.mkdir()
     legacy_analysis_dir.mkdir()
-    media_file = tmp_path / "alpha.mp4"
+    media_file = tmp_path / "ALPHA.MP3"
     media_file.write_bytes(b"123")
 
     response = client.post(
@@ -319,12 +388,102 @@ def test_list_files_can_return_structured_entries(tmp_path):
     assert payload["directories"][0]["type"] == "directory"
     assert payload["directories"][0]["mtime_epoch"] == subdir.stat().st_mtime
     files = payload["files"]
-    assert files[0]["name"] == "alpha.mp4"
+    assert files[0]["name"] == "ALPHA.MP3"
     assert files[0]["type"] == "file"
+    assert files[0]["media_kind"] == "audio"
     assert files[0]["size_mb"] == 0
     assert files[0]["size_bytes"] == 3
     assert files[0]["mtime_epoch"] == media_file.stat().st_mtime
     datetime.strptime(files[0]["mtime"], "%Y-%m-%d %H:%M")
+
+
+def test_list_files_prefers_mp4_then_webm_then_mp3_for_same_stem(tmp_path):
+    _, client = make_client()
+    for name in ("song.mp3", "song.webm", "song.mp4", "audio.mp3"):
+        (tmp_path / name).write_bytes(b"media")
+
+    response = client.post(
+        "/list_files",
+        json={"dirname": str(tmp_path), "matchstring": "", "structured": True},
+    )
+
+    assert [item["name"] for item in response.get_json()["files"]] == [
+        "audio.mp3",
+        "song.mp4",
+    ]
+
+
+def test_enqueue_batch_uses_submitted_gui_order_and_next_limit(tmp_path):
+    app_wrapper, client = make_client()
+    for name in ("a.mp4", "b.mp3", "c.webm", "done.mp4"):
+        (tmp_path / name).write_bytes(b"media")
+    done_repr = FileRepr(str(tmp_path / "done.mp4"), create=True)
+    done = ChordData()
+    done.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+    done.save_to_file(done_repr.get("json"))
+    app_wrapper.analysis_queue.enqueue(tmp_path / "b.mp3")
+
+    response = client.post("/enqueue_batch", json={
+        "dirname": str(tmp_path),
+        "filenames": ["done.mp4", "b.mp3", "c.webm", "a.mp4"],
+        "limit": 1,
+    })
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "queued",
+        "queued_count": 1,
+        "queued_paths": [str((tmp_path / "c.webm").resolve())],
+        "already_queued_count": 1,
+        "skipped_analyzed_count": 1,
+        "remaining_count": 1,
+    }
+    assert [Path(item["path"]).name for item in app_wrapper.analysis_queue.status()["pending"]] == [
+        "b.mp3", "c.webm",
+    ]
+
+    next_response = client.post("/enqueue_batch", json={
+        "dirname": str(tmp_path),
+        "filenames": ["done.mp4", "b.mp3", "c.webm", "a.mp4"],
+        "limit": 1,
+    })
+
+    assert next_response.get_json()["queued_paths"] == [str((tmp_path / "a.mp4").resolve())]
+    assert next_response.get_json()["remaining_count"] == 0
+
+
+def test_enqueue_batch_rejects_bad_limits_paths_and_lower_priority_media(tmp_path):
+    _, client = make_client()
+    (tmp_path / "song.mp4").write_bytes(b"video")
+    (tmp_path / "song.mp3").write_bytes(b"audio")
+
+    bad_limit = client.post("/enqueue_batch", json={
+        "dirname": str(tmp_path), "filenames": ["song.mp4"], "limit": 0,
+    })
+    traversal = client.post("/enqueue_batch", json={
+        "dirname": str(tmp_path), "filenames": ["../song.mp4"], "limit": 1,
+    })
+    lower_priority = client.post("/enqueue_batch", json={
+        "dirname": str(tmp_path), "filenames": ["song.mp3"], "limit": 1,
+    })
+
+    assert bad_limit.status_code == 400
+    assert traversal.status_code == 400
+    assert lower_priority.status_code == 400
+
+
+def test_load_file_rejects_lower_priority_same_stem_media(tmp_path):
+    _, client = make_client()
+    (tmp_path / "song.mp4").write_bytes(b"video")
+    (tmp_path / "song.mp3").write_bytes(b"audio")
+
+    response = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": "song.mp3"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "song.mp4 takes precedence over song.mp3"
 
 
 def test_list_files_returns_not_found_for_missing_directory(tmp_path):
@@ -372,6 +531,43 @@ def test_load_file_rejects_traversal_and_unsupported_files(tmp_path):
 
     assert traversal.status_code == 400
     assert unsupported.status_code == 400
+
+
+def test_load_file_accepts_mp3_and_reports_audio_kind(tmp_path):
+    app_wrapper, client = make_client()
+    media = tmp_path / "song.MP3"
+    media.write_bytes(b"not used")
+    app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
+
+    response = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": media.name},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "queued"
+    assert response.get_json()["media_kind"] == "audio"
+    assert app_wrapper.analysis_queue.status()["pending"][0]["path"] == str(media)
+
+
+@pytest.mark.parametrize(
+    ("name", "content_type"),
+    [
+        ("song.mp3", "audio/mpeg"),
+        ("song.mp4", "video/mp4"),
+        ("song.webm", "video/webm"),
+    ],
+)
+def test_media_route_uses_source_content_type(tmp_path, name, content_type):
+    app_wrapper, client = make_client()
+    media = tmp_path / name
+    media.write_bytes(b"media")
+    app_wrapper.file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"))
+
+    response = client.get("/video")
+
+    assert response.status_code == 200
+    assert response.content_type == content_type
 
 
 def test_load_file_allows_valid_media_symlink(tmp_path):
@@ -696,7 +892,6 @@ def test_analysis_worker_processes_one_queued_file(tmp_path):
             self.data_dir = Path(data_dir)
 
         def process(self):
-            self.data_dir.mkdir()
             chord_data = ChordData()
             chord_data.set_base_chords([
                 {"timestamp": 0.0, "chord": "G"},
@@ -706,7 +901,11 @@ def test_analysis_worker_processes_one_queued_file(tmp_path):
     worker = AnalysisWorker(queue=queue, poll_seconds=0, analyzer_cls=FakeAnalyzer)
 
     assert worker.run_once() is True
-    assert calls == [(str(media), str(tmp_path / ".chordflask"))]
+    assert len(calls) == 1
+    assert calls[0][0] == str(media)
+    assert Path(calls[0][1]).parent == tmp_path / ".chordflask"
+    assert Path(calls[0][1]).name.startswith(".song.analyze-")
+    assert not Path(calls[0][1]).exists()
     assert queue.status()["pending"] == []
     assert queue.status()["failed"] == []
 
@@ -941,6 +1140,22 @@ def test_allowed_roots_defaults_to_none(monkeypatch):
     assert app_wrapper.allowed_roots is None
 
 
+def test_browse_roots_starts_at_home_without_restrictions(monkeypatch):
+    monkeypatch.delenv("CHORDIFIER_MEDIA_ROOTS", raising=False)
+    _, client = make_client()
+
+    response = client.get("/browse_roots")
+
+    assert response.status_code == 200
+    assert response.get_json()["roots"] == [{
+        "type": "directory",
+        "name": Path.home().resolve().name,
+        "path": str(Path.home().resolve()),
+        "mtime": "",
+        "mtime_epoch": Path.home().resolve().stat().st_mtime,
+    }]
+
+
 def test_allowed_roots_parsed_from_environment(monkeypatch, tmp_path):
     root1 = tmp_path / "music"
     root2 = tmp_path / "videos"
@@ -955,6 +1170,42 @@ def test_allowed_roots_parsed_from_environment(monkeypatch, tmp_path):
     assert app_wrapper.allowed_roots is not None
     assert len(app_wrapper.allowed_roots) == 2
     assert Path(root1) in app_wrapper.allowed_roots
+
+
+def test_browse_roots_lists_only_configured_roots(monkeypatch, tmp_path):
+    root1 = tmp_path / "music"
+    root2 = tmp_path / "videos"
+    root1.mkdir()
+    root2.mkdir()
+    monkeypatch.setenv(
+        "CHORDIFIER_MEDIA_ROOTS",
+        f"{root1}{os.path.pathsep}{root2}",
+    )
+    _, client = make_client()
+
+    roots = client.get("/browse_roots").get_json()["roots"]
+
+    assert [root["path"] for root in roots] == [str(root1), str(root2)]
+
+
+def test_list_files_hides_parent_at_allowed_root(monkeypatch, tmp_path):
+    root = tmp_path / "music"
+    nested = root / "album"
+    nested.mkdir(parents=True)
+    monkeypatch.setenv("CHORDIFIER_MEDIA_ROOTS", str(root))
+    _, client = make_client()
+
+    root_payload = client.post(
+        "/list_files",
+        json={"dirname": str(root), "matchstring": "", "structured": True},
+    ).get_json()
+    nested_payload = client.post(
+        "/list_files",
+        json={"dirname": str(nested), "matchstring": "", "structured": True},
+    ).get_json()
+
+    assert root_payload["parent_dir"] is None
+    assert nested_payload["parent_dir"] == str(root)
 
 
 def test_allowed_roots_rejects_non_directory(monkeypatch):

@@ -292,8 +292,9 @@ def transpose_single_chord(chord_label, semitones, prefer_flats):
     Returns:
         str: The transposed chord label, or 'N' if the chord cannot be transposed.
     """
-    if chord_label.upper() == 'N':
-        return 'N'
+    special = chord_label.upper()
+    if special in {'N', 'X'}:
+        return special
 
     try:
         fixed_label = fix_chord_label(chord_label)

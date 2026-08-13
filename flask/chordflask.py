@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 
-"""
-Flask application for MP4 chord analysis and playback.
-"""
+"""Flask application for media chord analysis and playback."""
 
 import argparse
 import sys
 from flask import Flask, render_template, jsonify, request, send_file, make_response
 import os
-import glob
 import logging
 import math
 from datetime import datetime
 from pathlib import Path
 
-from analysis_queue import AnalysisQueue
+from analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from chordflask_config import (
     ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME, ALLOWED_MEDIA_ROOTS_ENV, LISTEN_ENV,
     PORT_ENV, DEBUG_ENV, DEFAULT_HOST, DEFAULT_PORT,
+    SUPPORTED_MEDIA_SUFFIXES,
 )
 from filerepr import FileRepr  # Import FileRepr class for file path management
 from ffmpeg_runtime import require_system_ffmpeg
+from media_library import preferred_media_files
 
 from mp4playerflask import MP4PlayerFlask  # Import the MP4PlayerFlask class
 
@@ -201,14 +200,31 @@ class FlaskMP4App:
         filename = filename.split(" | ", 1)[0]
         if Path(filename).name != filename or filename in {".", ".."}:
             raise ValueError("filename must not contain a path")
-        media = (directory / filename).resolve()
+        requested_media = directory / filename
+        if requested_media.suffix.lower() not in SUPPORTED_MEDIA_SUFFIXES:
+            raise ValueError("Only .mp3, .mp4, and .webm files are supported")
+        if not requested_media.is_file():
+            raise FileNotFoundError("Media file does not exist")
+
+        preferred = {
+            path.stem.casefold(): path
+            for path in preferred_media_files(directory)
+        }.get(requested_media.stem.casefold())
+        if preferred is not None and preferred.name != requested_media.name:
+            raise ValueError(
+                f"{preferred.name} takes precedence over {requested_media.name}"
+            )
+
+        media = requested_media.resolve()
         if not self._is_allowed_directory(media.parent):
             raise PermissionError("Media file is outside allowed media roots")
-        if media.suffix.lower() not in {".mp4", ".webm"}:
-            raise ValueError("Only .mp4 and .webm files are supported")
-        if not media.is_file():
-            raise FileNotFoundError("Media file does not exist")
+        if media.suffix.lower() not in SUPPORTED_MEDIA_SUFFIXES:
+            raise ValueError("Only .mp3, .mp4, and .webm files are supported")
         return media
+
+    @staticmethod
+    def _media_kind(media):
+        return "audio" if Path(media).suffix.lower() == ".mp3" else "video"
 
     def _path_error(self, error):
         if isinstance(error, PermissionError):
@@ -333,6 +349,7 @@ class FlaskMP4App:
         """
         self.app.add_url_rule('/', 'index', self.index)
         self.app.add_url_rule('/list_files', 'list_files', self.list_files, methods=['POST'])
+        self.app.add_url_rule('/enqueue_batch', 'enqueue_batch', self.enqueue_batch, methods=['POST'])
         self.app.add_url_rule('/load_file', 'load_file', self.load_file, methods=['POST'])
         self.app.add_url_rule('/reanalyze', 'reanalyze', self.reanalyze, methods=['POST'])
         self.app.add_url_rule('/video', 'serve_video', self.serve_video)
@@ -342,6 +359,7 @@ class FlaskMP4App:
         self.app.add_url_rule('/update_display_options', 'update_display_options', self.update_display_options, methods=['POST'])
         self.app.add_url_rule('/update_analysis_tracks', 'update_analysis_tracks', self.update_analysis_tracks, methods=['POST'])
         self.app.add_url_rule('/get_stored_directories', 'get_stored_directories', self.get_stored_directories, methods=['GET'])
+        self.app.add_url_rule('/browse_roots', 'browse_roots', self.browse_roots, methods=['GET'])
         self.app.add_url_rule('/analysis_queue_status', 'analysis_queue_status', self.analysis_queue_status, methods=['GET'])
         self.app.add_url_rule('/toggle_unicode', 'toggle_unicode', self.toggle_unicode, methods=['POST'])
 
@@ -356,7 +374,7 @@ class FlaskMP4App:
 
     def list_files(self):
         """
-        List all .mp4 and .webm files in the provided directory.
+        List all supported media files in the provided directory.
         If the directory is new, it is added to the stored directories.
         :return: JSON list of video files with their sizes.
         """
@@ -380,13 +398,15 @@ class FlaskMP4App:
             self.stored_directories.append(dirname)
             logging.info(f"Added new directory to stored_directories: {dirname}")
 
-        # Use glob to find all .mp4 and .webm files
-        mp4_files = sorted(glob.glob(os.path.join(dirname, "*.mp4")) + glob.glob(os.path.join(dirname, "*.webm")))
-        logging.info(f"Found {len(mp4_files)} files before filtering")
+        media_files = [str(entry) for entry in preferred_media_files(directory)]
+        logging.info(f"Found {len(media_files)} files before filtering")
 
         if matchstring:
-            mp4_files = [f for f in mp4_files if matchstring in os.path.basename(f).lower()]
-            logging.info(f"{len(mp4_files)} files after applying matchstring filter")
+            media_files = [
+                media for media in media_files
+                if matchstring in os.path.basename(media).lower()
+            ]
+            logging.info(f"{len(media_files)} files after applying matchstring filter")
 
         if structured:
             directories = []
@@ -407,10 +427,11 @@ class FlaskMP4App:
                 })
 
             files = []
-            for file in mp4_files:
+            for file in media_files:
                 stat = os.stat(file)
                 files.append({
                     "type": "file",
+                    "media_kind": self._media_kind(file),
                     "name": os.path.basename(file),
                     "path": file,
                     "size_mb": stat.st_size // 1000000,
@@ -418,18 +439,78 @@ class FlaskMP4App:
                     "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
                     "mtime_epoch": stat.st_mtime,
                 })
+            parent = directory.parent.resolve()
+            parent_dir = None
+            if parent != directory and self._is_allowed_directory(parent):
+                parent_dir = str(parent)
             return jsonify({
                 "current_dir": dirname,
-                "parent_dir": os.path.join(dirname, os.pardir),
+                "parent_dir": parent_dir,
                 "directories": directories,
                 "files": files,
             })
 
-        file_size_mb = [os.path.getsize(file) // 1000000 for file in mp4_files]
-        file_names = [os.path.basename(file) for file in mp4_files]
+        file_size_mb = [os.path.getsize(file) // 1000000 for file in media_files]
+        file_names = [os.path.basename(file) for file in media_files]
         res = [f"{name} | {size}M" for name, size in zip(file_names, file_size_mb)]
 
         return jsonify(res)
+
+    def enqueue_batch(self):
+        """Queue the next N missing analyses in the submitted GUI order."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        filenames = data.get("filenames")
+        limit = data.get("limit")
+        if not isinstance(filenames, list) or not all(
+            isinstance(filename, str) for filename in filenames
+        ):
+            return jsonify(error="filenames must be a list of strings"), 400
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or not 1 <= limit <= MAX_BATCH_SIZE
+        ):
+            return jsonify(error=f"limit must be an integer from 1 to {MAX_BATCH_SIZE}"), 400
+
+        try:
+            directory = self._existing_directory(data.get("dirname"))
+        except (ValueError, FileNotFoundError, PermissionError) as error:
+            return self._path_error(error)
+
+        available = {path.name: path.resolve() for path in preferred_media_files(directory)}
+        ordered_media = []
+        seen = set()
+        for filename in filenames:
+            if Path(filename).name != filename or filename in {"", ".", ".."}:
+                return jsonify(error="filenames must not contain paths"), 400
+            media = available.get(filename)
+            if media is None:
+                return jsonify(error=f"Unsupported or unavailable media file: {filename}"), 400
+            if media not in seen:
+                seen.add(media)
+                ordered_media.append(media)
+
+        candidates = []
+        analyzed_count = 0
+        for media in ordered_media:
+            file_repr = FileRepr(str(media), datapath=ANALYSIS_DIR_NAME)
+            json_path = file_repr.get("json")
+            if os.path.exists(json_path) and self.__analysis_is_valid(json_path):
+                analyzed_count += 1
+            else:
+                candidates.append(media)
+
+        result = self.analysis_queue.enqueue_many(candidates, limit)
+        return jsonify({
+            "status": "queued",
+            "queued_count": len(result["queued"]),
+            "queued_paths": result["queued"],
+            "already_queued_count": len(result["already_queued"]),
+            "skipped_analyzed_count": analyzed_count,
+            "remaining_count": len(result["deferred"]),
+        })
 
     def analysis_error_message(self, filename, error):
         error_text = str(error)
@@ -450,7 +531,7 @@ class FlaskMP4App:
 
     def load_file(self):
         """
-        Load the selected .mp4 file and check if a corresponding .json file exists.
+        Load the selected media file and check if a corresponding .json file exists.
         If not, it queues analysis for the external worker and leaves the
         current player unchanged.
         :return: JSON response with mp4 and json file paths.
@@ -483,6 +564,7 @@ class FlaskMP4App:
                 'status': queue_status,
                 'message': 'Added to analysis queue' if queue_status == 'queued' else 'Already in analysis queue',
                 'mp4_file': requested_file_repr.get(),
+                'media_kind': self._media_kind(media),
                 'json_file': None,
                 'title': f"ChordFlask - {filename}"
             })
@@ -515,6 +597,7 @@ class FlaskMP4App:
         return jsonify({
             'status': 'ready',
             'mp4_file': self.file_repr.get(),
+            'media_kind': self._media_kind(media),
             'json_file': self.file_repr.get("json") if self.file_repr.get("json") else None,
             'analysis_valid': analysis_valid,
             'title': f"ChordFlask - {filename}",
@@ -551,21 +634,30 @@ class FlaskMP4App:
                 else 'Reanalysis already in queue'
             ),
             'mp4_file': str(media),
+            'media_kind': self._media_kind(media),
         })
 
     def serve_video(self):
         """
-        Serve the MP4 file as the video source for the front-end player.
-        :return: MP4 file as a response.
+        Serve the selected audio or video source to the front-end player.
         """
         if self.file_repr and os.path.exists(self.file_repr.get()):
-            logging.info(f"Serving MP4 file: {self.file_repr.get()}")
-            response = make_response(send_file(self.file_repr.get(), mimetype='video/mp4'))
+            media_path = self.file_repr.get()
+            mime_types = {
+                ".mp3": "audio/mpeg",
+                ".mp4": "video/mp4",
+                ".webm": "video/webm",
+            }
+            logging.info(f"Serving media file: {media_path}")
+            response = make_response(send_file(
+                media_path,
+                mimetype=mime_types[Path(media_path).suffix.lower()],
+            ))
             response.headers['Cache-Control'] = 'no-store'
             return response
         else:
-            logging.error("Video file not found")
-            return "Video file not found.", 404
+            logging.error("Media file not found")
+            return "Media file not found.", 404
 
     def get_callback_output(self):
         """
@@ -677,6 +769,25 @@ class FlaskMP4App:
         """
         logging.info("Fetching stored directories")
         return jsonify(self.stored_directories)
+
+    def browse_roots(self):
+        """Return safe starting directories for the browser file picker."""
+        roots = self.allowed_roots or [Path.home().resolve()]
+        seen = set()
+        entries = []
+        for root in roots:
+            resolved = Path(root).resolve()
+            if resolved in seen or not resolved.is_dir():
+                continue
+            seen.add(resolved)
+            entries.append({
+                "type": "directory",
+                "name": resolved.name or str(resolved),
+                "path": str(resolved),
+                "mtime": "",
+                "mtime_epoch": resolved.stat().st_mtime,
+            })
+        return jsonify({"roots": entries})
 
     def analysis_queue_status(self):
         """

@@ -33,17 +33,21 @@ class FailingAnalyzer:
         raise RuntimeError("analysis failed")
 
 
-def test_find_media_files_returns_mp4_and_webm_sorted_by_size(tmp_path):
+def test_find_media_files_returns_preferred_media_sorted_by_size(tmp_path):
     small = tmp_path / "b.webm"
     large = tmp_path / "a.mp4"
+    audio = tmp_path / "c.mp3"
+    duplicate_audio = tmp_path / "a.mp3"
     ignored = tmp_path / "notes.txt"
     small.write_bytes(b"1")
     large.write_bytes(b"12345")
+    audio.write_bytes(b"123")
+    duplicate_audio.write_bytes(b"2")
     ignored.write_text("ignored")
 
     files = find_media_files(tmp_path)
 
-    assert files == [small, large]
+    assert files == [small, audio, large]
 
 
 def test_analyze_file_safe_returns_success_payload(tmp_path):

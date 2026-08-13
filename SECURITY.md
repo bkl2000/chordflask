@@ -33,6 +33,9 @@ Do not open a public issue.
 - Non-loopback operation requires explicitly configured media roots, and the
   app rejects traversal outside them. Loopback-only trusted-user operation may
   browse other locally readable directories for compatibility.
+- The web directory browser starts at the local user's home directory on
+  loopback. On non-loopback listeners it exposes only configured media roots
+  and hides parent navigation at each boundary.
 - Flask debug mode is disabled by default and is rejected on non-loopback
   listeners even when explicitly requested.
 - File-system operations resolve paths with `Path.resolve()` and validate

@@ -54,6 +54,11 @@ class FailingAnalyzer:
         raise RuntimeError("analysis failed")
 
 
+class FailingExporter:
+    def write_midi_and_musicxml(self, chord_data, file_repr):
+        raise RuntimeError("export failed")
+
+
 def test_analysis_service_loads_existing_json_without_reanalysis(tmp_path):
     media = tmp_path / "song.mp4"
     media.write_bytes(b"not used")
@@ -96,6 +101,31 @@ def test_analysis_service_generates_json_and_exports_when_missing(tmp_path):
     assert Path(file_repr.get("json")).is_file()
 
 
+def test_analysis_service_uses_converter_returned_audio_path(tmp_path):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(str(media), create=True)
+
+    class SourceConverter(FakeConverter):
+        def ensure_mp3(self, file_repr):
+            self.calls.append(file_repr.get())
+            return file_repr.get()
+
+    converter = SourceConverter()
+    analyzer = FakeAnalyzer()
+    service = ChordAnalysisService(
+        converter=converter,
+        analyzer=analyzer,
+        exporter=FakeExporter(),
+    )
+
+    service.ensure_analyzed(file_repr)
+
+    assert converter.calls == [str(media)]
+    assert analyzer.calls == [(str(media), False)]
+    assert not Path(file_repr.get("mp3")).exists()
+
+
 def test_analysis_service_can_skip_midi_export(tmp_path):
     media = tmp_path / "song.mp4"
     media.write_bytes(b"not used")
@@ -126,6 +156,40 @@ def test_analysis_service_propagates_analyzer_failure(tmp_path):
         service.ensure_analyzed(file_repr)
 
     assert not Path(file_repr.get("json")).exists()
+
+
+def test_analysis_service_writes_completion_json_only_after_exports(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(str(media), create=True)
+    service = ChordAnalysisService(
+        converter=FakeConverter(),
+        analyzer=FakeAnalyzer(),
+        exporter=FailingExporter(),
+    )
+
+    with pytest.raises(RuntimeError, match="export failed"):
+        service.ensure_analyzed(file_repr)
+
+    assert not Path(file_repr.get("json")).exists()
+
+
+def test_chord_exporter_preserves_destination_and_cleans_temp_on_failure(tmp_path):
+    destination = tmp_path / "song.xml"
+    destination.write_text("old", encoding="utf-8")
+
+    class FailingScore:
+        def write(self, output_format, fp):
+            Path(fp).write_text("partial", encoding="utf-8")
+            raise RuntimeError("write failed")
+
+    with pytest.raises(RuntimeError, match="write failed"):
+        ChordExporter._ChordExporter__atomic_score_write(
+            FailingScore(), "musicxml", destination
+        )
+
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert list(tmp_path.glob(".song.export-*")) == []
 
 
 def test_compatibility_facade_reports_analyzer_failure(tmp_path, capsys):

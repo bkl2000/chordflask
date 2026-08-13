@@ -9,6 +9,7 @@ and console diagnostic for compatibility with existing callers.
 import os
 import sys
 import bisect
+from pathlib import Path
 
 from analysis_service import ChordAnalysisService
 from audio_analyzer import AudioAnalyzer
@@ -40,6 +41,11 @@ class ChordAnalyzer:
     def convert_mp4_to_mp3(self):
         self.converter.ensure_mp3(self.file_repr)
 
+    def __analysis_audio_path(self):
+        if Path(self.file_repr.get()).suffix.lower() == ".mp3":
+            return self.file_repr.get()
+        return self.file_repr.get("mp3")
+
     def _extract_chords_vamp(self, y, sr):
         return self.audio_analyzer._extract_chords_vamp(y, sr)
 
@@ -49,7 +55,7 @@ class ChordAnalyzer:
     def analyze_chords(self, use_madmom=False):
         try:
             self.chord_data = self.audio_analyzer.analyze(
-                self.file_repr.get("mp3"),
+                self.__analysis_audio_path(),
                 use_madmom=use_madmom,
             )
             return True
@@ -61,7 +67,7 @@ class ChordAnalyzer:
         return self.analyze_chords(use_madmom=use_madmom)
 
     def detect_meter(self):
-        return self.audio_analyzer.detect_meter(self.file_repr.get("mp3"))
+        return self.audio_analyzer.detect_meter(self.__analysis_audio_path())
 
     def play_with_chords(self):
         from mp3player import MP3Player
@@ -73,7 +79,7 @@ class ChordAnalyzer:
             if 0 <= idx < len(transposed_chords):
                 chords_to_display = [f"{transposed_chords[i][1]:^8}" for i in range(idx, min(idx + 4, len(transposed_chords)))]
                 print(f"{position:7.2f} |{'|'.join(chords_to_display)}")
-        player = MP3Player(self.file_repr.get("mp3"), position_callback=print_chord_at_time)  # noqa: F841
+        player = MP3Player(self.__analysis_audio_path(), position_callback=print_chord_at_time)  # noqa: F841
 
     def play_mp4_with_chords(self):
         from mp4player import MP4Player

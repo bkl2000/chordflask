@@ -108,13 +108,56 @@
       min-height: 0;
     }
 
-    #videoPlayer {
+    #videoPlayer,
+    .audio-player-panel {
       display: block;
       width: 100%;
       height: 100%;
       min-height: 420px;
+    }
+
+    #videoPlayer {
       object-fit: contain;
       background: #000;
+    }
+
+    #videoPlayer[hidden] {
+      display: none;
+    }
+
+    .audio-player-panel {
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 32px;
+      color: #d7e0ea;
+      background: radial-gradient(circle at center, #26313d 0, #121820 68%);
+    }
+
+    .audio-player-panel[hidden] {
+      display: none;
+    }
+
+    .audio-symbol {
+      font-size: clamp(64px, 10vw, 120px);
+      line-height: 1;
+      color: #7fc4ff;
+    }
+
+    #audioFileName {
+      max-width: 90%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 18px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    #audioPlayer {
+      width: min(520px, 90%);
     }
 
     .chord-panel {
@@ -353,8 +396,15 @@
 
     .directory-tools button {
       grid-column: 2;
-      grid-row: 1 / span 2;
-      height: 74px;
+      height: 34px;
+    }
+
+    .directory-tools .browse-button {
+      grid-row: 1;
+    }
+
+    .directory-tools .load-button {
+      grid-row: 2;
     }
 
     .directory-tools button {
@@ -370,9 +420,20 @@
 
     .browser-head {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 8px;
       align-items: center;
+    }
+
+    .batch-tools {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .batch-tools input {
+      width: 66px;
     }
 
     .file-table-wrap {
@@ -500,7 +561,8 @@
         min-height: 0;
       }
 
-      #videoPlayer {
+      #videoPlayer,
+      .audio-player-panel {
         min-height: 0;
       }
 
@@ -529,7 +591,8 @@
         min-height: auto;
       }
 
-      #videoPlayer {
+      #videoPlayer,
+      .audio-player-panel {
         height: auto;
         min-height: 0;
         aspect-ratio: 16 / 9;
@@ -578,6 +641,15 @@
         grid-column: auto;
       }
 
+      .browser-head {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+
+      .batch-tools {
+        grid-column: 1 / -1;
+        justify-self: end;
+      }
+
       .directory-tools {
         grid-template-columns: 1fr;
       }
@@ -613,6 +685,13 @@
         <video id="videoPlayer" controls>
           Your browser does not support the video tag.
         </video>
+        <div id="audioPlayerPanel" class="audio-player-panel" hidden>
+          <span class="audio-symbol" aria-hidden="true">&#9835;</span>
+          <span id="audioFileName"></span>
+          <audio id="audioPlayer" controls>
+            Your browser does not support the audio tag.
+          </audio>
+        </div>
       </div>
 
       <aside class="chord-panel">
@@ -647,7 +726,8 @@
           <select id="storedDirs" onchange="selectStoredDirectory()">
             <option value="">Select a directory</option>
           </select>
-          <button type="button" onclick="loadFiles({ autoload: false })">Load</button>
+          <button class="browse-button" type="button" onclick="browseDirectories()">Browse</button>
+          <button class="load-button" type="button" onclick="loadFiles({ autoload: false })">Load</button>
         </div>
       </div>
 
@@ -655,6 +735,12 @@
         <div class="browser-head">
           <label for="matchstring">Files</label>
           <input type="text" id="matchstring" placeholder="Filter filenames..." />
+          <div class="batch-tools">
+            <label for="batchLimit">Next</label>
+            <input id="batchLimit" type="number" min="1" max="500" step="1" value="50"
+                   aria-label="Number of new analyses to queue" />
+            <button id="queueNextButton" type="button" disabled>Queue next</button>
+          </div>
         </div>
         <div class="file-table-wrap">
           <table class="file-table">
@@ -701,7 +787,11 @@
 
   <script>
     let dirnameInput = document.getElementById('dirname');
-    let video = document.getElementById('videoPlayer');
+    let videoPlayer = document.getElementById('videoPlayer');
+    let audioPlayer = document.getElementById('audioPlayer');
+    let audioPlayerPanel = document.getElementById('audioPlayerPanel');
+    let audioFileName = document.getElementById('audioFileName');
+    let video = videoPlayer;
     let semitonesInput = document.getElementById('semitones');
     let callbackOutput = document.getElementById('callbackOutput');
     let callbackContainer = document.getElementById('callbackContainer');
@@ -717,6 +807,8 @@
     let rhythmTrackSelect = document.getElementById('rhythmTrackSelect');
     let previousFileButton = document.getElementById('previousFileButton');
     let nextFileButton = document.getElementById('nextFileButton');
+    let batchLimitInput = document.getElementById('batchLimit');
+    let queueNextButton = document.getElementById('queueNextButton');
 
     let isRepeating = false;
     let isContinuing = false;
@@ -732,6 +824,9 @@
     let loadedMediaPath = '';
     let loadedAnalysisValid = false;
     let loadRequestInFlight = false;
+    let batchRequestInFlight = false;
+    let activeLoadIntent = null;
+    let loadIntentQueue = [];
     let pendingAnalysisLoad = null;
     let queuedAnalysisPaths = new Set();
     let previousQueuePaths = new Set();
@@ -748,6 +843,7 @@
       file: 'chordifier.file',
       sortKey: 'chordifier.sortKey',
       sortDirection: 'chordifier.sortDirection',
+      batchLimit: 'chordflask.batchLimit',
       repeatMode: 'chordifier.repeatMode',
       preferFlats: 'chordifier.preferFlats',
       chordTrackId: 'chordflask.chordTrackId',
@@ -850,16 +946,77 @@
     }
 
     function navigationAnchorName() {
-      return pendingAnalysisLoad?.filename || loadedFileName;
+      return selectedFileName || pendingAnalysisLoad?.filename || loadedFileName;
     }
 
     function updateNavigationButtons() {
       const anchor = navigationAnchorName();
       const currentIndex = currentFiles.findIndex(file => file.name === anchor);
-      previousFileButton.disabled = loadRequestInFlight || currentIndex <= 0;
-      nextFileButton.disabled = (
-        loadRequestInFlight || currentIndex < 0 || currentIndex >= currentFiles.length - 1
+      previousFileButton.disabled = currentIndex <= 0;
+      nextFileButton.disabled = currentIndex < 0 || currentIndex >= currentFiles.length - 1;
+    }
+
+    function normalizedBatchLimit() {
+      const parsed = Number.parseInt(batchLimitInput.value, 10);
+      const limit = Number.isFinite(parsed) ? Math.min(500, Math.max(1, parsed)) : 50;
+      batchLimitInput.value = String(limit);
+      return limit;
+    }
+
+    function updateBatchButton() {
+      queueNextButton.disabled = (
+        batchRequestInFlight || !currentDirectory || currentFiles.length === 0
       );
+    }
+
+    function queueNextBatch() {
+      if (batchRequestInFlight || !currentDirectory || !currentFiles.length) {
+        return;
+      }
+      const limit = normalizedBatchLimit();
+      localStorage.setItem(storageKeys.batchLimit, String(limit));
+      batchRequestInFlight = true;
+      updateBatchButton();
+      showQueueStatus(`Queueing next ${limit}...`);
+
+      fetch('/enqueue_batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store'
+        },
+        body: JSON.stringify({
+          dirname: currentDirectory,
+          filenames: currentFiles.map(file => file.name),
+          limit: limit
+        })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        (data.queued_paths || []).forEach(path => queuedAnalysisPaths.add(path));
+        const queued = Number(data.queued_count || 0);
+        const remaining = Number(data.remaining_count || 0);
+        showQueueStatus(
+          queued
+            ? `${queued} queued · ${remaining} remaining`
+            : (remaining ? `${remaining} remaining` : 'No unscanned files')
+        );
+        updateReanalyzeButton();
+        refreshAnalysisQueueStatus();
+      })
+      .catch(error => {
+        console.error('Error queueing batch:', error);
+        showQueueStatus(error.error || 'Could not queue batch');
+      })
+      .finally(() => {
+        batchRequestInFlight = false;
+        updateBatchButton();
+      });
     }
 
     function waitForAnalysis(dirname, filename, path, reason) {
@@ -1028,6 +1185,46 @@
       loadFiles({ autoload: false });
     }
 
+    function browseDirectories() {
+      discardQueuedLoadIntents();
+      fileStatus.innerText = 'Opening directory browser...';
+      fetch('/browse_roots', {
+        method: 'GET',
+        headers: { 'Cache-Control': 'no-store' }
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        const roots = data.roots || [];
+        if (roots.length === 1) {
+          openDirectory(roots[0].path);
+          return;
+        }
+        currentDirectory = '';
+        parentDirectory = '';
+        currentDirectories = roots;
+        currentFiles = [];
+        selectedFileName = '';
+        dirnameInput.value = '';
+        renderBrowserTable(currentDirectories, currentFiles);
+        updateBatchButton();
+        fileStatus.innerText = roots.length ? 'Choose a media root' : 'No media roots available';
+      })
+      .catch(error => {
+        console.error('Error opening directory browser:', error);
+        fileStatus.innerText = error.error || 'Directory browser error';
+      });
+    }
+
+    function discardQueuedLoadIntents() {
+      loadIntentQueue = [];
+      pendingAnalysisLoad = null;
+    }
+
     function loadFiles(options = {}) {
       const autoload = options.autoload !== false;
       const preferredFile = options.preferredFile || localStorage.getItem(storageKeys.file) || '';
@@ -1039,6 +1236,7 @@
         return;
       }
 
+      discardQueuedLoadIntents();
       fileStatus.innerText = 'Loading files...';
       localStorage.setItem(storageKeys.dirname, dirname);
       localStorage.setItem(storageKeys.filter, matchstring);
@@ -1058,7 +1256,7 @@
       })
       .then(data => {
         currentDirectory = data.current_dir || dirname;
-        parentDirectory = data.parent_dir || `${dirname}/..`;
+        parentDirectory = data.parent_dir || '';
         currentDirectories = data.directories || [];
         currentFiles = data.files || [];
         sortBrowserEntries();
@@ -1066,6 +1264,7 @@
         fileStatus.innerText = `${currentDirectories.length} dirs, ${currentFiles.length} files`;
         selectPreferredFile(preferredFile);
         renderBrowserTable(currentDirectories, currentFiles);
+        updateBatchButton();
         if (autoload && currentFiles.length) {
           loadSelectedFile();
         }
@@ -1160,8 +1359,12 @@
 
     function renderBrowserTable(directories, files) {
       fileTableBody.innerHTML = '';
-      renderDirectoryRow('.', currentDirectory, 'Reload current directory');
-      renderDirectoryRow('..', parentDirectory, 'Open parent directory');
+      if (currentDirectory) {
+        renderDirectoryRow('.', currentDirectory, 'Reload current directory');
+      }
+      if (parentDirectory) {
+        renderDirectoryRow('..', parentDirectory, 'Open parent directory');
+      }
 
       if (!directories.length && !files.length) {
         const row = document.createElement('tr');
@@ -1171,6 +1374,7 @@
         row.appendChild(cell);
         fileTableBody.appendChild(row);
         updateNavigationButtons();
+        updateBatchButton();
         return;
       }
 
@@ -1187,7 +1391,7 @@
         row.addEventListener('click', () => {
           selectedFileName = file.name;
           renderBrowserTable(currentDirectories, currentFiles);
-          loadSelectedFile();
+          loadSelectedFile({ autoplay: true, analysisWaitReason: 'manual' });
         });
 
         const nameCell = document.createElement('td');
@@ -1208,6 +1412,7 @@
         fileTableBody.appendChild(row);
       });
       updateNavigationButtons();
+      updateBatchButton();
     }
 
     function renderDirectoryRow(name, path, title, mtime = '') {
@@ -1233,36 +1438,51 @@
       fileTableBody.appendChild(row);
     }
 
-    function loadSelectedFile(options = {}) {
-      const autoplay = options.autoplay === true;
-      const analysisWaitReason = options.analysisWaitReason || '';
-      const filename = options.filename || selectedFileName;
-      const dirname = options.dirname || dirnameInput.value.trim();
+    function sameLoadIntent(left, right) {
+      return Boolean(left && right)
+        && left.filename === right.filename
+        && normalizeDirectoryPath(left.dirname) === normalizeDirectoryPath(right.dirname);
+    }
 
-      if (!filename) {
-        alert('Please select a valid file.');
+    function loadIntentIsCurrentSelection(intent) {
+      if (!selectedFileName || !dirnameInput.value.trim()) {
+        return false;
+      }
+      return mediaPath(intent.dirname, intent.filename)
+        === mediaPath(dirnameInput.value.trim(), selectedFileName);
+    }
+
+    function selectMediaPlayer(mediaKind, filename) {
+      const nextPlayer = mediaKind === 'audio' ? audioPlayer : videoPlayer;
+      if (video !== nextPlayer) {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        video = nextPlayer;
+      }
+      video.loop = isRepeating;
+      const audioOnly = mediaKind === 'audio';
+      videoPlayer.hidden = audioOnly;
+      audioPlayerPanel.hidden = !audioOnly;
+      audioFileName.innerText = audioOnly ? filename : '';
+    }
+
+    function processNextLoadIntent() {
+      if (loadRequestInFlight || !loadIntentQueue.length) {
         return;
       }
 
-      const requestedPath = mediaPath(dirname, filename);
-      if (loadRequestInFlight) {
-        return;
-      }
-      if (queuedAnalysisPaths.has(requestedPath)) {
-        showQueueStatus(`Already queued: ${filename}`);
-        if (analysisWaitReason || isContinuing) {
-          waitForAnalysis(
-            dirname, filename, requestedPath, analysisWaitReason || 'continue'
-          );
-        }
-        return;
-      }
+      const intent = loadIntentQueue.shift();
+      const { autoplay, analysisWaitReason, dirname, filename, requestedPath } = intent;
+      activeLoadIntent = intent;
 
       localStorage.setItem(storageKeys.dirname, dirname);
       localStorage.setItem(storageKeys.filter, document.getElementById('matchstring').value.trim());
-      fileStatus.innerText = 'Checking analysis...';
+      if (loadIntentIsCurrentSelection(intent)) {
+        fileStatus.innerText = `Checking analysis: ${filename}`;
+      }
       loadRequestInFlight = true;
-      updateNavigationButtons();
+      updateReanalyzeButton();
 
       fetch('/load_file', {
         method: 'POST',
@@ -1284,37 +1504,45 @@
         return response.json();
       })
       .then(data => {
+        const isCurrentSelection = loadIntentIsCurrentSelection(intent);
         if (data.error) {
-          alert(`Error: ${data.error}`);
-          fileStatus.innerText = 'Load error';
-          setContinue(false);
+          if (isCurrentSelection) {
+            alert(`Error: ${data.error}`);
+            fileStatus.innerText = 'Load error';
+            setContinue(false);
+          }
           return;
         }
         if (data.status === 'queued' || data.status === 'already_queued') {
           const queuedPath = data.mp4_file || requestedPath;
           queuedAnalysisPaths.add(queuedPath);
           showQueueStatus(data.message || 'Added to analysis queue');
-          if (analysisWaitReason || isContinuing) {
+          if (isCurrentSelection && (analysisWaitReason || isContinuing)) {
             waitForAnalysis(
               dirname, filename, queuedPath, analysisWaitReason || 'continue'
             );
-          } else {
+          } else if (isCurrentSelection) {
             fileStatus.innerText = loadedFileName || 'No file loaded';
           }
           return;
         }
-        pendingAnalysisLoad = null;
+        if (pendingAnalysisLoad?.path === requestedPath) {
+          pendingAnalysisLoad = null;
+        }
         semitonesInput.value = 0;
         localStorage.setItem(storageKeys.file, filename);
         callbackOutput.innerText = '';
+        selectMediaPlayer(data.media_kind, filename);
         video.src = '/video?' + new Date().getTime();
         video.load();
         pageTitle.innerText = data.title;
         loadedFileName = filename;
         loadedFileDirectory = dirname;
-        loadedMediaPath = data.mp4_file || mediaPath(dirname, filename);
+        loadedMediaPath = data.mp4_file || requestedPath;
         loadedAnalysisValid = data.analysis_valid === true;
-        fileStatus.innerText = filename;
+        fileStatus.innerText = pendingAnalysisLoad
+          ? `Waiting for analysis: ${pendingAnalysisLoad.filename}`
+          : filename;
         updateReanalyzeButton();
         updateTrackSelectors(
           data.available_chord_tracks, data.available_rhythm_tracks,
@@ -1323,23 +1551,72 @@
         if (autoplay) {
           video.play().catch(error => {
             console.error('Autoplay failed:', error);
-            fileStatus.innerText = 'Autoplay blocked';
-            setContinue(false);
+            if (loadIntentIsCurrentSelection(intent)) {
+              fileStatus.innerText = 'Autoplay blocked';
+              setContinue(false);
+            }
           });
         }
         sendDisplayOptions();
       })
       .catch(error => {
         console.error('Error loading file:', error);
-        fileStatus.innerText = 'Load error';
-        setContinue(false);
-        alert(`Error loading file: ${error.error || 'Unknown error'}`);
+        if (loadIntentIsCurrentSelection(intent)) {
+          fileStatus.innerText = 'Load error';
+          setContinue(false);
+          alert(`Error loading file: ${error.error || 'Unknown error'}`);
+        }
       })
       .finally(() => {
         loadRequestInFlight = false;
+        activeLoadIntent = null;
         updateReanalyzeButton();
         updateNavigationButtons();
+        processNextLoadIntent();
       });
+    }
+
+    function loadSelectedFile(options = {}) {
+      const intent = {
+        autoplay: options.autoplay === true,
+        analysisWaitReason: options.analysisWaitReason || '',
+        filename: options.filename || selectedFileName,
+        dirname: options.dirname || dirnameInput.value.trim()
+      };
+
+      if (!intent.filename) {
+        alert('Please select a valid file.');
+        return;
+      }
+
+      intent.requestedPath = mediaPath(intent.dirname, intent.filename);
+      if (
+        pendingAnalysisLoad
+        && pendingAnalysisLoad.path !== intent.requestedPath
+      ) {
+        pendingAnalysisLoad = null;
+      }
+      if (queuedAnalysisPaths.has(intent.requestedPath)) {
+        showQueueStatus(`Already queued: ${intent.filename}`);
+        if (intent.analysisWaitReason || isContinuing) {
+          waitForAnalysis(
+            intent.dirname,
+            intent.filename,
+            intent.requestedPath,
+            intent.analysisWaitReason || 'continue'
+          );
+        }
+        return;
+      }
+
+      const lastQueuedIntent = loadIntentQueue[loadIntentQueue.length - 1];
+      const previousIntent = lastQueuedIntent || activeLoadIntent;
+      if (sameLoadIntent(intent, previousIntent)) {
+        return;
+      }
+      loadIntentQueue.push(intent);
+      updateNavigationButtons();
+      processNextLoadIntent();
     }
 
     function reanalyzeCurrentFile() {
@@ -1461,9 +1738,11 @@
     }
 
     setInterval(() => syncPlaybackPosition(false), positionSyncIntervalMs);
-    video.addEventListener('seeked', () => syncPlaybackPosition(true));
-    video.addEventListener('play', () => syncPlaybackPosition(true));
-    video.addEventListener('pause', () => syncPlaybackPosition(true));
+    [videoPlayer, audioPlayer].forEach(player => {
+      player.addEventListener('seeked', () => syncPlaybackPosition(true));
+      player.addEventListener('play', () => syncPlaybackPosition(true));
+      player.addEventListener('pause', () => syncPlaybackPosition(true));
+    });
 
     function updateSemitones() {
       const semitones = parseInt(semitonesInput.value, 10);
@@ -1583,7 +1862,7 @@
     }
 
     function navigateFile(offset, reason = 'manual') {
-      if (loadRequestInFlight || !currentFiles.length || ![-1, 1].includes(offset)) {
+      if (!currentFiles.length || ![-1, 1].includes(offset)) {
         return;
       }
 
@@ -1607,13 +1886,21 @@
     }
 
     function playNextFileIfContinue() {
-      if (!isContinuing || isRepeating || pendingAnalysisLoad) {
+      if (
+        !isContinuing
+        || isRepeating
+        || pendingAnalysisLoad
+        || loadRequestInFlight
+        || loadIntentQueue.length
+      ) {
         return;
       }
       navigateFile(1, 'continue');
     }
 
-    video.addEventListener('ended', playNextFileIfContinue);
+    [videoPlayer, audioPlayer].forEach(player => {
+      player.addEventListener('ended', playNextFileIfContinue);
+    });
 
     document.addEventListener('DOMContentLoaded', () => {
       const savedDirname = localStorage.getItem(storageKeys.dirname) || '';
@@ -1622,10 +1909,19 @@
       const savedSortKey = localStorage.getItem(storageKeys.sortKey);
       const savedSortDirection = localStorage.getItem(storageKeys.sortDirection);
       const savedRepeatMode = localStorage.getItem(storageKeys.repeatMode);
+      const savedBatchLimit = Number.parseInt(localStorage.getItem(storageKeys.batchLimit), 10);
       sortKey = ['name', 'size', 'modified'].includes(savedSortKey) ? savedSortKey : 'name';
       sortDirection = savedSortDirection === 'desc' ? 'desc' : 'asc';
       repeatMode = savedRepeatMode === 'chords' ? 'chords' : 'changes';
       preferFlats = localStorage.getItem(storageKeys.preferFlats) !== '0';
+      batchLimitInput.value = String(
+        Number.isFinite(savedBatchLimit) ? Math.min(500, Math.max(1, savedBatchLimit)) : 50
+      );
+      queueNextButton.addEventListener('click', queueNextBatch);
+      batchLimitInput.addEventListener('change', () => {
+        localStorage.setItem(storageKeys.batchLimit, String(normalizedBatchLimit()));
+      });
+      updateBatchButton();
       document.querySelectorAll('.sort-button').forEach(button => {
         button.addEventListener('click', () => setSort(button.dataset.sortKey));
       });

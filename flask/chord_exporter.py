@@ -1,4 +1,7 @@
 from fractions import Fraction
+import os
+import tempfile
+from pathlib import Path
 
 from music21 import stream, meter, note, chord as m21_chord, metadata, harmony, tempo
 from PIL import Image, ImageDraw, ImageFont
@@ -31,11 +34,33 @@ class ChordExporter:
             except Exception:
                 part.append(note.Rest(quarterLength=quarter_length))
         score.append(part)
-        score.write('musicxml', fp=file_repr.get("xml"))
+        self.__atomic_score_write(score, "musicxml", file_repr.get("xml"))
         print(f"MusicXML file saved: {file_repr.get('xml')}")
-        score.write('midi', fp=file_repr.get("mid"))
+        self.__atomic_score_write(score, "midi", file_repr.get("mid"))
         print(f"MIDI file saved: {file_repr.get('mid')}")
         del score
+
+    @staticmethod
+    def __atomic_score_write(score, output_format, destination_path):
+        destination = Path(destination_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{destination.stem}.export-",
+            suffix=destination.suffix,
+            dir=destination.parent,
+        )
+        os.close(descriptor)
+        os.unlink(temporary_name)
+        try:
+            score.write(output_format, fp=temporary_name)
+            os.replace(temporary_name, destination)
+            temporary_name = None
+        finally:
+            if temporary_name is not None:
+                try:
+                    os.unlink(temporary_name)
+                except FileNotFoundError:
+                    pass
 
     def _duration_quarter_length(self, chord_offsets, index, bpm):
         if index + 1 < len(chord_offsets):

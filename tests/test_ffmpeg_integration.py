@@ -107,6 +107,65 @@ def test_media_converter_fails_before_opening_media_without_ffmpeg(monkeypatch, 
         raise AssertionError("Direct media conversion must require system ffmpeg")
 
 
+def test_media_converter_uses_source_mp3_without_moviepy_or_copy(monkeypatch, tmp_path):
+    import media_converter
+    from filerepr import FileRepr
+
+    source = tmp_path / "song.MP3"
+    source.write_bytes(b"audio")
+    file_repr = FileRepr(str(source), create=True)
+
+    def unexpected_video_open(*args, **kwargs):
+        raise AssertionError("source MP3 must not be opened with MoviePy")
+
+    def unexpected_ffmpeg_check():
+        raise AssertionError("source MP3 needs no conversion preflight")
+
+    monkeypatch.setattr(media_converter, "VideoFileClip", unexpected_video_open)
+    monkeypatch.setattr(media_converter, "require_system_ffmpeg", unexpected_ffmpeg_check)
+
+    result = media_converter.MediaConverter().ensure_mp3(file_repr)
+
+    assert result == str(source)
+    assert not Path(file_repr.get("mp3")).exists()
+
+
+def test_media_converter_does_not_publish_or_leave_partial_mp3(monkeypatch, tmp_path):
+    import media_converter
+    from filerepr import FileRepr
+
+    source = tmp_path / "song.mp4"
+    source.write_bytes(b"video")
+    file_repr = FileRepr(str(source), create=True)
+
+    class PartialAudio:
+        def write_audiofile(self, output_path):
+            Path(output_path).write_bytes(b"partial")
+            raise RuntimeError("conversion interrupted")
+
+    class FakeVideo:
+        audio = PartialAudio()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(media_converter, "require_system_ffmpeg", lambda: None)
+    monkeypatch.setattr(media_converter, "VideoFileClip", lambda path: FakeVideo())
+
+    try:
+        media_converter.MediaConverter().ensure_mp3(file_repr)
+    except RuntimeError as error:
+        assert "conversion interrupted" in str(error)
+    else:
+        raise AssertionError("interrupted conversion must fail")
+
+    assert not Path(file_repr.get("mp3")).exists()
+    assert list(Path(file_repr.datapath).glob(".song.convert-*.mp3")) == []
+
+
 def test_audio_analyzer_fails_before_loading_audio_without_ffmpeg(monkeypatch):
     import audio_analyzer
 

@@ -51,6 +51,7 @@ videos/**/*.xml
 videos/**/*.mid
 videos/**/*.song
 videos/**/*.wav
+videos/*.mp3
 videos/*.mp4
 videos/*.webm
 videos/**/*.mp4

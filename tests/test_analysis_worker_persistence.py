@@ -94,6 +94,61 @@ def test_worker_rejects_and_preserves_invalid_new_analysis(tmp_path):
     assert "created invalid chord data" in queue.status()["failed"][0]["error"]
 
 
+def test_worker_cleans_interrupted_work_and_publishes_json_last(tmp_path):
+    media, queue, analysis_dir = _setup_job(tmp_path)
+    stale_analysis = analysis_dir / ".song.analyze-crashed"
+    stale_reanalysis = analysis_dir / ".song.reanalyze-crashed"
+    unrelated = analysis_dir / ".other.analyze-active"
+    stale_analysis.mkdir()
+    stale_reanalysis.mkdir()
+    unrelated.mkdir()
+    (stale_analysis / "partial.mp3").write_bytes(b"partial")
+    (analysis_dir / "song.mp3").write_bytes(b"old partial")
+
+    class CompleteAnalyzer:
+        def __init__(self, media_path, data_dir):
+            self.data_dir = Path(data_dir)
+
+        def process(self):
+            assert not stale_analysis.exists()
+            assert not stale_reanalysis.exists()
+            assert unrelated.exists()
+            assert not (analysis_dir / "song.mp3").exists()
+            _write_track(self.data_dir / "song.json", "C")
+            (self.data_dir / "song.mp3").write_bytes(b"complete audio")
+            (self.data_dir / "song.xml").write_text("complete xml", encoding="utf-8")
+
+    worker = AnalysisWorker(queue=queue, analyzer_cls=CompleteAnalyzer)
+
+    assert worker.run_once() is True
+    assert (analysis_dir / "song.mp3").read_bytes() == b"complete audio"
+    assert (analysis_dir / "song.xml").read_text(encoding="utf-8") == "complete xml"
+    assert (analysis_dir / "song.json").exists()
+    assert unrelated.exists()
+    assert list(analysis_dir.glob(".song.analyze-*")) == []
+    assert queue.status() == {"pending": [], "failed": []}
+
+
+def test_worker_failure_leaves_no_published_partial_artifacts(tmp_path):
+    media, queue, analysis_dir = _setup_job(tmp_path)
+
+    class PartialAnalyzer:
+        def __init__(self, media_path, data_dir):
+            self.data_dir = Path(data_dir)
+
+        def process(self):
+            (self.data_dir / "song.mp3").write_bytes(b"partial")
+            raise RuntimeError("process stopped")
+
+    worker = AnalysisWorker(queue=queue, analyzer_cls=PartialAnalyzer)
+
+    assert worker.run_once() is True
+    assert not (analysis_dir / "song.mp3").exists()
+    assert not (analysis_dir / "song.json").exists()
+    assert list(analysis_dir.glob(".song.analyze-*")) == []
+    assert "process stopped" in queue.status()["failed"][0]["error"]
+
+
 def test_forced_reanalysis_atomically_replaces_json_and_preserves_user_data(tmp_path):
     media, queue, analysis_dir = _setup_job(tmp_path, force=True)
     json_path = analysis_dir / "song.json"

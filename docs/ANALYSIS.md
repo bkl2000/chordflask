@@ -1,14 +1,35 @@
 # Playback and analysis
 
-ChordFlask plays MP4 and WebM files while showing chords aligned to detected
-beats. Selecting an unanalyzed file adds it to a local queue. The managed worker
+ChordFlask plays MP3, MP4, and WebM files while showing chords aligned to
+detected beats. MP3 sources are analyzed directly without making another audio
+copy. Selecting an unanalyzed file adds it to a local queue. The managed worker
 processes one file at a time and the browser reports whether the file is
 running, waiting, failed, or ready.
+
+Use **Browse** to start at the local user's home directory. When allowed media
+roots are configured, Browse shows only those roots and does not offer parent
+navigation outside them. The path field and stored-directory selector remain
+available for direct access. Browser file uploads are deliberately not used.
+
+If files with the same base name have different supported extensions, only one
+appears because they would share an analysis sidecar. The deterministic order
+is MP4, then WebM, then MP3; source files are never removed.
+
+## Batch queue
+
+**Queue next** adds up to N new analyses from the current visible file list.
+N defaults to 50, accepts 1–500, and is remembered by the browser. The current
+filter and Name/Size/Modified ordering determine which files are next. Valid
+analyses and jobs already pending or processing are skipped without consuming
+N, so another click queues the following N files. Failed jobs are eligible for
+retry. Only the displayed directory is considered; subdirectories are not
+scanned recursively.
 
 ## Playback controls
 
 - **Previous** and **Next** follow the visible, filtered, and sorted file list.
-  They stop at the first and last file rather than wrapping.
+  MP3 and video files share this list. Navigation stops at the first and last
+  file rather than wrapping.
 - **Continue** starts the next visible file when the current one ends. If its
   analysis is missing, playback waits and starts after analysis succeeds.
 - **Repeat** repeats the current file.
@@ -22,6 +43,13 @@ running, waiting, failed, or ready.
 Each media directory receives a `.chordflask` subdirectory containing generated
 JSON, MusicXML, MIDI, and intermediate audio. ChordFlask does not alter the
 source media file.
+
+The local queue file is written atomically. When the worker restarts, a job left
+in `processing` returns to `pending`. Analysis runs in a per-song temporary
+directory; orphaned work directories are removed on retry, MP3/MusicXML/MIDI
+are replaced atomically, and valid JSON is published last as the completion
+marker. A process interruption can therefore delay a job but cannot make a
+partial analysis appear complete.
 
 Schema v3 stores independent named analysis tracks:
 

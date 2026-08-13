@@ -8,10 +8,10 @@ directly.
 
 These are kept as usable command-line tools and have smoke-test coverage.
 
-- `batch_core.py` - shared batch file discovery and serial/parallel execution
-  helpers.
-- `chordbatch.py` - serial batch analyzer entry point for `.mp4` and `.webm`
-  files.
+- `batch_core.py` - batch serial/parallel execution helpers; media discovery is
+  shared with the active app through `flask/media_library.py`.
+- `chordbatch.py` - serial batch analyzer entry point for MP3, MP4, and WebM
+  files, including the active same-stem priority.
 - `chordbatch_mp.py` - multiprocessing batch analyzer entry point.
 
 ## Legacy Or Experimental Analyzer Variants
