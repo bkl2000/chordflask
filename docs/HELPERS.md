@@ -15,8 +15,8 @@ These are kept as usable command-line tools and have smoke-test coverage.
 - `chordbatch_mp.py` - multiprocessing batch analyzer entry point.
 - `chordleadsheet_batch.py` - serial batch leadsheet exporter. It discovers
   MP3/MP4/WebM files non-recursively, reuses valid analysis JSON, analyzes only
-  missing files serially, and atomically writes
-  `.chordflask/<name>-chords-<track>.md` per file. One failing file does not
+  missing files serially, and atomically writes matching
+  `.chordflask/<name>-chords-<track>.md` and `.pdf` files. One failing file does not
   stop later files. Exit code 0 means all exports succeeded, 1 means partial
   or per-file errors, and 2 means invalid invocation or a missing directory.
   Options: `--chord-track auto|original|edited|TRACK_ID` (default `auto` =
@@ -30,6 +30,15 @@ These are kept as usable command-line tools and have smoke-test coverage.
 
   ```bash
   ~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py /path/to/collection
+  ```
+
+- `create_sheet_pdf.py` - thin command-line wrapper around the shared PDF
+  renderer used by browser Save and the batch helper. Pillow is its only PDF
+  dependency; the open-licensed fonts are bundled with ChordFlask.
+
+  ```bash
+  python flask/helpers/create_sheet_pdf.py leadsheet.md
+  python flask/helpers/create_sheet_pdf.py leadsheet.md -o leadsheet.pdf
   ```
 
 ## Legacy Or Experimental Analyzer Variants

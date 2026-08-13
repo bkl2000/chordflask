@@ -5,6 +5,7 @@
 import argparse
 import sys
 from io import BytesIO
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from flask import Flask, render_template, jsonify, request, send_file, make_response
 import os
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from chord_markdown import download_track_slug, format_chord_markdown
+from chord_sheet_pdf import ChordSheetPdfRenderer
 from chordflask_config import (
     ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME, ALLOWED_MEDIA_ROOTS_ENV, LISTEN_ENV,
     PORT_ENV, DEBUG_ENV, DEFAULT_HOST, DEFAULT_PORT,
@@ -793,7 +795,7 @@ class FlaskMP4App:
         return jsonify({"success": True, **self.player.analysis_track_state()})
 
     def download_chords(self):
-        """Return the active displayed beat-level chords as a Markdown leadsheet."""
+        """Return the active displayed beat-level chords as Markdown and PDF."""
         data, error_response = self._json_body()
         if error_response:
             return error_response
@@ -805,9 +807,9 @@ class FlaskMP4App:
         if not snapshot["beats"]:
             return jsonify(error="The active analysis has no beat grid to export."), 409
 
-        filename = (
+        export_stem = (
             f"{media_or_error.stem}-chords-"
-            f"{download_track_slug(snapshot['chord_track_id'])}.md"
+            f"{download_track_slug(snapshot['chord_track_id'])}"
         )
         markdown = format_chord_markdown(
             title=media_or_error.stem,
@@ -822,11 +824,21 @@ class FlaskMP4App:
             beats=snapshot["beats"],
             repeat_mode=snapshot["repeat_mode"],
         )
+        try:
+            pdf = ChordSheetPdfRenderer().render_markdown(markdown)
+            archive = BytesIO()
+            with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
+                output.writestr(f"{export_stem}.md", markdown.encode("utf-8"))
+                output.writestr(f"{export_stem}.pdf", pdf)
+            archive.seek(0)
+        except Exception:  # noqa: BLE001 - preserve the all-or-nothing download contract
+            logging.exception("Could not render the chord leadsheet PDF")
+            return jsonify(error="Could not render the chord leadsheet PDF."), 500
         return send_file(
-            BytesIO(markdown.encode("utf-8")),
-            mimetype="text/markdown",
+            archive,
+            mimetype="application/zip",
             as_attachment=True,
-            download_name=filename,
+            download_name=f"{export_stem}.zip",
         )
 
     def serve_video(self):

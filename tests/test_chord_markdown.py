@@ -1,5 +1,7 @@
+from io import BytesIO
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
@@ -416,23 +418,41 @@ def _payload(tmp_path, name="song.mp4", **extra):
     return payload
 
 
-def test_download_chords_returns_markdown_attachment(tmp_path):
+def _download_archive(response):
+    with ZipFile(BytesIO(response.data)) as archive:
+        return {name: archive.read(name) for name in archive.namelist()}
+
+
+def _download_markdown(response):
+    files = _download_archive(response)
+    markdown_name = next(name for name in files if name.endswith(".md"))
+    return files[markdown_name].decode("utf-8")
+
+
+def test_download_chords_returns_markdown_and_pdf_zip(tmp_path):
     app_wrapper, client = make_client()
     _activate(app_wrapper, tmp_path)
 
     response = client.post("/download_chords", json=_payload(tmp_path))
 
     assert response.status_code == 200
-    assert response.content_type == "text/markdown; charset=utf-8"
+    assert response.content_type == "application/zip"
     disposition = response.headers["Content-Disposition"]
-    assert "song-chords-chordino.md" in disposition
-    body = response.get_data(as_text=True)
+    assert "song-chords-chordino.zip" in disposition
+    files = _download_archive(response)
+    assert set(files) == {
+        "song-chords-chordino.md",
+        "song-chords-chordino.pdf",
+    }
+    assert files["song-chords-chordino.pdf"].startswith(b"%PDF")
+    body = files["song-chords-chordino.md"].decode("utf-8")
     assert body.startswith("# song\n")
     assert "**120 BPM · 4/4 · Original · Flats · Transpose 0**" in body
     assert "Chordino · QM Bar/Beat Tracker" in body
     assert "```text\n" in body
     assert "C          -          G          -" in body
     assert "|" not in body
+    assert not list((tmp_path / ".chordflask").glob("song-chords-*"))
 
 
 def test_download_chords_uses_absolute_beat_numbers(tmp_path):
@@ -448,7 +468,7 @@ def test_download_chords_uses_absolute_beat_numbers(tmp_path):
     response = client.post("/download_chords", json=_payload(tmp_path))
 
     assert response.status_code == 200
-    body = response.get_data(as_text=True)
+    body = _download_markdown(response)
     assert "Auftakt (Zählzeiten 3–4)" in body
     assert "                      C          -" in body
     assert "G          -          -          -" in body
@@ -461,8 +481,8 @@ def test_download_chords_uses_edited_slug_and_version(tmp_path):
     response = client.post("/download_chords", json=_payload(tmp_path))
 
     assert response.status_code == 200
-    assert "song-chords-edited.md" in response.headers["Content-Disposition"]
-    body = response.get_data(as_text=True)
+    assert "song-chords-edited.zip" in response.headers["Content-Disposition"]
+    body = _download_markdown(response)
     assert "· Edited ·" in body
     assert "Edited · QM Bar/Beat Tracker" in body
 
@@ -507,6 +527,24 @@ def test_download_chords_rejects_malformed_payload(tmp_path):
     assert response.status_code == 400
 
 
+def test_download_chords_returns_no_partial_zip_when_pdf_rendering_fails(
+    tmp_path, monkeypatch
+):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+
+    def fail_render(self, markdown):
+        raise OSError("render failed")
+
+    monkeypatch.setattr("chordflask.ChordSheetPdfRenderer.render_markdown", fail_render)
+
+    response = client.post("/download_chords", json=_payload(tmp_path))
+
+    assert response.status_code == 500
+    assert response.content_type == "application/json"
+    assert response.get_json() == {"error": "Could not render the chord leadsheet PDF."}
+
+
 def test_download_chords_snapshot_uses_metric_filtered_full_beat_view(tmp_path):
     media = tmp_path / "song.mp4"
     media.write_bytes(b"media")
@@ -541,7 +579,7 @@ def test_download_chords_snapshot_uses_metric_filtered_full_beat_view(tmp_path):
     response = client.post("/download_chords", json=_payload(tmp_path))
 
     assert response.status_code == 200
-    body = response.get_data(as_text=True)
+    body = _download_markdown(response)
     assert "C          -          -          G" in body
 
 
@@ -553,7 +591,7 @@ def test_download_chords_uses_chords_repeat_mode(tmp_path):
     response = client.post("/download_chords", json=_payload(tmp_path))
 
     assert response.status_code == 200
-    body = response.get_data(as_text=True)
+    body = _download_markdown(response)
     assert "C          C          G          G" in body
     assert "-" not in body.split("```text\n", 1)[1]
 
@@ -601,8 +639,8 @@ def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path
     response = client.post("/download_chords", json=_payload(tmp_path))
 
     assert response.status_code == 200
-    assert "song-chords-other.md" in response.headers["Content-Disposition"]
-    body = response.get_data(as_text=True)
+    assert "song-chords-other.zip" in response.headers["Content-Disposition"]
+    body = _download_markdown(response)
     assert "**100 BPM · 4/4 · Original · Flats · Transpose 0 · Unicode**" in body
     assert "Neural · Pulse" in body
     assert "D♭/A♭      N          X          G♭/D♭" in body
@@ -617,7 +655,8 @@ def test_index_contains_save_control_and_download_contract():
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="saveButton"' in body
-    assert 'aria-label="Download chords as Markdown"' in body
+    assert 'aria-label="Download chords as Markdown and PDF"' in body
+    assert "'chords.zip'" in body
     assert "#saveButton" in body
     assert "fetch('/download_chords'" in body
     assert "function updateSaveButton()" in body

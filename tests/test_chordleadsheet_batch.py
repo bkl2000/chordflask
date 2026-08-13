@@ -1,7 +1,9 @@
 import argparse
+from io import BytesIO
 import subprocess
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
@@ -93,7 +95,9 @@ def test_export_file_reuses_analysis_and_writes_leadsheet(tmp_path):
         "error": None,
     }
     leadsheet = analysis_dir / "song-chords-chordino.md"
+    pdf = analysis_dir / "song-chords-chordino.pdf"
     assert leadsheet.is_file()
+    assert pdf.read_bytes().startswith(b"%PDF")
     content = leadsheet.read_text()
     assert content.startswith("# song\n")
     assert "**120 BPM · 4/4 · Original · Flats · Transpose 0**" in content
@@ -121,7 +125,11 @@ def test_browser_and_batch_exports_are_byte_identical(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.data == (analysis_dir / "song-chords-chordino.md").read_bytes()
+    with ZipFile(BytesIO(response.data)) as archive:
+        assert archive.read("song-chords-chordino.md") == (
+            analysis_dir / "song-chords-chordino.md"
+        ).read_bytes()
+        assert archive.read("song-chords-chordino.pdf").startswith(b"%PDF")
 
 
 def test_export_file_prefers_edited_for_auto(tmp_path):
@@ -237,6 +245,23 @@ def test_export_file_atomic_failure_preserves_existing_leadsheet(tmp_path, monke
 
     assert leadsheet.read_text() == "old content\n"
     assert list(analysis_dir.glob(".*.tmp")) == []
+
+
+def test_export_file_pdf_failure_publishes_neither_output(tmp_path, monkeypatch):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+
+    def fail_render(self, markdown):
+        raise OSError("PDF failed")
+
+    monkeypatch.setattr(chordleadsheet_batch.ChordSheetPdfRenderer, "render_markdown", fail_render)
+
+    with pytest.raises(LeadsheetExportError, match="PDF failed"):
+        export_file(media, _args())
+
+    assert not (analysis_dir / "song-chords-chordino.md").exists()
+    assert not (analysis_dir / "song-chords-chordino.pdf").exists()
 
 
 def test_run_continues_after_failures_and_returns_one(tmp_path, monkeypatch):

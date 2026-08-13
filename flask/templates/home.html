@@ -870,8 +870,8 @@
                     aria-label="Edit chords" hidden disabled>Edit</button>
             <button id="versionButton" type="button" title="Switch between Original and Edited chords"
                     aria-label="Original/Edited chord version" hidden>Original</button>
-            <button id="saveButton" type="button" title="Download current chords as Markdown"
-                    aria-label="Download chords as Markdown" hidden disabled>Save</button>
+            <button id="saveButton" type="button" title="Download current chords as Markdown and PDF"
+                    aria-label="Download chords as Markdown and PDF" hidden disabled>Save</button>
             <span id="queueStatus"></span>
             <button id="reanalyzeButton" type="button" title="Chordino/QM reanalysis of current file"
                     aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
@@ -2018,7 +2018,7 @@
           return response.json().then(error => { throw error; });
         }
         const disposition = response.headers.get('Content-Disposition') || '';
-        const filename = filenameFromDisposition(disposition) || 'chords.md';
+        const filename = filenameFromDisposition(disposition) || 'chords.zip';
         return response.blob().then(blob => ({ blob, filename }));
       })
       .then(({ blob, filename }) => {

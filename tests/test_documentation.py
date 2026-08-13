@@ -65,6 +65,9 @@ def test_readme_documents_batch_leadsheet_export():
     assert "--sharps --transpose 2" in readme
     assert "--chord-track original --repeat-mode chords" in readme
     assert ".chordflask/<name>-chords-<track>.md" in readme
+    assert "one ZIP" in readme
+    assert "create_sheet_pdf.py leadsheet.md -o leadsheet.pdf" in readme
+    assert "python -m pip install Pillow" in readme
     assert "reused" in readme.lower()
 
 
@@ -86,6 +89,9 @@ def test_helpers_doc_describes_batch_helper_options_and_exit_codes():
     assert "Exit code 0" in helpers
     assert "1 means partial" in helpers
     assert "2 means invalid invocation" in helpers
+    assert "create_sheet_pdf.py" in helpers
+    assert "matching" in helpers
+    assert ".pdf" in helpers
 
 
 def test_analysis_doc_describes_leadsheet_save_output():
@@ -100,3 +106,6 @@ def test_analysis_doc_describes_leadsheet_save_output():
     assert "Original/Edited" in analysis
     assert "A-B-A" in analysis
     assert "A-B-C" not in analysis
+    assert "one ZIP" in analysis
+    assert "four framed measures" in analysis
+    assert "15 rows per page" in analysis

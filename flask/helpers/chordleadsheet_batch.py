@@ -4,7 +4,7 @@
 
 This CLI helper is independent of the Flask server. It discovers MP3/MP4/WebM
 media non-recursively, reuses valid analysis JSON, analyzes only missing files
-serially, and writes a playable Markdown leadsheet per file into its
+serially, and writes matching playable Markdown and PDF leadsheets into each
 ``.chordflask`` directory.
 
 Exit codes: 0 all exports succeeded, 1 partial or file errors, 2 argparse or
@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from batch_core import find_media_files  # noqa: E402
 from chord_markdown import download_track_slug, format_chord_markdown  # noqa: E402
+from chord_sheet_pdf import ChordSheetPdfRenderer  # noqa: E402
 
 EDITED_TRACK_ID = "user_edited"
 CHORDINO_TRACK_ID = "chordino"
@@ -117,7 +118,7 @@ def resolve_chord_track(chord_data, choice):
     return choice
 
 
-def _write_atomic(path, text):
+def _write_atomic(path, content):
     path = os.path.abspath(os.fspath(path))
     directory = os.path.dirname(path)
     os.makedirs(directory, exist_ok=True)
@@ -127,9 +128,11 @@ def _write_atomic(path, text):
         dir=directory,
     )
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        mode = "wb" if isinstance(content, bytes) else "w"
+        options = {} if mode == "wb" else {"encoding": "utf-8"}
+        with os.fdopen(descriptor, mode, **options) as handle:
             descriptor = None
-            handle.write(text)
+            handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
@@ -220,11 +223,13 @@ def export_file(media_path, args):
             repeat_mode=args.repeat_mode,
         )
 
-        output_path = os.path.join(
+        output_stem = os.path.join(
             file_repr.datapath,
-            f"{file_repr.basename}-chords-{download_track_slug(chord_track_id)}.md",
+            f"{file_repr.basename}-chords-{download_track_slug(chord_track_id)}",
         )
-        _write_atomic(output_path, markdown)
+        pdf = ChordSheetPdfRenderer().render_markdown(markdown)
+        _write_atomic(f"{output_stem}.md", markdown)
+        _write_atomic(f"{output_stem}.pdf", pdf)
     except LeadsheetExportError:
         raise
     except Exception as error:

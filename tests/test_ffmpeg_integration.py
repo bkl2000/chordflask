@@ -202,6 +202,9 @@ def test_build_script_excludes_batch_helper_but_keeps_shared_formatter():
 
     assert "--exclude-module=chordleadsheet_batch" in content
     assert (REPO_ROOT / "flask" / "chord_markdown.py").is_file()
+    assert (REPO_ROOT / "flask" / "chord_sheet_pdf.py").is_file()
     assert (REPO_ROOT / "flask" / "helpers" / "chordleadsheet_batch.py").is_file()
+    assert '--add-data "assets:assets"' in content
+    assert 'LIBERATION-FONTS-LICENSE.txt' in content
     for pattern in ("Beat | Time (s) | Chord",):
         assert pattern not in (REPO_ROOT / "flask" / "chord_markdown.py").read_text()

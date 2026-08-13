@@ -88,10 +88,11 @@ differ:
 
 ## Saving a leadsheet
 
-The **Save** control downloads the exact active display as a playable Markdown
-leadsheet; the server creates no export file. The document contains the media
-title, one compact metadata line (`**120 BPM · 4/4 · Edited · Flats · Transpose 0**`),
-the chord/rhythm track source line, and a `text` code block without tables,
+The **Save** control downloads the exact active display as one ZIP containing
+matching playable Markdown and print-ready A4 PDF leadsheets; the server
+creates no export file. The Markdown document contains the media title, one
+compact metadata line (`**120 BPM · 4/4 · Edited · Flats · Transpose 0**`), the
+chord/rhythm track source line, and a `text` code block without tables,
 barlines, or measure labels. Each row contains two complete measures: eight
 aligned beat fields in 4/4 or six in 3/4. Beat fields are at least ten
 characters wide, expand together for longer symbols, and the space between the
@@ -109,3 +110,8 @@ fields. Analyses without usable beat numbers fall back to the meter (or four
 beats per measure). Chord qualities, extensions, slash basses, `N`, and `X`
 remain unchanged. The batch helper documented in the README writes the same
 format.
+
+The PDF keeps the Markdown beat text verbatim and uses four framed measures per
+row, 15 rows per page, bar numbers, continuation headings, and automatically
+fitted monospace chords. A pickup has its own `Auftakt` box before measure 1;
+incomplete endings retain a full measure box with empty remaining beat fields.

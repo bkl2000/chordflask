@@ -22,7 +22,7 @@ This local, on-demand workflow is the main reason ChordFlask exists:
 - keep each completed analysis beside the media for later sessions;
 - continue browsing and playing while other files are analyzed;
 - transpose, respell, compare, and correct the displayed chords; and
-- download the accepted beat-level result as Markdown.
+- download the accepted beat-level result as matching Markdown and PDF.
 
 Automatic chord transcription is approximate, especially with dense mixes or
 unusual harmony. The current Chordino-based result is intended as a useful
@@ -80,19 +80,21 @@ queue and incomplete temporary output is discarded on retry.
 
 ## Batch leadsheet export
 
-A non-recursive helper turns every supported media file in a directory into a
-playable Markdown leadsheet with title, tempo/meter metadata, the chord source,
-and a monospace chord block with two complete measures per line. Beat fields are
-aligned and each group of eight measures gets extra vertical space. Existing
-analyses are reused; missing files are analyzed serially only when needed, so a
-second run costs no new analysis time.
+A non-recursive helper turns every supported media file in a directory into
+matching playable Markdown and print-ready PDF leadsheets. The Markdown has a
+title, tempo/meter metadata, the chord source, and a monospace chord block with
+two complete measures per line. The A4 PDF uses four framed measures per row,
+60 measures per page, numbered bars, and automatically fitted monospace chord
+text. Existing analyses are reused; missing files are analyzed serially only
+when needed, so a second run costs no new analysis time.
 
 ```bash
 ~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music
 ```
 
-Each exported file lands beside its analysis as
-`.chordflask/<name>-chords-<track>.md` and is updated atomically. Defaults are
+Both exported files land beside the analysis as
+`.chordflask/<name>-chords-<track>.md` and `.pdf` and are updated atomically.
+Defaults are
 the Edited version when present (otherwise Chordino), QM Bar/Beat Tracker
 rhythm, no transpose, Flats spelling, ASCII symbols, repeated-chord `changes`
 mode, and rhythm-aware smoothing. Examples:
@@ -105,10 +107,19 @@ mode, and rhythm-aware smoothing. Examples:
 ~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --chord-track original --repeat-mode chords
 ```
 
-The browser **Save** button downloads the same leadsheet format for the single
-file currently displayed, including its active track selection, spelling, and
-transpose state. In the default `changes` mode a held chord is written as `-`;
-`chords` writes the full chord symbol on every beat.
+The browser **Save** button downloads one ZIP containing the matching `.md` and
+`.pdf` for the single file currently displayed, including its active track
+selection, spelling, and transpose state. It creates no server-side export
+files. In the default `changes` mode a held chord is written as `-`; `chords`
+writes the full chord symbol on every beat.
+
+The PDF command-line helper is optional and uses the same renderer:
+
+```bash
+python -m pip install Pillow
+python flask/helpers/create_sheet_pdf.py leadsheet.md
+python flask/helpers/create_sheet_pdf.py leadsheet.md -o leadsheet.pdf
+```
 
 ## Build a portable Linux bundle
 
@@ -157,6 +168,14 @@ ChordFlask has no authentication, TLS, or CSRF protection. Keep the default
 - [Portable bundle guide](docs/STANDALONE.md)
 - [Platform and Python compatibility](docs/COMPATIBILITY.md)
 - [Development and tests](CONTRIBUTING.md)
+
+## Development transparency
+
+ChordFlask has been and continues to be developed through a maintainer-led,
+AI-assisted "vibe coding" workflow. The maintainer defines, leads, and reviews
+all changes and retains the testing and release decisions. AI assistance is
+provided by OpenAI Codex and OpenCode with DeepSeek V4. These tools are not
+authors, maintainers, partners, or endorsers of the project.
 
 ## License
 

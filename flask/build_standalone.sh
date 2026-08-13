@@ -27,6 +27,7 @@ pyinstaller \
     --exclude-module=imageio_ffmpeg.binaries \
     --exclude-module=chordleadsheet_batch \
     --add-data "templates:templates" \
+    --add-data "assets:assets" \
     chordflask.py
 
 archive_listing="$(pyi-archive_viewer -l "${SCRIPT_DIR}/dist/chordflask")"
@@ -51,6 +52,7 @@ EOF
 cp "${SCRIPT_DIR}/install_vamp.sh" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/docs/STANDALONE.md" "${RELEASE_DIR}/README.md"
 cp "${PROJECT_ROOT}/THIRD_PARTY_NOTICES.md" "${RELEASE_DIR}/"
+cp "${SCRIPT_DIR}/assets/fonts/LICENSE.txt" "${RELEASE_DIR}/LIBERATION-FONTS-LICENSE.txt"
 semver="$(head -n1 "${PROJECT_ROOT}/VERSION")"
 printf '%s %s %s\n' "$semver" "$(date -u +'%Y-%m-%d %H:%M')" "$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD)" \
     > "${RELEASE_DIR}/VERSION"

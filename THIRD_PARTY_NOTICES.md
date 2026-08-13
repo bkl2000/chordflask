@@ -83,6 +83,18 @@ sudo apt install ffmpeg
 
 Official reference: https://ffmpeg.org/legal.html
 
+## Liberation Fonts
+
+ChordFlask bundles unmodified Liberation Sans, Liberation Sans Bold, and
+Liberation Mono font files for rasterized PDF leadsheets.
+
+- **License:** SIL Open Font License 1.1
+- **Copyright:** Digitized data copyright (c) 2010 Google Corporation;
+  copyright (c) 2012 Red Hat, Inc.
+- **Upstream:** https://github.com/liberationfonts/liberation-fonts
+- **Full license:** `flask/assets/fonts/LICENSE.txt` in the source tree and
+  `LIBERATION-FONTS-LICENSE.txt` in the standalone archive
+
 ## Python Dependencies
 
 Python runtime dependencies are listed in `requirements-core.txt` and
