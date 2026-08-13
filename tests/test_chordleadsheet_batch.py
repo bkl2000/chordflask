@@ -22,6 +22,9 @@ from chordleadsheet_batch import (  # noqa: E402
     export_file,
     run,
 )
+from chordflask import FlaskMP4App  # noqa: E402
+from filerepr import FileRepr  # noqa: E402
+from mp4playerflask import MP4PlayerFlask  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -95,7 +98,30 @@ def test_export_file_reuses_analysis_and_writes_leadsheet(tmp_path):
     assert content.startswith("# song\n")
     assert "**120 BPM · 4/4 · Original · Flats · Transpose 0**" in content
     assert "Chordino · QM Bar/Beat Tracker" in content
-    assert "| `C _ G _` |" in content
+    assert "```text\n" in content
+    assert "C          -          G          -" in content
+
+
+def test_browser_and_batch_exports_are_byte_identical(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+    export_file(media, _args())
+
+    file_repr = FileRepr(str(media), create=True)
+    app_wrapper = FlaskMP4App()
+    app_wrapper.file_repr = file_repr
+    app_wrapper.player = MP4PlayerFlask(file_repr, metric_chords=True)
+    app_wrapper.player.set_prefer_flats(True)
+    app_wrapper.player.set_repeat_mode("changes")
+
+    response = app_wrapper.app.test_client().post(
+        "/download_chords",
+        json={"dirname": str(tmp_path), "filename": media.name},
+    )
+
+    assert response.status_code == 200
+    assert response.data == (analysis_dir / "song-chords-chordino.md").read_bytes()
 
 
 def test_export_file_prefers_edited_for_auto(tmp_path):
@@ -125,7 +151,7 @@ def test_export_file_uses_named_chord_and_rhythm_tracks(tmp_path):
     leadsheet = analysis_dir / "song-chords-pytorch.md"
     content = leadsheet.read_text()
     assert "**100 BPM · 4/4 · Original · Flats · Transpose 0**" in content
-    assert "| `F F Am Am` |" in content
+    assert "F          F          Am         Am" in content
 
 
 def test_export_file_applies_transpose_sharps_unicode(tmp_path):
@@ -140,7 +166,7 @@ def test_export_file_applies_transpose_sharps_unicode(tmp_path):
     assert "Transpose 2" in content
     assert "Sharps" in content
     assert "Unicode" in content
-    assert "| `D _ A _` |" in content
+    assert "D          -          A          -" in content
 
 
 def test_export_file_missing_analysis_is_created_serially(tmp_path, monkeypatch):

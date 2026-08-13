@@ -80,11 +80,12 @@ queue and incomplete temporary output is discarded on retry.
 
 ## Batch leadsheet export
 
-A non-recursive helper turns every supported media file in a directory into a playable
-Markdown leadsheet with title, tempo/meter metadata, the chord source, and
-measure tables of eight measures per block. Existing analyses are reused;
-missing files are analyzed serially only when needed, so a second run costs no
-new analysis time.
+A non-recursive helper turns every supported media file in a directory into a
+playable Markdown leadsheet with title, tempo/meter metadata, the chord source,
+and a monospace chord block with two complete measures per line. Beat fields are
+aligned and each group of eight measures gets extra vertical space. Existing
+analyses are reused; missing files are analyzed serially only when needed, so a
+second run costs no new analysis time.
 
 ```bash
 ~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music
@@ -106,7 +107,8 @@ mode, and rhythm-aware smoothing. Examples:
 
 The browser **Save** button downloads the same leadsheet format for the single
 file currently displayed, including its active track selection, spelling, and
-transpose state.
+transpose state. In the default `changes` mode a held chord is written as `-`;
+`chords` writes the full chord symbol on every beat.
 
 ## Build a portable Linux bundle
 

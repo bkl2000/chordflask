@@ -83,7 +83,7 @@ def build_argument_parser():
         "--repeat-mode",
         choices=("changes", "chords"),
         default="changes",
-        help="changes repeats the held chord per measure, chords writes every beat (default: changes)",
+        help="changes writes held beats as -, chords writes every beat (default: changes)",
     )
     parser.add_argument(
         "--no-metric-chords",

@@ -24,7 +24,9 @@ These are kept as usable command-line tools and have smoke-test coverage.
   `qm_barbeattracker`), `--transpose N`, `--sharps`, `--unicode`,
   `--repeat-mode changes|chords` (default `changes`), and
   `--no-metric-chords` to disable the enabled-by-default rhythm-aware
-  smoothing. The helper never imports Flask or starts the server.
+  smoothing. The leadsheet uses aligned monospace beat fields, two complete
+  measures per row, and extra space after every eight measures. The helper
+  never imports Flask or starts the server.
 
   ```bash
   ~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py /path/to/collection

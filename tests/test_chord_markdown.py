@@ -95,28 +95,50 @@ def test_group_beats_into_measures_empty():
     assert group_beats_into_measures([], meter=4, beat_numbers=[]) == []
 
 
-def test_format_chord_markdown_writes_metadata_and_measure_table():
+def test_format_chord_markdown_exact_playable_row_snapshot():
     markdown = format_chord_markdown(
-        title="Song Name",
-        chord_track="Chordino",
+        title="Example",
+        chord_track="Edited",
         rhythm_track="QM Bar/Beat Tracker",
-        version="Original",
+        version="Edited",
         transpose=0,
         spelling="Flats",
         bpm=120,
         meter=4,
-        beats=_beats([["C", "C", "G", "G"]]),
+        beats=[
+            (3, "Gbmaj7"),
+            (4, "Gbmaj7"),
+            (1, "Db7"),
+            (2, "Bbm7b5"),
+            (3, "Gb/Db"),
+            (4, "G/C"),
+            (1, "N"),
+            (2, "X"),
+            (3, "Cmaj13(#11)"),
+            (4, "Cmaj13(#11)"),
+        ],
     )
 
-    assert markdown.startswith("# Song Name\n")
-    assert "**120 BPM · 4/4 · Original · Flats · Transpose 0**" in markdown
-    assert "Chordino · QM Bar/Beat Tracker" in markdown
-    assert "| Takt 1 " in markdown
-    assert "| :---: |" in markdown
-    assert "| `C _ G _` |" in markdown
+    expected = (
+        "# Example\n"
+        "\n"
+        "**120 BPM · 4/4 · Edited · Flats · Transpose 0**\n"
+        "\n"
+        "Edited · QM Bar/Beat Tracker\n"
+        "\n"
+        "```text\n"
+        "Auftakt (Zählzeiten 3–4)\n"
+        "                        Gbmaj7      -          " "\n"
+        "\n"
+        "Db7         Bbm7b5      Gb/Db       G/C              "
+        "N           X           Cmaj13(#11) -          " "\n"
+        "\n"
+        "```\n"
+    )
+    assert markdown == expected
 
 
-def test_format_chord_markdown_writes_eight_measures_per_block():
+def test_format_chord_markdown_adds_extra_space_after_eight_measures():
     beats = []
     for measure in range(10):
         chord = f"C{measure}"
@@ -133,17 +155,37 @@ def test_format_chord_markdown_writes_eight_measures_per_block():
         beats=beats,
     )
 
-    first_table = markdown[markdown.index("| Takt 1") : markdown.index("| Takt 9")]
-    assert "| Takt 8 " in first_table
-    assert "| Takt 9 " not in first_table
-    assert "| Takt 9 |" in markdown
-    assert "| Takt 10 |" in markdown
-    assert "| Takt 11 " not in markdown
-    assert (
-        "| `C0 _ _ _` | `C1 _ _ _` | `C2 _ _ _` | `C3 _ _ _` | `C4 _ _ _` | `C5 _ _ _` | `C6 _ _ _` | `C7 _ _ _` |"
-        in markdown
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    rows = [line for line in code.splitlines() if line]
+
+    assert len(rows) == 5
+    assert all("Takt" not in row and "|" not in row for row in rows)
+    assert "C0" in rows[0] and "C1" in rows[0]
+    assert "C6" in rows[3] and "C7" in rows[3]
+    assert "C8" in rows[4] and "C9" in rows[4]
+    assert f"{rows[3]}\n\n\n{rows[4]}" in code
+
+
+def test_format_chord_markdown_pads_odd_and_incomplete_final_measure_with_empty_fields():
+    markdown = format_chord_markdown(
+        title="Remainder",
+        chord_track="Chordino",
+        rhythm_track="QM",
+        version="Original",
+        transpose=0,
+        spelling="Flats",
+        meter=4,
+        repeat_mode="chords",
+        beats=_beats([["C"] * 4, ["G"] * 4, ["Am", "F"]]),
     )
-    assert "| `C8 _ _ _` | `C9 _ _ _` |" in markdown
+
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    rows = [line for line in code.splitlines() if line]
+
+    assert len(rows) == 2
+    assert len(rows[0]) == len(rows[1]) == 92
+    assert rows[1].startswith("Am         F")
+    assert rows[1][21:] == " " * 71
 
 
 def test_format_chord_markdown_groups_three_four_and_pickups():
@@ -158,8 +200,15 @@ def test_format_chord_markdown_groups_three_four_and_pickups():
         beats=[(3, "C"), (1, "G"), (2, "G"), (3, "Am"), (1, "F")],
     )
 
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    lines = [line for line in code.splitlines() if line]
+
     assert "**3/4 · Original · Flats · Transpose 0**" in markdown
-    assert "| `C` | `G _ Am` | `F` |" in markdown
+    assert lines[0] == "Auftakt (Zählzeiten 3)"
+    assert lines[1] == "                      C         "
+    assert len(lines[2]) == 70
+    assert lines[2].startswith("G          -          Am")
+    assert lines[2][38:].startswith("F")
 
 
 def test_format_chord_markdown_chords_mode_writes_every_beat():
@@ -175,8 +224,9 @@ def test_format_chord_markdown_chords_mode_writes_every_beat():
         repeat_mode="chords",
     )
 
-    assert "| `C C G G` |" in markdown
-    assert "`_` keeps the previous chord." not in markdown
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    assert "C          C          G          G" in code
+    assert "-" not in code
 
 
 def test_format_chord_markdown_rejects_unknown_repeat_mode():
@@ -193,7 +243,7 @@ def test_format_chord_markdown_rejects_unknown_repeat_mode():
         )
 
 
-def test_format_chord_markdown_repeats_valid_chord_at_measure_start():
+def test_format_chord_markdown_changes_mode_marks_held_measure_start_with_dash():
     markdown = format_chord_markdown(
         title="Held",
         chord_track="Chordino",
@@ -205,7 +255,24 @@ def test_format_chord_markdown_repeats_valid_chord_at_measure_start():
         beats=[(1, "C"), (2, "C"), (3, "C"), (4, "C"), (1, "C"), (2, "G"), (3, "G"), (4, "G")],
     )
 
-    assert "| `C _ _ _` | `C G _ _` |" in markdown
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    assert "C          -          -          -               -          G          -          -" in code
+
+
+def test_format_chord_markdown_never_replaces_n_or_x_with_dash():
+    markdown = format_chord_markdown(
+        title="Unknowns",
+        chord_track="Chordino",
+        rhythm_track="QM",
+        version="Original",
+        transpose=0,
+        spelling="Flats",
+        meter=4,
+        beats=_beats([["N", "N", "X", "X"]]),
+    )
+
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    assert "N          N          X          X" in code
 
 
 def test_format_chord_markdown_missing_meter_falls_back_to_four_beats():
@@ -220,7 +287,8 @@ def test_format_chord_markdown_missing_meter_falls_back_to_four_beats():
     )
 
     assert "**Original · Sharps · Transpose 0**" in markdown
-    assert "| `C D E F` | `G` |" in markdown
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    assert "C          D          E          F               G" in code
     assert "4/4" not in markdown
 
 
@@ -239,7 +307,7 @@ def test_format_chord_markdown_omits_optional_metadata():
     assert "4/4" not in markdown
     assert "Unicode" not in markdown
     assert "Sharps" in markdown
-    assert "| `N` |" in markdown
+    assert "```text\nN" in markdown
 
 
 def test_format_chord_markdown_marks_unicode_symbols():
@@ -256,7 +324,7 @@ def test_format_chord_markdown_marks_unicode_symbols():
 
     assert "Unicode" in markdown
     assert "G\u266dm7" in markdown
-    assert "| `G\u266dm7 _` |" in markdown
+    assert "G\u266dm7       -" in markdown
 
 
 def test_format_chord_markdown_escapes_pipes_and_newlines():
@@ -271,7 +339,7 @@ def test_format_chord_markdown_escapes_pipes_and_newlines():
     )
 
     assert markdown.startswith("# Song \\| Part\n")
-    assert "| `C\\|D` |" in markdown
+    assert "```text\nC|D" in markdown
 
 
 def test_format_chord_markdown_blank_beat_numbers():
@@ -286,7 +354,8 @@ def test_format_chord_markdown_blank_beat_numbers():
         beats=[("", "C"), ("", "C"), ("", "G"), ("", "G"), ("", "C")],
     )
 
-    assert "| `C _ G _` | `C` |" in markdown
+    code = markdown.split("```text\n", 1)[1].rsplit("\n```", 1)[0]
+    assert "C          -          G          -               C" in code
 
 
 def test_escape_markdown_cell_handles_none_and_backslashes():
@@ -361,8 +430,9 @@ def test_download_chords_returns_markdown_attachment(tmp_path):
     assert body.startswith("# song\n")
     assert "**120 BPM · 4/4 · Original · Flats · Transpose 0**" in body
     assert "Chordino · QM Bar/Beat Tracker" in body
-    assert "| Takt 1 " in body
-    assert "| `C _ G _` |" in body
+    assert "```text\n" in body
+    assert "C          -          G          -" in body
+    assert "|" not in body
 
 
 def test_download_chords_uses_absolute_beat_numbers(tmp_path):
@@ -379,7 +449,9 @@ def test_download_chords_uses_absolute_beat_numbers(tmp_path):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "| `C _` | `G _ _ _` | `G _` |" in body
+    assert "Auftakt (Zählzeiten 3–4)" in body
+    assert "                      C          -" in body
+    assert "G          -          -          -" in body
 
 
 def test_download_chords_uses_edited_slug_and_version(tmp_path):
@@ -470,7 +542,7 @@ def test_download_chords_snapshot_uses_metric_filtered_full_beat_view(tmp_path):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "| `C _ _ G` |" in body
+    assert "C          -          -          G" in body
 
 
 def test_download_chords_uses_chords_repeat_mode(tmp_path):
@@ -482,8 +554,8 @@ def test_download_chords_uses_chords_repeat_mode(tmp_path):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "| `C C G G` |" in body
-    assert "`_` keeps the previous chord." not in body
+    assert "C          C          G          G" in body
+    assert "-" not in body.split("```text\n", 1)[1]
 
 
 def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path):
@@ -533,7 +605,7 @@ def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path
     body = response.get_data(as_text=True)
     assert "**100 BPM · 4/4 · Original · Flats · Transpose 0 · Unicode**" in body
     assert "Neural · Pulse" in body
-    assert "| `D♭/A♭ N X G♭/D♭` |" in body
+    assert "D♭/A♭      N          X          G♭/D♭" in body
 
 
 # ── browser contract ─────────────────────────────────────────────────

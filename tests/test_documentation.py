@@ -93,7 +93,10 @@ def test_analysis_doc_describes_leadsheet_save_output():
 
     assert "Saving a leadsheet" in analysis
     assert "**120 BPM · 4/4 · Edited · Flats · Transpose 0**" in analysis
-    assert "eight measures per" in analysis
-    assert "`_`" in analysis
-    assert "Pickup measures" in analysis
+    assert "two complete measures" in analysis
+    assert "`text` code block" in analysis
+    assert "`-`" in analysis
+    assert "Auftakt (Zählzeiten …)" in analysis
     assert "Original/Edited" in analysis
+    assert "A-B-A" in analysis
+    assert "A-B-C" not in analysis

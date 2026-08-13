@@ -4,8 +4,7 @@
 
 This module has no Flask or filesystem dependencies. It converts a plain
 snapshot of the active display state into a UTF-8 Markdown document with one
-compact metadata line, a source line, and measure tables of eight whole
-measures per block.
+compact metadata line, a source line, and playable monospace chord rows.
 """
 
 import re
@@ -13,6 +12,9 @@ import re
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 _MEASURES_PER_BLOCK = 8
+_MEASURES_PER_ROW = 2
+_MINIMUM_BEAT_WIDTH = 10
+_MEASURE_GAP = "      "
 
 
 def safe_track_slug(track_id):
@@ -60,6 +62,31 @@ def _usable_beat_numbers(beat_numbers, meter):
     return True
 
 
+def _group_beats_with_positions(beats, meter=None, beat_numbers=None):
+    """Return ``(starting_beat, chords)`` pairs for each measure."""
+    if not beats:
+        return []
+    if len(beat_numbers or []) == len(beats) and _usable_beat_numbers(beat_numbers, meter):
+        measures = []
+        current = []
+        starting_beat = beat_numbers[0]
+        for chord, number in zip(beats, beat_numbers):
+            if number == 1 and current:
+                measures.append((starting_beat, current))
+                current = []
+                starting_beat = number
+            current.append(chord)
+        if current:
+            measures.append((starting_beat, current))
+        return measures
+
+    width = meter if _usable_meter(meter) else 4
+    return [
+        (1, list(beats[start : start + width]))
+        for start in range(0, len(beats), width)
+    ]
+
+
 def group_beats_into_measures(beats, meter=None, beat_numbers=None):
     """Group one display chord per beat into measures.
 
@@ -69,48 +96,54 @@ def group_beats_into_measures(beats, meter=None, beat_numbers=None):
     may be short and a trailing measure may be incomplete. The result is a
     list of measure chord lists.
     """
-    if not beats:
-        return []
-    if len(beat_numbers or []) == len(beats) and _usable_beat_numbers(beat_numbers, meter):
-        measures = []
-        current = []
-        for chord, number in zip(beats, beat_numbers):
-            if number == 1 and current:
-                measures.append(current)
-                current = []
-            current.append(chord)
-        if current:
-            measures.append(current)
-        return measures
-
-    width = meter if _usable_meter(meter) else 4
-    measures = []
-    for start in range(0, len(beats), width):
-        measures.append(list(beats[start : start + width]))
-    return measures
+    return [
+        measure
+        for _, measure in _group_beats_with_positions(
+            beats,
+            meter=meter,
+            beat_numbers=beat_numbers,
+        )
+    ]
 
 
 def _repeat_beat_fields(measures):
     """Apply the changes repeat mode to measure beat fields.
 
-    The valid chord is repeated at the start of every measure and later held
-    beats become ``_``.
+    A chord change is written once and later held beats become ``-``.
     """
     fields = []
     previous = None
     for measure in measures:
         row = []
-        for position, chord in enumerate(measure):
-            if position == 0:
-                cell = chord
-            elif chord == previous:
-                cell = "_"
-            else:
-                cell = chord
+        for chord in measure:
+            cell = "-" if chord == previous and chord not in {"", "N", "X"} else chord
             row.append(cell)
             previous = chord
         fields.append(row)
     return fields
+
+
+def _beat_width(measures):
+    return max(
+        _MINIMUM_BEAT_WIDTH,
+        max((len(str(chord)) for measure in measures for chord in measure), default=0),
+    )
+
+
+def _measure_row(measure, *, meter, beat_width, starting_beat=1):
+    fields = [""] * meter
+    for index, chord in enumerate(measure, starting_beat - 1):
+        if index >= meter:
+            break
+        fields[index] = str(chord)
+    return " ".join(field.ljust(beat_width) for field in fields)
+
+
+def _counting_range(starting_beat, chord_count):
+    ending_beat = starting_beat + chord_count - 1
+    if starting_beat == ending_beat:
+        return str(starting_beat)
+    return f"{starting_beat}\u2013{ending_beat}"
 
 
 def format_leadsheet_markdown(
@@ -131,14 +164,20 @@ def format_leadsheet_markdown(
     """Render the active display view as a playable leadsheet.
 
     ``beats`` is one display chord per active-rhythm beat. ``beat_numbers``
-    carries the rhythm track's measure positions when available. Measure
-    tables contain eight whole measures per block with centered ``Takt N``
-    headers and one cell per measure holding its beat fields.
+    carries the rhythm track's measure positions when available. Two complete
+    measures are rendered per row, with an initial pickup on its own row.
     """
     if repeat_mode not in {"changes", "chords"}:
         raise ValueError("repeat_mode must be 'changes' or 'chords'")
     beats = list(beats or [])
-    measures = group_beats_into_measures(beats, meter=meter, beat_numbers=beat_numbers)
+    positioned_measures = _group_beats_with_positions(
+        beats,
+        meter=meter,
+        beat_numbers=beat_numbers,
+    )
+    measure_width = meter if _usable_meter(meter) else 4
+    positions = [position for position, _ in positioned_measures]
+    measures = [measure for _, measure in positioned_measures]
     if repeat_mode == "changes":
         measures = _repeat_beat_fields(measures)
     else:
@@ -161,18 +200,42 @@ def format_leadsheet_markdown(
     lines.append("")
 
     lines.append(f"{escape_markdown_cell(chord_track)} · {escape_markdown_cell(rhythm_track)}")
-    if repeat_mode == "changes":
-        lines.append("")
-        lines.append("`_` keeps the previous chord.")
     lines.append("")
 
-    for block_start in range(0, len(measures), _MEASURES_PER_BLOCK):
-        block = measures[block_start : block_start + _MEASURES_PER_BLOCK]
-        headers = [f" Takt {block_start + index + 1} " for index in range(len(block))]
-        lines.append("|" + "|".join(headers) + "|")
-        lines.append("|" + "|".join(" :---: " for _ in block) + "|")
-        cells = [f"`{' '.join(escape_markdown_cell(chord) for chord in measure)}`" for measure in block]
-        lines.append("| " + " | ".join(cells) + " |")
+    lines.append("```text")
+    beat_width = _beat_width(measures)
+
+    if measures and positions[0] != 1:
+        pickup = measures.pop(0)
+        starting_beat = positions.pop(0)
+        counting = _counting_range(starting_beat, len(pickup))
+        lines.append(f"Auftakt (Zählzeiten {counting})")
+        lines.append(
+            _measure_row(
+                pickup,
+                meter=measure_width,
+                beat_width=beat_width,
+                starting_beat=starting_beat,
+            )
+        )
+        lines.append("")
+
+    for row_start in range(0, len(measures), _MEASURES_PER_ROW):
+        row_measures = measures[row_start : row_start + _MEASURES_PER_ROW]
+        rendered = [
+            _measure_row(measure, meter=measure_width, beat_width=beat_width)
+            for measure in row_measures
+        ]
+        if len(rendered) == 1:
+            rendered.append(_measure_row([], meter=measure_width, beat_width=beat_width))
+        lines.append(_MEASURE_GAP.join(rendered))
+        lines.append("")
+
+        rendered_measure_count = row_start + len(row_measures)
+        if rendered_measure_count % _MEASURES_PER_BLOCK == 0:
+            lines.append("")
+
+    lines.append("```")
 
     return "\n".join(lines) + "\n"
 
