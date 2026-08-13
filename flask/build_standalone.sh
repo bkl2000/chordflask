@@ -25,6 +25,7 @@ pyinstaller \
     --copy-metadata=moviepy \
     --additional-hooks-dir=pyinstaller_hooks \
     --exclude-module=imageio_ffmpeg.binaries \
+    --exclude-module=chordleadsheet_batch \
     --add-data "templates:templates" \
     chordflask.py
 

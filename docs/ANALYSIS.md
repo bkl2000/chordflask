@@ -85,3 +85,22 @@ differ:
 ```bash
 ~/.venvs/chordifier/bin/python scripts/metric_chords_diff.py path/to/chords.json
 ```
+
+## Saving a leadsheet
+
+The **Save** control downloads the exact active display as a playable Markdown
+leadsheet; the server creates no export file. The document contains the media
+title, one compact metadata line (`**120 BPM · 4/4 · Edited · Flats · Transpose 0**`),
+the chord/rhythm track source line, and measure tables with eight measures per
+block and centered `Takt N` headers. One table cell holds one measure's beat
+fields.
+
+The export always reflects the accepted screen state: the selected
+Original/Edited or named chord track, the active rhythm track, transpose,
+Flats/Sharps spelling, Unicode mode, the repeat mode, and the same
+rhythm-aware smoothing as the grid. In the default `changes` mode the valid
+chord is repeated at the start of every measure and held beats become `_`;
+the `chords` mode writes every beat chord. Pickup measures and incomplete
+final measures keep only their real beats, and analyses without usable beat
+numbers fall back to the meter (or four beats per measure). The same format
+is written to files by the batch helper documented in the README.

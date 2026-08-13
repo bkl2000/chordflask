@@ -32,11 +32,12 @@ def test_unicode_formatting_can_be_toggled():
         {"timestamp": 1.0, "chord": "F#"},
     ])
 
-    assert data.get_chords() == [(0.0, "Bb"), (1.0, "F#")]
+    # Untransposed labels are respelled to Flats spelling before display.
+    assert data.get_chords() == [(0.0, "Bb"), (1.0, "Gb")]
 
     data.set_unicode(True)
 
-    assert data.get_chords() == [(0.0, "B\u266d"), (1.0, "F\u266f")]
+    assert data.get_chords() == [(0.0, "B\u266d"), (1.0, "G\u266d")]
 
 
 def test_prefer_flats_can_be_toggled_for_display():

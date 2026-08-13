@@ -194,3 +194,14 @@ def test_build_script_excludes_embedded_ffmpeg():
     assert "pyi-archive_viewer -l" in content
     assert "prohibited FFmpeg or Vamp executable" in content
     assert "sudo apt install ffmpeg" in content
+
+
+def test_build_script_excludes_batch_helper_but_keeps_shared_formatter():
+    build_script = REPO_ROOT / "flask" / "build_standalone.sh"
+    content = build_script.read_text()
+
+    assert "--exclude-module=chordleadsheet_batch" in content
+    assert (REPO_ROOT / "flask" / "chord_markdown.py").is_file()
+    assert (REPO_ROOT / "flask" / "helpers" / "chordleadsheet_batch.py").is_file()
+    for pattern in ("Beat | Time (s) | Chord",):
+        assert pattern not in (REPO_ROOT / "flask" / "chord_markdown.py").read_text()

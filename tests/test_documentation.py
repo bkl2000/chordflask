@@ -43,6 +43,7 @@ def test_public_documentation_links_resolve():
     linked_files = (
         "SECURITY.md",
         "docs/ANALYSIS.md",
+        "docs/HELPERS.md",
         "docs/VAMP.md",
         "docs/STANDALONE.md",
         "docs/COMPATIBILITY.md",
@@ -54,3 +55,45 @@ def test_public_documentation_links_resolve():
     for relative_path in linked_files:
         assert f"]({relative_path})" in readme
         assert (REPO_ROOT / relative_path).is_file()
+
+
+def test_readme_documents_batch_leadsheet_export():
+    readme = (REPO_ROOT / "README.md").read_text()
+
+    assert "Batch leadsheet export" in readme
+    assert "~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music" in readme
+    assert "--sharps --transpose 2" in readme
+    assert "--chord-track original --repeat-mode chords" in readme
+    assert ".chordflask/<name>-chords-<track>.md" in readme
+    assert "reused" in readme.lower()
+
+
+def test_helpers_doc_describes_batch_helper_options_and_exit_codes():
+    helpers = (REPO_ROOT / "docs" / "HELPERS.md").read_text()
+
+    assert "chordleadsheet_batch.py" in helpers
+    for option in (
+        "--chord-track",
+        "--rhythm-track",
+        "--transpose",
+        "--sharps",
+        "--unicode",
+        "--repeat-mode",
+        "--no-metric-chords",
+    ):
+        assert option in helpers
+    assert "non-recursively" in helpers
+    assert "Exit code 0" in helpers
+    assert "1 means partial" in helpers
+    assert "2 means invalid invocation" in helpers
+
+
+def test_analysis_doc_describes_leadsheet_save_output():
+    analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
+
+    assert "Saving a leadsheet" in analysis
+    assert "**120 BPM · 4/4 · Edited · Flats · Transpose 0**" in analysis
+    assert "eight measures per" in analysis
+    assert "`_`" in analysis
+    assert "Pickup measures" in analysis
+    assert "Original/Edited" in analysis

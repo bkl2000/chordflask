@@ -6,11 +6,19 @@ from playbackview import PlaybackView
 from collections import deque
 import logging
 
+import chordutils
+
 _BUILTIN_TRACK_NAMES = {
     "chordino": "Chordino",
     "madmom": "Madmom",
     "qm_barbeattracker": "QM Bar/Beat Tracker",
 }
+
+_EDITED_TRACK_ID = "user_edited"
+_EDITED_SOURCE_CHORD = "chordino"
+_EDITED_SOURCE_RHYTHM = "qm_barbeattracker"
+_EDIT_GRID_ROWS = 16
+_EDIT_GRID_MEASURES_PER_ROW = 2
 
 
 class MP4PlayerFlask:
@@ -48,6 +56,8 @@ class MP4PlayerFlask:
         cd = self.chord_data
         chord_tracks = []
         for tid in cd.available_chord_track_ids:
+            if tid == _EDITED_TRACK_ID:
+                continue
             chord_tracks.append({
                 "id": tid,
                 "display_name": self.__track_display_name(
@@ -67,6 +77,8 @@ class MP4PlayerFlask:
             "active_rhythm_track_id": cd.active_rhythm_track_id,
             "available_chord_tracks": chord_tracks,
             "available_rhythm_tracks": rhythm_tracks,
+            "has_edited": cd.has_chord_track(_EDITED_TRACK_ID),
+            "active_chord_version": self.active_chord_version(),
         }
 
     def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
@@ -80,16 +92,34 @@ class MP4PlayerFlask:
                 if not soft_fallback:
                     raise ValueError("chord_track_id must be a non-empty string")
                 chord_track_id = None
-            if chord_track_id not in available_chords and not soft_fallback:
-                raise ValueError(f"chord track \"{chord_track_id}\" not available")
+            if chord_track_id not in available_chords:
+                if not soft_fallback:
+                    raise ValueError(f"chord track \"{chord_track_id}\" not available")
+                chord_track_id = None
 
         if rhythm_track_id is not None:
             if not isinstance(rhythm_track_id, str) or not rhythm_track_id.strip():
                 if not soft_fallback:
                     raise ValueError("rhythm_track_id must be a non-empty string")
                 rhythm_track_id = None
-            if rhythm_track_id not in available_rhythms and not soft_fallback:
-                raise ValueError(f"rhythm track \"{rhythm_track_id}\" not available")
+            if rhythm_track_id not in available_rhythms:
+                if not soft_fallback:
+                    raise ValueError(f"rhythm track \"{rhythm_track_id}\" not available")
+                rhythm_track_id = None
+
+        effective_chord = (
+            chord_track_id if chord_track_id in available_chords
+            else self.chord_data.active_chord_track_id
+        )
+        if effective_chord == _EDITED_TRACK_ID:
+            if _EDITED_SOURCE_RHYTHM not in available_rhythms:
+                raise ValueError("QM beat track is not available")
+            if rhythm_track_id is not None and rhythm_track_id != _EDITED_SOURCE_RHYTHM:
+                raise ValueError(
+                    "Rhythm source is fixed to QM Bar/Beat Tracker while the "
+                    "Edited version is active"
+                )
+            rhythm_track_id = _EDITED_SOURCE_RHYTHM
 
         changed = False
         if chord_track_id in available_chords:
@@ -117,6 +147,197 @@ class MP4PlayerFlask:
         return {
             "chord": state["available_chord_tracks"],
             "rhythm": state["available_rhythm_tracks"],
+        }
+
+    # ── chord editing ─────────────────────────────────────────────────
+
+    def has_edited_chords(self):
+        return self.chord_data.has_chord_track(_EDITED_TRACK_ID)
+
+    def active_chord_version(self):
+        active = self.chord_data.active_chord_track_id
+        return "edited" if active == _EDITED_TRACK_ID else "original"
+
+    def start_chord_editing(self):
+        cd = self.chord_data
+        if not cd.has_chord_track(_EDITED_SOURCE_CHORD):
+            raise ValueError("Chordino analysis is not available")
+        if not cd.has_rhythm_track(_EDITED_SOURCE_RHYTHM):
+            raise ValueError("QM beat track is not available")
+        if not cd.rhythm_track_data(_EDITED_SOURCE_RHYTHM)["beat_times"]:
+            raise ValueError("QM beat track has no beat times")
+        if not cd.has_chord_track(_EDITED_TRACK_ID):
+            cd.create_beat_aligned_track(
+                _EDITED_TRACK_ID,
+                source_chord_track_id=_EDITED_SOURCE_CHORD,
+                source_rhythm_track_id=_EDITED_SOURCE_RHYTHM,
+                metadata={"display_name": "Edited"},
+            )
+        self.select_analysis_tracks(chord_track_id=_EDITED_TRACK_ID)
+        return self.analysis_track_state()
+
+    def set_chord_version(self, version):
+        if version == "edited":
+            if not self.has_edited_chords():
+                raise ValueError("No edited chord version exists")
+            self.select_analysis_tracks(chord_track_id=_EDITED_TRACK_ID)
+        elif version == "original":
+            self.select_analysis_tracks(chord_track_id=_EDITED_SOURCE_CHORD)
+        else:
+            raise ValueError("version must be 'original' or 'edited'")
+
+    def edit_chord(self, beat_index, label):
+        cd = self.chord_data
+        normalized = chordutils.validate_chord_label(label)
+        if normalized in ("N", "X"):
+            canonical = normalized
+        else:
+            canonical = chordutils.transpose_chord_pitches(
+                normalized, -cd.transpose_semitones, cd.prefer_flats
+            )
+
+        if not cd.has_rhythm_track(_EDITED_SOURCE_RHYTHM):
+            raise ValueError("QM beat track is not available")
+        beat_times = cd.rhythm_track_data(_EDITED_SOURCE_RHYTHM)["beat_times"]
+        if not isinstance(beat_index, int) or isinstance(beat_index, bool):
+            raise ValueError("beat_index must be an integer")
+        if beat_index < 0 or beat_index >= len(beat_times):
+            raise ValueError(
+                f"beat_index {beat_index} out of range [0, {len(beat_times)})"
+            )
+
+        if not cd.has_chord_track(_EDITED_TRACK_ID):
+            self.start_chord_editing()
+        elif cd.active_chord_track_id != _EDITED_TRACK_ID:
+            self.select_analysis_tracks(chord_track_id=_EDITED_TRACK_ID)
+        cd.edit_chord_track_beat(_EDITED_TRACK_ID, beat_index, canonical)
+        self.__build_playback_view()
+        self.reset_render_cache()
+
+    def reset_edited_chords(self):
+        if not self.has_edited_chords():
+            raise ValueError("No edited chord version exists")
+        if not self.chord_data.has_chord_track(_EDITED_SOURCE_CHORD):
+            raise ValueError("Chordino analysis is not available")
+        if not self.chord_data.has_rhythm_track(_EDITED_SOURCE_RHYTHM):
+            raise ValueError("QM beat track is not available")
+        self.chord_data.remove_chord_track(_EDITED_TRACK_ID)
+        self.chord_data.select_chord_track(_EDITED_SOURCE_CHORD)
+        self.chord_data.select_rhythm_track(_EDITED_SOURCE_RHYTHM)
+        self.__build_playback_view()
+        self.reset_render_cache()
+
+    def reload_chord_data(self, chord_track_id=None, rhythm_track_id=None):
+        """Restore persisted chord data and the active view after a failed save.
+
+        Reloads from the unchanged JSON on disk without altering display
+        settings, the requested active analysis tracks, or the playback view.
+        """
+        use_unicode = self.chord_data.use_unicode
+        prefer_flats = self.chord_data.prefer_flats
+        repeat_mode = self.playback_view.repeat_mode
+        self.chord_data = ChordData(use_unicode=use_unicode)
+        self.chord_data.load_from_file(self.file_repr.get("json"))
+        self.chord_data.transpose(self.semitones)
+        self.chord_data.set_prefer_flats(prefer_flats)
+        self.select_analysis_tracks(
+            chord_track_id=chord_track_id,
+            rhythm_track_id=rhythm_track_id,
+        )
+        self.__build_playback_view()
+        self.playback_view.repeat_mode = repeat_mode
+        self.reset_render_cache()
+
+    def edit_grid(self, position=0.0):
+        cd = self.chord_data
+        beat_chords = cd.get_chords_per_beat()
+        beat_count = len(beat_chords)
+        meter = cd.meter_signature or 4
+        beats_per_row = meter * _EDIT_GRID_MEASURES_PER_ROW
+        empty = {
+            "beat_time": 0.0,
+            "active_beat_index": 0,
+            "beats_per_row": beats_per_row,
+            "beat_count": 0,
+            "meter_signature": cd.meter_signature,
+            "rows": [],
+        }
+        if beat_count == 0:
+            return empty
+
+        current_index = min(cd.get_beat_index_for_position(position), beat_count - 1)
+        active_row_start = cd.get_grid_row_start(current_index)
+        if active_row_start is None:
+            active_row_start = current_index - (current_index % beats_per_row)
+        start_index = active_row_start - beats_per_row
+
+        rows = []
+        for row in range(_EDIT_GRID_ROWS):
+            cells = []
+            for col in range(beats_per_row):
+                abs_index = start_index + row * beats_per_row + col
+                if 0 <= abs_index < beat_count:
+                    chord = beat_chords[abs_index][1]
+                    cells.append({
+                        "beat_index": abs_index,
+                        "chord": chord,
+                        "active": abs_index == current_index,
+                        "repeat": abs_index > 0 and beat_chords[abs_index - 1][1] == chord,
+                    })
+                else:
+                    cells.append({
+                        "beat_index": abs_index,
+                        "chord": "",
+                        "active": False,
+                        "repeat": False,
+                    })
+            rows.append(cells)
+
+        return {
+            "beat_time": cd.beat_times[current_index],
+            "active_beat_index": current_index,
+            "beats_per_row": beats_per_row,
+            "beat_count": beat_count,
+            "meter_signature": cd.meter_signature,
+            "rows": rows,
+        }
+
+    def chord_download_snapshot(self):
+        """Return the plain display state for a Markdown leadsheet download."""
+        cd = self.chord_data
+        chord_id = cd.active_chord_track_id
+        rhythm_id = cd.active_rhythm_track_id
+        if chord_id and cd.has_chord_track(chord_id):
+            chord_label = self.__track_display_name(
+                chord_id, cd.chord_track_metadata(chord_id)
+            )
+        else:
+            chord_label = chord_id or ""
+        if rhythm_id and cd.has_rhythm_track(rhythm_id):
+            rhythm_label = self.__track_display_name(
+                rhythm_id, cd.rhythm_track_metadata(rhythm_id)
+            )
+        else:
+            rhythm_label = rhythm_id or ""
+
+        beat_chords = self.playback_view.full_beat_view()
+        beat_numbers = cd.beat_numbers
+        beats = [
+            (beat_numbers[i] if i < len(beat_numbers) else "", chord)
+            for i, chord in enumerate(beat_chords)
+        ]
+        return {
+            "chord_track_id": chord_id,
+            "chord_track_label": chord_label,
+            "rhythm_track_label": rhythm_label,
+            "version": self.active_chord_version(),
+            "transpose": cd.transpose_semitones,
+            "prefer_flats": cd.prefer_flats,
+            "use_unicode": cd.use_unicode,
+            "bpm": cd.bpm,
+            "meter": cd.meter_signature,
+            "repeat_mode": self.playback_view.repeat_mode,
+            "beats": beats,
         }
 
     @staticmethod

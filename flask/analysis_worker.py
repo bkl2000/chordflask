@@ -60,7 +60,11 @@ class AnalysisWorker:
 
         media_path = item["path"]
         try:
-            self._analyze(media_path, force=item.get("force", False))
+            self._analyze(
+                media_path,
+                force=item.get("force", False),
+                discard_edits=item.get("discard_edits", False),
+            )
             self.queue.complete(media_path)
         except Exception as error:
             _worker_log(f"Analysis failed for {media_path}: {error}")
@@ -80,7 +84,7 @@ class AnalysisWorker:
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
             return False
 
-    def _analyze(self, media_path, force=False):
+    def _analyze(self, media_path, force=False, discard_edits=False):
         media = Path(media_path)
         if not media.exists():
             raise FileNotFoundError(media_path)
@@ -96,7 +100,7 @@ class AnalysisWorker:
         analysis_dir.mkdir(parents=True, exist_ok=True)
         self.__cleanup_interrupted_work(analysis_dir, media.stem)
         if force:
-            self.__reanalyze(media, file_repr)
+            self.__reanalyze(media, file_repr, discard_edits=discard_edits)
             return
         if os.path.exists(json_path):
             validation_error = self._json_validation_error(json_path)
@@ -159,7 +163,7 @@ class AnalysisWorker:
                 if candidate.is_dir() and not candidate.is_symlink():
                     shutil.rmtree(candidate)
 
-    def __reanalyze(self, media, current_file_repr):
+    def __reanalyze(self, media, current_file_repr, discard_edits=False):
         current_json = current_file_repr.get("json")
         validation_error = self._json_validation_error(current_json)
         if validation_error is not None:
@@ -197,7 +201,7 @@ class AnalysisWorker:
                     f"Reanalysis created invalid chord data ({validation_error})"
                 )
 
-            self.__preserve_user_data(current_json, temporary_json)
+            self.__preserve_user_data(current_json, temporary_json, drop_edited=discard_edits)
             validation_error = self._json_validation_error(temporary_json)
             if validation_error is not None:
                 raise RuntimeError(
@@ -222,7 +226,7 @@ class AnalysisWorker:
             temporary_mp3.symlink_to(current_mp3)
 
     @staticmethod
-    def __preserve_user_data(current_json, temporary_json):
+    def __preserve_user_data(current_json, temporary_json, drop_edited=False):
         from chorddata import ChordTrackRepository
 
         repository = ChordTrackRepository()
@@ -231,6 +235,8 @@ class AnalysisWorker:
 
         for track_id in current_track.available_chord_track_ids:
             if track_id == "chordino":
+                continue
+            if drop_edited and track_id == "user_edited":
                 continue
             replacement_track.set_chord_track(
                 track_id,

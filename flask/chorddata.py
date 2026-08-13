@@ -725,6 +725,73 @@ class ChordData:
             "metadata": copy.deepcopy(entry["metadata"]),
         }
 
+    def has_chord_track(self, track_id):
+        return track_id in self.__chord_tracks
+
+    def has_rhythm_track(self, track_id):
+        return track_id in self.__rhythm_tracks
+
+    # ── beat-aligned chord editing ─────────────────────────────────────
+
+    def create_beat_aligned_track(self, track_id, source_chord_track_id="chordino",
+                                  source_rhythm_track_id="qm_barbeattracker",
+                                  metadata=None):
+        """Sample a chord track onto a rhythm grid and store it run-length encoded."""
+        self.__validate_track_id(track_id)
+        chords = self.chord_track_chords(source_chord_track_id)
+        rhythm = self.rhythm_track_data(source_rhythm_track_id)
+        beat_times = rhythm["beat_times"]
+        if not beat_times:
+            raise ValueError(
+                f"rhythm track \"{source_rhythm_track_id}\" has no beat times"
+            )
+        times = [entry["timestamp"] for entry in chords]
+        labels = []
+        for lookup in self._beat_lookup_times_for(beat_times):
+            index = bisect.bisect_right(times, lookup) - 1
+            labels.append(chords[index]["chord"] if 0 <= index < len(chords) else "N")
+        encoded = chordutils.rle_chord_labels(list(zip(beat_times, labels)))
+        meta = copy.deepcopy(metadata) if metadata is not None else {}
+        meta.setdefault("sources", {
+            "chord": source_chord_track_id,
+            "rhythm": source_rhythm_track_id,
+        })
+        self.set_chord_track(track_id, encoded, metadata=meta)
+
+    def edit_chord_track_beat(self, track_id, beat_index, label,
+                              rhythm_track_id="qm_barbeattracker"):
+        """Change one beat's label on a beat-aligned track and re-compress it."""
+        self.__validate_track_id(track_id)
+        if track_id not in self.__chord_tracks:
+            raise ValueError(f"chord track \"{track_id}\" not available")
+        rhythm = self.rhythm_track_data(rhythm_track_id)
+        beat_times = rhythm["beat_times"]
+        if not isinstance(beat_index, int) or isinstance(beat_index, bool):
+            raise ValueError("beat_index must be an integer")
+        if beat_index < 0 or beat_index >= len(beat_times):
+            raise ValueError(
+                f"beat_index {beat_index} out of range [0, {len(beat_times)})"
+            )
+        normalized = chordutils.validate_chord_label(label)
+        per_beat = chordutils.expand_chord_labels(
+            self.chord_track_chords(track_id), beat_times
+        )
+        per_beat[beat_index] = normalized
+        encoded = chordutils.rle_chord_labels(list(zip(beat_times, per_beat)))
+        self.set_chord_track(track_id, encoded, metadata=self.chord_track_metadata(track_id))
+
+    def remove_chord_track(self, track_id):
+        """Remove one chord track, restoring the default view when it was active."""
+        self.__validate_track_id(track_id)
+        if track_id not in self.__chord_tracks:
+            raise ValueError(f"chord track \"{track_id}\" not available")
+        del self.__chord_tracks[track_id]
+        if self.__active_chord_track_id == track_id:
+            self.__active_chord_track_id = None
+            self.__chord_selection_explicit = False
+            self._rebuild_active_view()
+        self.get_chords.cache_clear()
+
     # ── active view rebuild ────────────────────────────────────────────
 
     def _rebuild_active_view(self):
@@ -928,15 +995,15 @@ class ChordData:
 
     def _transpose_chords(self):
         raw = [(entry['timestamp'], entry['chord']) for entry in self._base_chords]
-        if self._transpose == 0 and self.prefer_flats:
-            return raw
-        return chordutils.transpose_chords(
-            raw,
-            self._transpose,
-            self.prefer_flats,
-            use_unicode=False,
-            parallel=self._transpose != 0
-        )
+        return [
+            (
+                timestamp,
+                chordutils.transpose_chord_pitches(
+                    chord, self._transpose, self.prefer_flats
+                ),
+            )
+            for timestamp, chord in raw
+        ]
 
     def get_chord_at(self, time):
         chords = self.get_chords()
@@ -977,19 +1044,23 @@ class ChordData:
             indexes.append(max(0, idx))
         return indexes
 
-    def _beat_lookup_times(self):
-        if not self._beat_times:
+    @staticmethod
+    def _beat_lookup_times_for(beat_times):
+        if not beat_times:
             return []
         lookup_times = [
             (current + following) / 2
-            for current, following in zip(self._beat_times, self._beat_times[1:])
+            for current, following in zip(beat_times, beat_times[1:])
         ]
-        if len(self._beat_times) == 1:
-            lookup_times.append(self._beat_times[0])
+        if len(beat_times) == 1:
+            lookup_times.append(beat_times[0])
         else:
-            last_interval = self._beat_times[-1] - self._beat_times[-2]
-            lookup_times.append(self._beat_times[-1] + last_interval / 2)
+            last_interval = beat_times[-1] - beat_times[-2]
+            lookup_times.append(beat_times[-1] + last_interval / 2)
         return lookup_times
+
+    def _beat_lookup_times(self):
+        return self._beat_lookup_times_for(self._beat_times)
 
     def get_chords_per_beat(self):
         chords = self.get_chords()

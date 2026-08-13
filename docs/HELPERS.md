@@ -13,6 +13,22 @@ These are kept as usable command-line tools and have smoke-test coverage.
 - `chordbatch.py` - serial batch analyzer entry point for MP3, MP4, and WebM
   files, including the active same-stem priority.
 - `chordbatch_mp.py` - multiprocessing batch analyzer entry point.
+- `chordleadsheet_batch.py` - serial batch leadsheet exporter. It discovers
+  MP3/MP4/WebM files non-recursively, reuses valid analysis JSON, analyzes only
+  missing files serially, and atomically writes
+  `.chordflask/<name>-chords-<track>.md` per file. One failing file does not
+  stop later files. Exit code 0 means all exports succeeded, 1 means partial
+  or per-file errors, and 2 means invalid invocation or a missing directory.
+  Options: `--chord-track auto|original|edited|TRACK_ID` (default `auto` =
+  Edited when present, otherwise Chordino), `--rhythm-track TRACK_ID` (default
+  `qm_barbeattracker`), `--transpose N`, `--sharps`, `--unicode`,
+  `--repeat-mode changes|chords` (default `changes`), and
+  `--no-metric-chords` to disable the enabled-by-default rhythm-aware
+  smoothing. The helper never imports Flask or starts the server.
+
+  ```bash
+  ~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py /path/to/collection
+  ```
 
 ## Legacy Or Experimental Analyzer Variants
 

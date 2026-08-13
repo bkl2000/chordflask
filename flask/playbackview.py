@@ -58,6 +58,13 @@ class PlaybackView:
                 result[i] = (result[i][0], result[i - 1][1])
         return result
 
+    def full_beat_view(self):
+        """Return one displayed chord per beat after the metric filter."""
+        beat_chords = self.chord_data.get_chords_per_beat()
+        if self.__metric_chords:
+            beat_chords = self.__get_metric_chords(beat_chords)
+        return [chord for _, chord in beat_chords]
+
     def render(self, position):
         lookup_position = position + self.display_chord_offset
 

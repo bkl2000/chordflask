@@ -638,7 +638,7 @@ def test_reanalyze_rejects_media_outside_allowed_roots(tmp_path):
     assert response.status_code == 403
 
 
-def test_reanalyze_queues_forced_job_and_deduplicates(tmp_path):
+def test_reanalyze_rejects_duplicate_queued_job(tmp_path):
     app_wrapper, client = make_client()
     media = activate_analyzed_media(app_wrapper, tmp_path)
     app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
@@ -649,14 +649,15 @@ def test_reanalyze_queues_forced_job_and_deduplicates(tmp_path):
 
     assert queued.status_code == 200
     assert queued.get_json()["status"] == "queued"
-    assert duplicate.get_json()["status"] == "already_queued"
+    assert duplicate.status_code == 409
+    assert "already has queued analysis work" in duplicate.get_json()["error"]
     pending = app_wrapper.analysis_queue.status()["pending"]
     assert len(pending) == 1
     assert pending[0]["path"] == str(media)
     assert pending[0]["force"] is True
 
 
-def test_reanalyze_deduplicates_already_running_job(tmp_path):
+def test_reanalyze_rejects_already_running_job(tmp_path):
     app_wrapper, client = make_client()
     media = activate_analyzed_media(app_wrapper, tmp_path)
     app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
@@ -668,8 +669,7 @@ def test_reanalyze_deduplicates_already_running_job(tmp_path):
         json={"dirname": str(tmp_path), "filename": media.name},
     )
 
-    assert response.status_code == 200
-    assert response.get_json()["status"] == "already_queued"
+    assert response.status_code == 409
     assert app_wrapper.analysis_queue.status()["pending"][0]["status"] == "processing"
 
 

@@ -230,6 +230,168 @@
       opacity: 0.4;
     }
 
+    #editButton,
+    #versionButton,
+    #saveButton {
+      width: auto;
+      min-width: 22px;
+      height: 20px;
+      padding: 0 6px;
+      border-color: #69727d;
+      background: transparent;
+      color: var(--chord-muted);
+      font-size: 12px;
+      line-height: 18px;
+      text-transform: none;
+    }
+
+    #editButton:hover:not(:disabled),
+    #versionButton:hover:not(:disabled),
+    #saveButton:hover:not(:disabled) {
+      border-color: #9eabb8;
+      background: #313944;
+      color: #fff;
+    }
+
+    #editButton:disabled,
+    #versionButton:disabled,
+    #saveButton:disabled {
+      cursor: default;
+      opacity: 0.4;
+    }
+
+    #versionButton.display-on {
+      border-color: #1b7a43;
+      background: #1b7a43;
+      color: #fff;
+    }
+
+    #editTools {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+      padding: 4px 12px 6px;
+      border-top: 1px solid #2a3038;
+    }
+
+    #editTools button {
+      width: auto;
+      min-width: 22px;
+      height: 20px;
+      padding: 0 8px;
+      border-color: #69727d;
+      background: transparent;
+      color: var(--chord-muted);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    #editTools button:hover:not(:disabled) {
+      border-color: #9eabb8;
+      background: #313944;
+      color: #fff;
+    }
+
+    #editTools button:disabled {
+      cursor: default;
+      opacity: 0.4;
+    }
+
+    #editGridContainer {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 8px 12px;
+    }
+
+    .edit-grid-row {
+      display: flex;
+      gap: 3px;
+      margin-bottom: 3px;
+    }
+
+    .edit-cell {
+      flex: 1;
+      min-width: 0;
+      height: 26px;
+      padding: 0;
+      border: 1px solid #2a3038;
+      border-radius: 3px;
+      background: #1c2128;
+      color: #d0d8e0;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: clamp(9px, 2.2cqw, 14px);
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .edit-cell:hover {
+      border-color: #7fc4ff;
+      background: #26313d;
+    }
+
+    .edit-cell.active {
+      border-color: #7fc4ff;
+      background: #1767a8;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .edit-cell.repeat {
+      color: #9aa5b1;
+    }
+
+    .edit-cell.empty {
+      cursor: default;
+      background: transparent;
+      border-color: transparent;
+    }
+
+    dialog#editChordDialog {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 14px;
+      min-width: 240px;
+    }
+
+    dialog#editChordDialog .dialog-head {
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    dialog#editChordDialog input {
+      width: 100%;
+      height: 34px;
+    }
+
+    .edit-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 8px 0;
+    }
+
+    .edit-suggestions button {
+      height: 26px;
+      padding: 0 8px;
+      font-size: 13px;
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .dialog-actions button {
+      height: 30px;
+      padding: 0 12px;
+    }
+
     .track-selectors {
       display: flex;
       align-items: center;
@@ -704,6 +866,12 @@
               <select id="rhythmTrackSelect" hidden onchange="switchTrack('rhythm')"
                       aria-label="Select rhythm analysis source"></select>
             </span>
+            <button id="editButton" type="button" title="Edit chords beat by beat"
+                    aria-label="Edit chords" hidden disabled>Edit</button>
+            <button id="versionButton" type="button" title="Switch between Original and Edited chords"
+                    aria-label="Original/Edited chord version" hidden>Original</button>
+            <button id="saveButton" type="button" title="Download current chords as Markdown"
+                    aria-label="Download chords as Markdown" hidden disabled>Save</button>
             <span id="queueStatus"></span>
             <button id="reanalyzeButton" type="button" title="Chordino/QM reanalysis of current file"
                     aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
@@ -712,6 +880,15 @@
         </div>
         <div id="callbackContainer">
           <pre id="callbackOutput"></pre>
+          <div id="editGridContainer" hidden>
+            <div id="editGrid"></div>
+          </div>
+          <div id="editTools" hidden>
+            <button id="undoEditButton" type="button" title="Undo the last accepted beat change"
+                    aria-label="Undo last edit" disabled>Undo</button>
+            <button id="resetEditButton" type="button" title="Delete Edited chords and return to Original"
+                    aria-label="Reset edited chords">Reset</button>
+          </div>
         </div>
       </aside>
     </section>
@@ -785,6 +962,17 @@
     </div>
   </div>
 
+  <dialog id="editChordDialog" aria-labelledby="editChordDialogTitle">
+    <div class="dialog-head" id="editChordDialogTitle">Edit chord <span id="editDialogBeat"></span></div>
+    <input id="editChordInput" type="text" aria-label="Chord label"
+           placeholder="Chord label, e.g. Am7, Bb, N" />
+    <div class="edit-suggestions" id="editSuggestions"></div>
+    <div class="dialog-actions">
+      <button id="editCancelButton" type="button">Cancel</button>
+      <button id="editApplyButton" type="button">Apply</button>
+    </div>
+  </dialog>
+
   <script>
     let dirnameInput = document.getElementById('dirname');
     let videoPlayer = document.getElementById('videoPlayer');
@@ -809,6 +997,11 @@
     let nextFileButton = document.getElementById('nextFileButton');
     let batchLimitInput = document.getElementById('batchLimit');
     let queueNextButton = document.getElementById('queueNextButton');
+    let editButton = document.getElementById('editButton');
+    let versionButton = document.getElementById('versionButton');
+    let saveButton = document.getElementById('saveButton');
+    let undoEditButton = document.getElementById('undoEditButton');
+    let resetEditButton = document.getElementById('resetEditButton');
 
     let isRepeating = false;
     let isContinuing = false;
@@ -855,11 +1048,29 @@
     let activeChordTrackId = '';
     let activeRhythmTrackId = '';
 
-    function updateTrackSelectors(availableChord, availableRhythm, activeChord, activeRhythm) {
-      activeChordTrackId = activeChord || '';
-      activeRhythmTrackId = activeRhythm || '';
-      chordTrackSelectOptions = availableChord || [];
-      rhythmTrackSelectOptions = availableRhythm || [];
+    let editMode = false;
+    let hasEditedChords = false;
+    let activeChordVersion = 'original';
+    let editGridData = null;
+    let editBeatCount = 0;
+    let editUndoStack = [];
+    let currentEditCell = null;
+    let editRequestInFlight = false;
+    let reanalysisQueuedPath = null;
+    let saveRequestInFlight = false;
+    let trackRequestInFlight = false;
+
+    function updateTrackSelectors(payload) {
+      const availableChord = payload.available_chord_tracks || [];
+      const availableRhythm = payload.available_rhythm_tracks || [];
+      const activeChord = payload.active_chord_track_id || '';
+      const activeRhythm = payload.active_rhythm_track_id || '';
+      activeChordTrackId = activeChord;
+      activeRhythmTrackId = activeRhythm;
+      hasEditedChords = payload.has_edited === true;
+      activeChordVersion = payload.active_chord_version || 'original';
+      chordTrackSelectOptions = availableChord;
+      rhythmTrackSelectOptions = availableRhythm;
 
       function populateSelect(selectEl, tracks, activeId) {
         selectEl.innerHTML = '';
@@ -873,8 +1084,11 @@
         selectEl.hidden = tracks.length <= 1;
       }
 
-      populateSelect(chordTrackSelect, chordTrackSelectOptions, activeChordTrackId);
+      populateSelect(chordTrackSelect, chordTrackSelectOptions,
+        activeChord === 'user_edited' ? 'chordino' : activeChord);
       populateSelect(rhythmTrackSelect, rhythmTrackSelectOptions, activeRhythmTrackId);
+      rhythmTrackSelect.disabled = activeChord === 'user_edited';
+      updateEditControls();
     }
 
     function switchTrack(kind) {
@@ -886,6 +1100,8 @@
 
       if (!newId || newId === activeId) return;
 
+      trackRequestInFlight = true;
+      updateEditControls();
       fetch('/update_analysis_tracks', {
         method: 'POST',
         headers: {
@@ -905,19 +1121,25 @@
           localStorage.setItem(storageKey, newId);
           activeChordTrackId = data.active_chord_track_id;
           activeRhythmTrackId = data.active_rhythm_track_id;
-          updateTrackSelectors(
-            data.available_chord_tracks, data.available_rhythm_tracks,
-            activeChordTrackId, activeRhythmTrackId
-          );
+          exitEditMode();
+          updateTrackSelectors(data);
           syncPlaybackPosition(true);
         }
       })
       .catch(error => {
         console.error(`Error switching ${kind} track:`, error);
-        updateTrackSelectors(
-          chordTrackSelectOptions, rhythmTrackSelectOptions,
-          activeChordTrackId, activeRhythmTrackId
-        );
+        updateTrackSelectors({
+          available_chord_tracks: chordTrackSelectOptions,
+          available_rhythm_tracks: rhythmTrackSelectOptions,
+          active_chord_track_id: activeChordTrackId,
+          active_rhythm_track_id: activeRhythmTrackId,
+          has_edited: hasEditedChords,
+          active_chord_version: activeChordVersion
+        });
+      })
+      .finally(() => {
+        trackRequestInFlight = false;
+        updateEditControls();
       });
     }
 
@@ -1096,10 +1318,24 @@
           };
         }
       }
+      if (reanalysisQueuedPath) {
+        if (currentPaths.has(reanalysisQueuedPath)) {
+          // still queued or processing
+        } else if (failedPaths.has(reanalysisQueuedPath)) {
+          reanalysisQueuedPath = null;
+        } else {
+          const completedReanalysis = reanalysisQueuedPath;
+          reanalysisQueuedPath = null;
+          if (completedReanalysis === loadedMediaPath) {
+            refreshLoadedAnalysis();
+          }
+        }
+      }
       queueStatusInitialized = true;
       previousQueuePaths = currentPaths;
       queuedAnalysisPaths = currentPaths;
       updateReanalyzeButton();
+      updateEditControls();
       resumeAfterAnalysis(currentPaths, failed);
 
       const processing = pending.find(item => item.status === 'processing');
@@ -1483,6 +1719,7 @@
       }
       loadRequestInFlight = true;
       updateReanalyzeButton();
+      updateEditControls();
 
       fetch('/load_file', {
         method: 'POST',
@@ -1493,7 +1730,9 @@
         body: JSON.stringify({
           dirname: dirname,
           filename: filename,
-          chord_track_id: desiredChordTrackId || undefined,
+          chord_track_id: (desiredChordTrackId && desiredChordTrackId !== 'chordino')
+            ? desiredChordTrackId
+            : undefined,
           rhythm_track_id: desiredRhythmTrackId || undefined
         })
       })
@@ -1529,6 +1768,8 @@
         if (pendingAnalysisLoad?.path === requestedPath) {
           pendingAnalysisLoad = null;
         }
+        exitEditMode();
+        clearEditUndo();
         semitonesInput.value = 0;
         localStorage.setItem(storageKeys.file, filename);
         callbackOutput.innerText = '';
@@ -1544,10 +1785,7 @@
           ? `Waiting for analysis: ${pendingAnalysisLoad.filename}`
           : filename;
         updateReanalyzeButton();
-        updateTrackSelectors(
-          data.available_chord_tracks, data.available_rhythm_tracks,
-          data.active_chord_track_id, data.active_rhythm_track_id
-        );
+        updateTrackSelectors(data);
         if (autoplay) {
           video.play().catch(error => {
             console.error('Autoplay failed:', error);
@@ -1571,6 +1809,7 @@
         loadRequestInFlight = false;
         activeLoadIntent = null;
         updateReanalyzeButton();
+        updateEditControls();
         updateNavigationButtons();
         processNextLoadIntent();
       });
@@ -1623,7 +1862,13 @@
       if (!loadedMediaPath || reanalyzeButton.disabled) {
         return;
       }
-      if (!window.confirm(`Reanalyze ${loadedFileName}? This can take a while.`)) {
+      let discardEdits = false;
+      if (hasEditedChords) {
+        if (!window.confirm('Reanalyzing replaces Chordino/QM and discards your Edited chords. Continue?')) {
+          return;
+        }
+        discardEdits = true;
+      } else if (!window.confirm(`Reanalyze ${loadedFileName}? This can take a while.`)) {
         return;
       }
 
@@ -1636,7 +1881,8 @@
         },
         body: JSON.stringify({
           dirname: loadedFileDirectory,
-          filename: loadedFileName
+          filename: loadedFileName,
+          discard_edits: discardEdits
         })
       })
       .then(response => {
@@ -1648,7 +1894,9 @@
       .then(data => {
         if (data.mp4_file) {
           queuedAnalysisPaths.add(data.mp4_file);
+          reanalysisQueuedPath = data.mp4_file;
         }
+        exitEditMode();
         showQueueStatus(data.message || 'Added reanalysis to queue');
         updateReanalyzeButton();
         refreshAnalysisQueueStatus();
@@ -1657,6 +1905,437 @@
         console.error('Error queueing reanalysis:', error);
         alert(`Could not reanalyze file: ${error.error || 'Unknown error'}`);
         updateReanalyzeButton();
+      });
+    }
+
+    // ── chord editing ────────────────────────────────────────────────
+
+    function refreshLoadedAnalysis() {
+      if (!loadedFileDirectory || !loadedFileName || loadRequestInFlight) {
+        return;
+      }
+      loadRequestInFlight = true;
+      updateReanalyzeButton();
+      updateEditControls();
+      fetch('/load_file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({
+          dirname: loadedFileDirectory,
+          filename: loadedFileName
+        })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.status !== 'ready') {
+          return;
+        }
+        exitEditMode();
+        clearEditUndo();
+        loadedAnalysisValid = data.analysis_valid === true;
+        semitonesInput.value = 0;
+        updateTrackSelectors(data);
+        updateReanalyzeButton();
+        syncPlaybackPosition(true);
+      })
+      .catch(error => {
+        console.error('Error refreshing analysis after reanalysis:', error);
+      })
+      .finally(() => {
+        loadRequestInFlight = false;
+        updateReanalyzeButton();
+        updateEditControls();
+        processNextLoadIntent();
+      });
+    }
+
+    function updateEditControls() {
+      const chordinoAvailable = chordTrackSelectOptions.some(t => t.id === 'chordino');
+      const qmAvailable = rhythmTrackSelectOptions.some(t => t.id === 'qm_barbeattracker');
+      const validLoaded = Boolean(loadedMediaPath) && loadedAnalysisValid;
+      const isPaused = video.paused && !loadRequestInFlight;
+      const notQueued = !queuedAnalysisPaths.has(loadedMediaPath);
+      const canEdit = validLoaded && chordinoAvailable && qmAvailable && isPaused && notQueued;
+
+      editButton.hidden = !validLoaded;
+      editButton.disabled = editRequestInFlight || !canEdit;
+      editButton.textContent = editMode ? 'Done' : 'Edit';
+
+      versionButton.hidden = !hasEditedChords;
+      versionButton.textContent = activeChordVersion === 'edited' ? 'Edited' : 'Original';
+      versionButton.classList.toggle('display-on', activeChordVersion === 'edited');
+      versionButton.disabled = editRequestInFlight || loadRequestInFlight;
+
+      undoEditButton.disabled = editRequestInFlight || !editUndoStack.length;
+      resetEditButton.disabled = editRequestInFlight;
+      updateSaveButton();
+    }
+
+    function updateSaveButton() {
+      const validLoaded = Boolean(loadedMediaPath) && loadedAnalysisValid;
+      saveButton.hidden = !validLoaded;
+      saveButton.disabled = (
+        !validLoaded
+        || loadRequestInFlight
+        || editRequestInFlight
+        || saveRequestInFlight
+        || trackRequestInFlight
+        || queuedAnalysisPaths.has(loadedMediaPath)
+      );
+    }
+
+    function filenameFromDisposition(disposition) {
+      const star = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+      if (star) {
+        try {
+          return decodeURIComponent(star[1].trim());
+        } catch (error) {
+          return star[1].trim();
+        }
+      }
+      const plain = /filename="?([^";]+)"?/i.exec(disposition);
+      return plain ? plain[1].trim() : '';
+    }
+
+    function downloadChords() {
+      if (saveButton.disabled) {
+        return;
+      }
+      saveRequestInFlight = true;
+      updateSaveButton();
+      fetch('/download_chords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const filename = filenameFromDisposition(disposition) || 'chords.md';
+        return response.blob().then(blob => ({ blob, filename }));
+      })
+      .then(({ blob, filename }) => {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      })
+      .catch(error => {
+        console.error('Error downloading chords:', error);
+        alert(`Could not download chords: ${error.error || 'Unknown error'}`);
+      })
+      .finally(() => {
+        saveRequestInFlight = false;
+        updateSaveButton();
+      });
+    }
+
+    function exitEditMode() {
+      if (!editMode) {
+        return;
+      }
+      editMode = false;
+      editGridData = null;
+      document.getElementById('editGridContainer').hidden = true;
+      document.getElementById('editTools').hidden = true;
+      callbackOutput.hidden = false;
+      updateEditControls();
+    }
+
+    function clearEditUndo() {
+      editUndoStack = [];
+      updateEditControls();
+    }
+
+    function applyChordEditingState(data) {
+      hasEditedChords = data.has_edited === true;
+      activeChordVersion = data.active_chord_version || 'original';
+      updateTrackSelectors(data);
+      if (data.grid) {
+        renderEditGrid(data.grid);
+      }
+      if (editMode) {
+        document.getElementById('editGridContainer').hidden = false;
+        document.getElementById('editTools').hidden = false;
+        callbackOutput.hidden = true;
+      }
+      updateEditControls();
+    }
+
+    function startChordEditing() {
+      editRequestInFlight = true;
+      updateEditControls();
+      fetch('/start_chord_editing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        editMode = true;
+        applyChordEditingState(data);
+      })
+      .catch(error => {
+        console.error('Error starting chord editing:', error);
+        alert(`Could not start editing: ${error.error || 'Unknown error'}`);
+      })
+      .finally(() => {
+        editRequestInFlight = false;
+        updateEditControls();
+      });
+    }
+
+    function toggleEditMode() {
+      if (editRequestInFlight) {
+        return;
+      }
+      if (editMode) {
+        exitEditMode();
+      } else {
+        startChordEditing();
+      }
+    }
+
+    function renderEditGrid(grid) {
+      editBeatCount = grid.beat_count || 0;
+      editGridData = grid;
+      const container = document.getElementById('editGrid');
+      container.innerHTML = '';
+      (grid.rows || []).forEach(row => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'edit-grid-row';
+        row.forEach(cell => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'edit-cell';
+          if (cell.active) {
+            btn.classList.add('active');
+          }
+          if (cell.chord) {
+            btn.textContent = cell.chord;
+            btn.dataset.beatIndex = String(cell.beat_index);
+            btn.setAttribute(
+              'aria-label', `Beat ${cell.beat_index + 1}: ${cell.chord}`
+            );
+            if (cell.repeat) {
+              btn.classList.add('repeat');
+            }
+            btn.addEventListener('click', () => openEditDialog(cell));
+          } else {
+            btn.classList.add('empty');
+            btn.disabled = true;
+            btn.textContent = '\u00a0';
+          }
+          rowEl.appendChild(btn);
+        });
+        container.appendChild(rowEl);
+      });
+    }
+
+    function chordAtBeat(beatIndex) {
+      for (const row of (editGridData?.rows || [])) {
+        for (const cell of row) {
+          if (cell.beat_index === beatIndex && cell.chord) {
+            return cell.chord;
+          }
+        }
+      }
+      return '';
+    }
+
+    function openEditDialog(cell) {
+      currentEditCell = cell;
+      document.getElementById('editDialogBeat').textContent = `(beat ${cell.beat_index + 1})`;
+      const input = document.getElementById('editChordInput');
+      input.value = cell.chord;
+      renderEditSuggestions(cell.chord);
+      document.getElementById('editChordDialog').showModal();
+      input.focus();
+      input.select();
+    }
+
+    function renderEditSuggestions(currentChord) {
+      const suggestions = [currentChord, 'N', 'X', 'C', 'G', 'Am', 'F'];
+      const container = document.getElementById('editSuggestions');
+      container.innerHTML = '';
+      const seen = new Set();
+      suggestions.forEach(label => {
+        if (!label || seen.has(label)) {
+          return;
+        }
+        seen.add(label);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+          document.getElementById('editChordInput').value = label;
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    function closeEditDialog() {
+      const dialog = document.getElementById('editChordDialog');
+      if (dialog.open) {
+        dialog.close();
+      }
+      currentEditCell = null;
+      document.getElementById('editChordInput').value = '';
+    }
+
+    function submitEdit(beatIndex, chord, recordUndo = true, onSuccess = null) {
+      if (editRequestInFlight) {
+        return;
+      }
+      const previous = chordAtBeat(beatIndex) || 'N';
+      editRequestInFlight = true;
+      updateEditControls();
+      fetch('/edit_chord', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({
+          dirname: loadedFileDirectory,
+          filename: loadedFileName,
+          beat_index: beatIndex,
+          chord: chord
+        })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (recordUndo) {
+          editUndoStack.push({ beat_index: beatIndex, chord: previous });
+        }
+        applyChordEditingState(data);
+        if (onSuccess) {
+          onSuccess();
+        }
+        closeEditDialog();
+      })
+      .catch(error => {
+        console.error('Error saving chord edit:', error);
+        alert(`Could not save chord: ${error.error || 'Unknown error'}`);
+      })
+      .finally(() => {
+        editRequestInFlight = false;
+        updateEditControls();
+      });
+    }
+
+    function applyEditDialog() {
+      if (editRequestInFlight || !currentEditCell) {
+        return;
+      }
+      const chord = document.getElementById('editChordInput').value.trim();
+      if (!chord) {
+        return;
+      }
+      submitEdit(currentEditCell.beat_index, chord);
+    }
+
+    function undoLastEdit() {
+      if (!editUndoStack.length || editRequestInFlight) {
+        return;
+      }
+      const last = editUndoStack[editUndoStack.length - 1];
+      submitEdit(last.beat_index, last.chord, false, () => {
+        editUndoStack.pop();
+      });
+    }
+
+    function resetEditedChords() {
+      if (editRequestInFlight) {
+        return;
+      }
+      if (!window.confirm('Discard all Edited chords and return to Original?')) {
+        return;
+      }
+      editRequestInFlight = true;
+      updateEditControls();
+      fetch('/reset_edited_chords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        exitEditMode();
+        clearEditUndo();
+        applyChordEditingState(data);
+      })
+      .catch(error => {
+        console.error('Error resetting edited chords:', error);
+        alert(`Could not reset edited chords: ${error.error || 'Unknown error'}`);
+      })
+      .finally(() => {
+        editRequestInFlight = false;
+        updateEditControls();
+      });
+    }
+
+    function toggleChordVersion() {
+      const nextVersion = activeChordVersion === 'edited' ? 'original' : 'edited';
+      setChordVersion(nextVersion);
+    }
+
+    function setChordVersion(version) {
+      if (editRequestInFlight) {
+        return;
+      }
+      editRequestInFlight = true;
+      updateEditControls();
+      fetch('/set_chord_version', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({
+          dirname: loadedFileDirectory,
+          filename: loadedFileName,
+          version: version
+        })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        exitEditMode();
+        applyChordEditingState(data);
+        syncPlaybackPosition(true);
+      })
+      .catch(error => {
+        console.error('Error switching chord version:', error);
+        alert(`Could not switch chord version: ${error.error || 'Unknown error'}`);
+      })
+      .finally(() => {
+        editRequestInFlight = false;
+        updateEditControls();
       });
     }
 
@@ -1675,6 +2354,9 @@
       if (callbackOutput.innerText !== fullOutput) {
         callbackOutput.innerText = fullOutput;
         callbackContainer.scrollTop = 0;
+      }
+      if (editMode && dataDict.edit_grid) {
+        renderEditGrid(dataDict.edit_grid);
       }
     }
 
@@ -1711,7 +2393,7 @@
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store'
         },
-        body: JSON.stringify({ position: position })
+        body: JSON.stringify({ position: position, include_edit_grid: editMode })
       })
       .then(response => response.json())
       .then(data => {
@@ -1740,8 +2422,15 @@
     setInterval(() => syncPlaybackPosition(false), positionSyncIntervalMs);
     [videoPlayer, audioPlayer].forEach(player => {
       player.addEventListener('seeked', () => syncPlaybackPosition(true));
-      player.addEventListener('play', () => syncPlaybackPosition(true));
-      player.addEventListener('pause', () => syncPlaybackPosition(true));
+      player.addEventListener('play', () => {
+        exitEditMode();
+        syncPlaybackPosition(true);
+        updateEditControls();
+      });
+      player.addEventListener('pause', () => {
+        syncPlaybackPosition(true);
+        updateEditControls();
+      });
     });
 
     function updateSemitones() {
@@ -1762,6 +2451,8 @@
       .then(data => {
         if (!data.success) {
           console.error('Error updating semitones:', data.error);
+        } else {
+          clearEditUndo();
         }
       })
       .catch(error => {
@@ -1930,6 +2621,20 @@
       setPreferFlats(preferFlats);
       reanalyzeButton.addEventListener('click', reanalyzeCurrentFile);
       updateReanalyzeButton();
+      editButton.addEventListener('click', toggleEditMode);
+      versionButton.addEventListener('click', toggleChordVersion);
+      saveButton.addEventListener('click', downloadChords);
+      undoEditButton.addEventListener('click', undoLastEdit);
+      resetEditButton.addEventListener('click', resetEditedChords);
+      document.getElementById('editApplyButton').addEventListener('click', applyEditDialog);
+      document.getElementById('editCancelButton').addEventListener('click', closeEditDialog);
+      document.getElementById('editChordDialog').addEventListener('close', closeEditDialog);
+      document.getElementById('editChordInput').addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          applyEditDialog();
+        }
+      });
+      updateEditControls();
       chordTrackSelect.hidden = true;
       rhythmTrackSelect.hidden = true;
       refreshAnalysisQueueStatus();

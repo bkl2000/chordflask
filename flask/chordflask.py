@@ -4,6 +4,8 @@
 
 import argparse
 import sys
+from io import BytesIO
+
 from flask import Flask, render_template, jsonify, request, send_file, make_response
 import os
 import logging
@@ -12,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
+from chord_markdown import download_track_slug, format_chord_markdown
 from chordflask_config import (
     ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME, ALLOWED_MEDIA_ROOTS_ENV, LISTEN_ENV,
     PORT_ENV, DEBUG_ENV, DEFAULT_HOST, DEFAULT_PORT,
@@ -358,6 +361,11 @@ class FlaskMP4App:
         self.app.add_url_rule('/update_semitones', 'update_semitones', self.update_semitones, methods=['POST'])
         self.app.add_url_rule('/update_display_options', 'update_display_options', self.update_display_options, methods=['POST'])
         self.app.add_url_rule('/update_analysis_tracks', 'update_analysis_tracks', self.update_analysis_tracks, methods=['POST'])
+        self.app.add_url_rule('/start_chord_editing', 'start_chord_editing', self.start_chord_editing, methods=['POST'])
+        self.app.add_url_rule('/set_chord_version', 'set_chord_version', self.set_chord_version, methods=['POST'])
+        self.app.add_url_rule('/edit_chord', 'edit_chord', self.edit_chord, methods=['POST'])
+        self.app.add_url_rule('/reset_edited_chords', 'reset_edited_chords', self.reset_edited_chords, methods=['POST'])
+        self.app.add_url_rule('/download_chords', 'download_chords', self.download_chords, methods=['POST'])
         self.app.add_url_rule('/get_stored_directories', 'get_stored_directories', self.get_stored_directories, methods=['GET'])
         self.app.add_url_rule('/browse_roots', 'browse_roots', self.browse_roots, methods=['GET'])
         self.app.add_url_rule('/analysis_queue_status', 'analysis_queue_status', self.analysis_queue_status, methods=['GET'])
@@ -592,6 +600,15 @@ class FlaskMP4App:
             soft_fallback=True,
         )
 
+        producer_requested = (
+            isinstance(requested_chord_track_id, str)
+            and requested_chord_track_id.strip()
+        )
+        if not producer_requested and self._analysis_has_edited_track(
+            self.file_repr.get("json")
+        ):
+            self.player.select_analysis_tracks(chord_track_id="user_edited")
+
         state = self.player.analysis_track_state()
 
         return jsonify({
@@ -624,7 +641,19 @@ class FlaskMP4App:
         if not self.__analysis_is_valid(self.file_repr.get("json")):
             return jsonify(error="The active file has no valid analysis to replace."), 409
 
-        queue_status = self.analysis_queue.enqueue(str(media), force=True)
+        discard_edits = data.get("discard_edits", False)
+        if not isinstance(discard_edits, bool):
+            return jsonify(error="discard_edits must be a boolean"), 400
+        if self._media_is_queued(media):
+            return jsonify(error="This file already has queued analysis work."), 409
+        if self._analysis_has_edited_track(self.file_repr.get("json")) and not discard_edits:
+            return jsonify(
+                error="This file has edited chords. Confirm discarding them before reanalysis."
+            ), 409
+
+        queue_status = self.analysis_queue.enqueue(
+            str(media), force=True, discard_edits=discard_edits
+        )
         logging.info("Queued reanalysis for %s: %s", media.name, queue_status)
         return jsonify({
             'status': queue_status,
@@ -636,6 +665,169 @@ class FlaskMP4App:
             'mp4_file': str(media),
             'media_kind': self._media_kind(media),
         })
+
+    # ── chord editing routes ──────────────────────────────────────────
+
+    def _media_is_queued(self, media_path):
+        target = str(Path(media_path).resolve())
+        return any(
+            item.get("path") == target
+            for item in self.analysis_queue.status().get("pending", [])
+        )
+
+    @staticmethod
+    def _analysis_has_edited_track(json_path):
+        from chorddata import ChordData
+
+        try:
+            track = ChordData(json_path)
+        except (OSError, ValueError, TypeError, KeyError):
+            return False
+        return track.has_chord_track("user_edited")
+
+    def _active_editing_media(self, data):
+        """Return the active media Path, or a JSON error response to return."""
+        if self.player is None:
+            return jsonify(error="Player not initialized"), 409
+        try:
+            media = self._existing_media_file(data.get("dirname"), data.get("filename"))
+        except (ValueError, FileNotFoundError, PermissionError) as error:
+            return self._path_error(error)
+        if media != Path(self.file_repr.get()).resolve():
+            return jsonify(error="Requested media is not the active file."), 409
+        return media
+
+    def _validate_editing_request(self, data):
+        media_or_error = self._active_editing_media(data)
+        if not isinstance(media_or_error, Path):
+            return media_or_error
+        if self._media_is_queued(media_or_error):
+            return jsonify(error="The active file has queued analysis work."), 409
+        return None
+
+    def _save_player_chord_data(self, previous_track_state):
+        json_path = self.file_repr.get("json")
+        try:
+            self.player.chord_data.save_to_file(json_path)
+        except (OSError, ValueError) as error:
+            self.player.reload_chord_data(
+                chord_track_id=previous_track_state["active_chord_track_id"],
+                rhythm_track_id=previous_track_state["active_rhythm_track_id"],
+            )
+            return jsonify(error=f"Could not save chord data: {error}"), 500
+        return None
+
+    def start_chord_editing(self):
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        validation_error = self._validate_editing_request(data)
+        if validation_error:
+            return validation_error
+        previous_track_state = self.player.analysis_track_state()
+        try:
+            state = self.player.start_chord_editing()
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        save_error = self._save_player_chord_data(previous_track_state)
+        if save_error:
+            return save_error
+        return jsonify({
+            "success": True,
+            "grid": self.player.edit_grid(self.current_position),
+            **state,
+        })
+
+    def set_chord_version(self):
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        media_or_error = self._active_editing_media(data)
+        if not isinstance(media_or_error, Path):
+            return media_or_error
+        try:
+            self.player.set_chord_version(data.get("version"))
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        self.player.update_position(self.current_position)
+        return jsonify({"success": True, **self.player.analysis_track_state()})
+
+    def edit_chord(self):
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        validation_error = self._validate_editing_request(data)
+        if validation_error:
+            return validation_error
+        previous_track_state = self.player.analysis_track_state()
+        try:
+            self.player.edit_chord(data.get("beat_index"), data.get("chord"))
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        save_error = self._save_player_chord_data(previous_track_state)
+        if save_error:
+            return save_error
+        self.player.update_position(self.current_position)
+        return jsonify({
+            "success": True,
+            "grid": self.player.edit_grid(self.current_position),
+            **self.player.analysis_track_state(),
+        })
+
+    def reset_edited_chords(self):
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        validation_error = self._validate_editing_request(data)
+        if validation_error:
+            return validation_error
+        previous_track_state = self.player.analysis_track_state()
+        try:
+            self.player.reset_edited_chords()
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        save_error = self._save_player_chord_data(previous_track_state)
+        if save_error:
+            return save_error
+        self.player.update_position(self.current_position)
+        return jsonify({"success": True, **self.player.analysis_track_state()})
+
+    def download_chords(self):
+        """Return the active displayed beat-level chords as a Markdown leadsheet."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        media_or_error = self._active_editing_media(data)
+        if not isinstance(media_or_error, Path):
+            return media_or_error
+
+        snapshot = self.player.chord_download_snapshot()
+        if not snapshot["beats"]:
+            return jsonify(error="The active analysis has no beat grid to export."), 409
+
+        filename = (
+            f"{media_or_error.stem}-chords-"
+            f"{download_track_slug(snapshot['chord_track_id'])}.md"
+        )
+        markdown = format_chord_markdown(
+            title=media_or_error.stem,
+            chord_track=snapshot["chord_track_label"],
+            rhythm_track=snapshot["rhythm_track_label"],
+            version=snapshot["version"].capitalize(),
+            transpose=snapshot["transpose"],
+            spelling="Flats" if snapshot["prefer_flats"] else "Sharps",
+            unicode_symbols=snapshot["use_unicode"],
+            bpm=snapshot["bpm"],
+            meter=snapshot["meter"],
+            beats=snapshot["beats"],
+            repeat_mode=snapshot["repeat_mode"],
+        )
+        return send_file(
+            BytesIO(markdown.encode("utf-8")),
+            mimetype="text/markdown",
+            as_attachment=True,
+            download_name=filename,
+        )
 
     def serve_video(self):
         """
@@ -680,6 +872,9 @@ class FlaskMP4App:
         position = data.get('position')
         if isinstance(position, bool) or not isinstance(position, (int, float)) or not math.isfinite(position) or position < 0:
             return jsonify(error="position must be a finite non-negative number"), 400
+        include_edit_grid = data.get('include_edit_grid', False)
+        if not isinstance(include_edit_grid, bool):
+            return jsonify(error="include_edit_grid must be a boolean"), 400
         self.current_position = position
 
         # Avoid unnecessary updates if position hasn't changed
@@ -688,18 +883,20 @@ class FlaskMP4App:
                 "callback_output": [], "bpm": 100
             }
             payload["success"] = True
-            return jsonify(payload)
+        else:
+            self.old_current_position = self.current_position
+            #logging.info(f"Setting video position to: {self.current_position} seconds")
 
-        self.old_current_position = self.current_position
-        #logging.info(f"Setting video position to: {self.current_position} seconds")
+            if self.player:
+                self.player.update_position(self.current_position)
+                payload = self.player.get_callback_output()
+                payload["success"] = True
+            else:
+                payload = {"success": True, "callback_output": [], "bpm": 100}
 
-        if self.player:
-            self.player.update_position(self.current_position)
-            payload = self.player.get_callback_output()
-            payload["success"] = True
-            return jsonify(payload)
-
-        return jsonify(success=True, callback_output=[], bpm=100)
+        if include_edit_grid and self.player:
+            payload["edit_grid"] = self.player.edit_grid(self.current_position)
+        return jsonify(payload)
 
     def update_semitones(self):
         data, error_response = self._json_body()

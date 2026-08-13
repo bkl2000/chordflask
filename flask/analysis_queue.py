@@ -45,9 +45,11 @@ class AnalysisQueue:
                 return legacy_dir
         return queue_dir
 
-    def enqueue(self, media_path, force=False):
+    def enqueue(self, media_path, force=False, discard_edits=False):
         if not isinstance(force, bool):
             raise TypeError("force must be a boolean")
+        if not isinstance(discard_edits, bool):
+            raise TypeError("discard_edits must be a boolean")
         media_path = str(Path(media_path).expanduser().resolve())
         with self._locked_data() as data:
             pending = data.setdefault("pending", [])
@@ -57,17 +59,12 @@ class AnalysisQueue:
                     continue
                 if force and item.get("status") != "processing":
                     item["force"] = True
+                if discard_edits and item.get("status") != "processing":
+                    item["discard_edits"] = True
                 return "already_queued"
 
             data["failed"] = [item for item in failed if item.get("path") != media_path]
-            pending.append({
-                "job_id": uuid.uuid4().hex,
-                "path": media_path,
-                "status": "pending",
-                "force": force,
-                "attempt_count": 0,
-                "added_at": self._now(),
-            })
+            pending.append(self._new_job(media_path, force=force, discard_edits=discard_edits))
             return "queued"
 
     def enqueue_many(self, media_paths, limit):
@@ -288,12 +285,13 @@ class AnalysisQueue:
                     pass
 
     @staticmethod
-    def _new_job(media_path, force=False):
+    def _new_job(media_path, force=False, discard_edits=False):
         return {
             "job_id": uuid.uuid4().hex,
             "path": media_path,
             "status": "pending",
             "force": force,
+            "discard_edits": discard_edits,
             "attempt_count": 0,
             "added_at": AnalysisQueue._now(),
         }
@@ -313,6 +311,9 @@ class AnalysisQueue:
             item.setdefault("force", False)
             if not isinstance(item["force"], bool):
                 raise ValueError("queue item force must be a boolean")
+            item.setdefault("discard_edits", False)
+            if not isinstance(item["discard_edits"], bool):
+                raise ValueError("queue item discard_edits must be a boolean")
             item.setdefault("attempt_count", 0)
             if (
                 not isinstance(item["attempt_count"], int)

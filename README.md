@@ -9,6 +9,28 @@ ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+. CPython 3.12 is the release-tested Python version. GitHub releases contain
 source code only, not a ready-made executable.
 
+## Motivation
+
+ChordFlask is a small local-first tool for working with a music collection you
+already have. Its emphasis is the workflow around chord analysis rather than a
+claim of uniquely accurate recognition: browse a directory, play any file, and
+generate reusable chord data only when it is useful.
+
+This local, on-demand workflow is the main reason ChordFlask exists:
+
+- prepare selected parts of a collection in bounded background batches;
+- keep each completed analysis beside the media for later sessions;
+- continue browsing and playing while other files are analyzed;
+- transpose, respell, compare, and correct the displayed chords; and
+- download the accepted beat-level result as Markdown.
+
+Automatic chord transcription is approximate, especially with dense mixes or
+unusual harmony. The current Chordino-based result is intended as a useful
+starting point for orientation and practice, not as an authoritative score.
+When the result is close enough, this workflow can avoid repeated manual setup.
+When it is not, the original remains intact while an Edited version can be
+corrected beat by beat.
+
 ## Quick start from source
 
 This is the recommended installation method. Install the system packages:
@@ -56,6 +78,36 @@ permission for the media directory. Existing media files are not modified.
 The queue survives an application restart; interrupted work is returned to the
 queue and incomplete temporary output is discarded on retry.
 
+## Batch leadsheet export
+
+A non-recursive helper turns every supported media file in a directory into a playable
+Markdown leadsheet with title, tempo/meter metadata, the chord source, and
+measure tables of eight measures per block. Existing analyses are reused;
+missing files are analyzed serially only when needed, so a second run costs no
+new analysis time.
+
+```bash
+~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music
+```
+
+Each exported file lands beside its analysis as
+`.chordflask/<name>-chords-<track>.md` and is updated atomically. Defaults are
+the Edited version when present (otherwise Chordino), QM Bar/Beat Tracker
+rhythm, no transpose, Flats spelling, ASCII symbols, repeated-chord `changes`
+mode, and rhythm-aware smoothing. Examples:
+
+```bash
+# Sharps spelling and two semitones up
+~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --sharps --transpose 2
+
+# The unedited Chordino version with every beat written out
+~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --chord-track original --repeat-mode chords
+```
+
+The browser **Save** button downloads the same leadsheet format for the single
+file currently displayed, including its active track selection, spelling, and
+transpose state.
+
 ## Build a portable Linux bundle
 
 This advanced workflow builds ChordFlask on your machine for use on a compatible
@@ -98,6 +150,7 @@ ChordFlask has no authentication, TLS, or CSRF protection. Keep the default
 ## More documentation
 
 - [Playback, analysis tracks, and chord display](docs/ANALYSIS.md)
+- [Supported command-line helpers](docs/HELPERS.md)
 - [Vamp plugin installation and verification](docs/VAMP.md)
 - [Portable bundle guide](docs/STANDALONE.md)
 - [Platform and Python compatibility](docs/COMPATIBILITY.md)
