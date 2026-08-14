@@ -3,7 +3,28 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-RELEASE_NAME="chordflask-linux-x86_64"
+
+detect_distro_token() {
+    if [[ ! -r /etc/os-release ]]; then
+        echo "linux"
+        return
+    fi
+    local id version
+    id="$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"')"
+    version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '"' | cut -d. -f1)"
+    case "$id" in
+        debian)    echo "debian${version}" ;;
+        ubuntu)    echo "ubuntu${version}" ;;
+        linuxmint) echo "mint${version}" ;;
+        *)         echo "linux" ;;
+    esac
+}
+
+arch_token="$(uname -m)"
+py_token="py$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+distro_token="$(detect_distro_token)"
+
+RELEASE_NAME="chordflask-${distro_token}-${arch_token}-${py_token}"
 RELEASE_DIR="${SCRIPT_DIR}/dist/${RELEASE_NAME}"
 RELEASE_ARCHIVE="${SCRIPT_DIR}/dist/${RELEASE_NAME}.tar.gz"
 
@@ -58,6 +79,7 @@ printf '%s %s %s\n' "$semver" "$(date -u +'%Y-%m-%d %H:%M')" "$(git -C "${PROJEC
     > "${RELEASE_DIR}/VERSION"
 chmod +x "${RELEASE_DIR}/chordflask" "${RELEASE_DIR}/chordflask.sh" "${RELEASE_DIR}/install_vamp.sh"
 tar -C "${SCRIPT_DIR}/dist" -czf "${RELEASE_ARCHIVE}" "${RELEASE_NAME}"
+printf '%s\n' "$RELEASE_NAME" > "${SCRIPT_DIR}/dist/.latest-release"
 
 printf '\n'
 printf 'Standalone: %s\n' "${RELEASE_DIR}/chordflask"

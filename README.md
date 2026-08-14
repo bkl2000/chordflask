@@ -9,6 +9,34 @@ ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+. CPython 3.12 is the release-tested Python version. GitHub releases contain
 source code only, not a ready-made executable.
 
+## Quick start
+
+This is the recommended installation method. On a fresh Debian 13 or WSL2
+system the Python interpreter, compiler toolchain, and download tools are not
+preinstalled, so install the system packages first:
+
+```bash
+sudo apt update
+sudo apt install --no-install-recommends \
+  git curl ffmpeg pkg-config vamp-plugin-sdk python3-venv python3-dev \
+  build-essential libasound2-dev libcairo2-dev
+```
+
+Download ChordFlask, create its private Python environment, install the two
+required audio-analysis plugins, and start it:
+
+```bash
+git clone https://github.com/bkl2000/chordflask.git
+cd chordflask
+make setup-runtime
+make plugins
+make run
+```
+
+Open <http://localhost:5000>. Stop ChordFlask with `Ctrl+C` in the terminal.
+The Make targets use `~/.venvs/chordflask` automatically; you do not need to
+activate that environment.
+
 ## Motivation
 
 ChordFlask is a small local-first tool for working with a music collection you
@@ -30,32 +58,6 @@ starting point for orientation and practice, not as an authoritative score.
 When the result is close enough, this workflow can avoid repeated manual setup.
 When it is not, the original remains intact while an Edited version can be
 corrected beat by beat.
-
-## Quick start from source
-
-This is the recommended installation method. Install the system packages:
-
-```bash
-sudo apt update
-sudo apt install --no-install-recommends \
-  git curl ffmpeg pkg-config vamp-plugin-sdk python3-venv python3-dev \
-  build-essential libasound2-dev libcairo2-dev
-```
-
-Download ChordFlask, create its private Python environment, install the two
-required audio-analysis plugins, and start it:
-
-```bash
-git clone https://github.com/bkl2000/chordflask.git
-cd chordflask
-make setup-runtime
-make plugins
-make run
-```
-
-Open <http://localhost:5000>. Stop ChordFlask with `Ctrl+C` in the terminal.
-The Make targets use `~/.venvs/chordifier` automatically; you do not need to
-activate that environment.
 
 ## First use
 
@@ -89,7 +91,7 @@ text. Existing analyses are reused; missing files are analyzed serially only
 when needed, so a second run costs no new analysis time.
 
 ```bash
-~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music
+~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music
 ```
 
 Both exported files land beside the analysis as
@@ -101,10 +103,10 @@ mode, and rhythm-aware smoothing. Examples:
 
 ```bash
 # Sharps spelling and two semitones up
-~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --sharps --transpose 2
+~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --sharps --transpose 2
 
 # The unedited Chordino version with every beat written out
-~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --chord-track original --repeat-mode chords
+~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --chord-track original --repeat-mode chords
 ```
 
 The browser **Save** button downloads one ZIP containing the matching `.md` and
@@ -131,10 +133,11 @@ make setup
 make standalone
 ```
 
-The transferable archive is:
+The transferable archive is named after the build machine's distro, CPU
+architecture, and Python version, for example:
 
 ```text
-flask/dist/chordflask-linux-x86_64.tar.gz
+flask/dist/chordflask-debian13-x86_64-py3.12.tar.gz
 ```
 
 Test the unpackaged build locally with `make standalone-run`. The archive does

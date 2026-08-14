@@ -51,7 +51,7 @@ def test_missing_prerequisites_exit_status_2(tmp_path):
     mock_dir = _mock_dpkg(tmp_path, "deinstall ok config-files")
     env = {
         "PATH": f"{mock_dir}:/usr/bin:/bin",
-        "CHORDIFIER_VENV": "/tmp/chordflask-test-venv-NEVER",
+        "CHORDFLASK_VENV": "/tmp/chordflask-test-venv-NEVER",
     }
     cp = _run_setup(extra_env=env)
     assert cp.returncode == 2
@@ -67,7 +67,7 @@ def test_missing_prerequisites_lists_only_requested_packages(tmp_path):
     mock_dir = _mock_dpkg(tmp_path, missing=("python3-dev", "ffmpeg"))
     env = {
         "PATH": f"{mock_dir}:/usr/bin:/bin",
-        "CHORDIFIER_VENV": "/tmp/chordflask-test-venv-NEVER",
+        "CHORDFLASK_VENV": "/tmp/chordflask-test-venv-NEVER",
     }
     cp = _run_setup(extra_env=env)
     assert cp.returncode == 2
@@ -85,7 +85,7 @@ def test_missing_prerequisites_continuation_preserves_venv_dir_override(tmp_path
     mock_dir = _mock_dpkg(tmp_path, "deinstall ok config-files")
     env = {
         "PATH": f"{mock_dir}:/usr/bin:/bin",
-        "CHORDIFIER_VENV": "/tmp/my-custom-venv",
+        "CHORDFLASK_VENV": "/tmp/my-custom-venv",
     }
     cp = _run_setup(extra_env=env)
     assert cp.returncode == 2
@@ -97,7 +97,7 @@ def test_missing_prerequisites_continuation_preserves_python_bin_override(tmp_pa
     env = {
         "PATH": f"{mock_dir}:/usr/bin:/bin",
         "CHORDIFIER_PYTHON": sys.executable,
-        "CHORDIFIER_VENV": "/tmp/chordflask-test-venv-NEVER",
+        "CHORDFLASK_VENV": "/tmp/chordflask-test-venv-NEVER",
     }
     cp = _run_setup(extra_env=env)
     assert cp.returncode == 2
@@ -110,7 +110,7 @@ def test_missing_prerequisites_continuation_preserves_optional_flag(tmp_path):
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
             "CHORDIFIER_OPTIONAL": "1",
-            "CHORDIFIER_VENV": str(tmp_path / "venv"),
+            "CHORDFLASK_VENV": str(tmp_path / "venv"),
         }
     )
     assert cp.returncode == 2
@@ -121,11 +121,86 @@ def test_missing_prerequisites_default_venv_prints_clean_continuation(tmp_path):
     mock_dir = _mock_dpkg(tmp_path, "deinstall ok config-files")
     env = {
         "PATH": f"{mock_dir}:/usr/bin:/bin",
-        "CHORDIFIER_VENV": str(Path.home() / ".venvs/chordifier"),
+        "CHORDFLASK_VENV": str(Path.home() / ".venvs/chordflask"),
     }
     cp = _run_setup(extra_env=env)
     assert cp.returncode == 2
     assert "VENV_DIR=" not in cp.stderr
+
+
+def test_no_python_prints_full_minimal_install(tmp_path):
+    mock_bin = tmp_path / "mock-bin"
+    mock_bin.mkdir()
+    for tool in ("bash", "env", "dirname", "pwd"):
+        (mock_bin / tool).symlink_to(f"/usr/bin/{tool}")
+    cp = _run_setup(extra_env={"PATH": str(mock_bin)})
+    assert cp.returncode == 2
+    assert "No supported Python interpreter found" in cp.stderr
+    assert "sudo apt update" in cp.stderr
+    assert "sudo apt install --no-install-recommends" in cp.stderr
+    assert "python3-venv" in cp.stderr
+    assert "build-essential" in cp.stderr
+    assert "curl" in cp.stderr
+    assert "No virtual environment was created or modified." in cp.stderr
+
+
+# ── virtual-environment naming compatibility ───────────────────────
+
+
+def test_chordifier_venv_env_is_deprecated_alias(tmp_path):
+    mock_dir = _mock_dpkg(tmp_path)
+    venv_dir, _ = _healthy_mock_venv(tmp_path)
+    cp = _run_setup(
+        extra_env={
+            "PATH": f"{mock_dir}:/usr/bin:/bin",
+            "CHORDIFIER_VENV": str(venv_dir),
+        }
+    )
+    assert cp.returncode == 0, cp.stderr
+    assert f"Using existing virtual environment: {venv_dir}" in cp.stdout
+
+
+def test_chordflask_venv_takes_precedence_over_chordifier_venv(tmp_path):
+    mock_dir = _mock_dpkg(tmp_path)
+    preferred_venv, _ = _healthy_mock_venv(tmp_path)
+    cp = _run_setup(
+        extra_env={
+            "PATH": f"{mock_dir}:/usr/bin:/bin",
+            "CHORDFLASK_VENV": str(preferred_venv),
+            "CHORDIFIER_VENV": str(tmp_path / "legacy-does-not-exist"),
+        }
+    )
+    assert cp.returncode == 0, cp.stderr
+    assert f"Using existing virtual environment: {preferred_venv}" in cp.stdout
+
+
+def test_legacy_default_venv_dir_is_reused_when_present(tmp_path):
+    mock_dir = _mock_dpkg(tmp_path)
+    home = tmp_path / "home"
+    legacy_venv = home / ".venvs" / "chordifier"
+    bin_dir = legacy_venv / "bin"
+    bin_dir.mkdir(parents=True)
+    call_log = tmp_path / "legacy-python-calls.log"
+    python = bin_dir / "python3"
+    python.write_text(
+        f"""#!/bin/bash
+echo "$*" >> "{call_log}"
+if [[ "$*" == *"version_info.major"* ]]; then
+    echo 3.12
+fi
+exit 0
+"""
+    )
+    python.chmod(0o755)
+    (bin_dir / "activate").write_text(f'export PATH="{bin_dir}:$PATH"\n')
+    cp = _run_setup(
+        extra_env={
+            "PATH": f"{mock_dir}:/usr/bin:/bin",
+            "HOME": str(home),
+        }
+    )
+    assert cp.returncode == 0, cp.stderr
+    assert "Using the existing legacy virtual environment" in cp.stderr
 
 
 # ── preflight before venv operations ──────────────────────────────
@@ -139,7 +214,7 @@ def test_prereq_check_runs_before_recreate(tmp_path):
     marker.write_text("unchanged")
     env = {
         "PATH": f"{mock_dir}:/usr/bin:/bin",
-        "CHORDIFIER_VENV": str(venv_dir),
+        "CHORDFLASK_VENV": str(venv_dir),
     }
     cp = _run_setup(extra_env=env, extra_args=("--recreate",))
     assert cp.returncode == 2
@@ -151,7 +226,7 @@ def test_prereq_check_runs_before_create(tmp_path):
     venv_dir = tmp_path / "new-venv"
     env = {
         "PATH": f"{mock_dir}:/usr/bin:/bin",
-        "CHORDIFIER_VENV": str(venv_dir),
+        "CHORDFLASK_VENV": str(venv_dir),
     }
     cp = _run_setup(extra_env=env)
     assert cp.returncode == 2
@@ -170,7 +245,7 @@ def test_setup_never_executes_package_manager_commands(tmp_path):
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(tmp_path / "venv"),
+            "CHORDFLASK_VENV": str(tmp_path / "venv"),
         }
     )
     assert cp.returncode == 2
@@ -205,7 +280,7 @@ def test_damaged_existing_venv_stops_with_recreate_instruction(tmp_path):
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
         }
     )
     assert cp.returncode == 1
@@ -221,7 +296,7 @@ def test_healthy_venv_is_reused_and_verifies_available_runtime(tmp_path):
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
         }
     )
     assert cp.returncode == 0, cp.stderr
@@ -240,7 +315,7 @@ def test_pip_failure_reports_command_and_retry(tmp_path):
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
             "MOCK_FAIL_MATCH": "--no-build-isolation vamp",
             "MOCK_FAIL_STATUS": "23",
         }
@@ -258,7 +333,7 @@ def test_import_verification_failure_is_actionable(tmp_path):
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
             "MOCK_FAIL_MATCH": "import analysis_queue",
         }
     )
@@ -275,7 +350,7 @@ def test_vamp_discovery_failure_is_actionable(tmp_path):
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
             "MOCK_FAIL_MATCH": "vamp.list_plugins",
         }
     )
@@ -290,7 +365,7 @@ def test_full_setup_installs_and_verifies_developer_tools(tmp_path):
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
         },
         extra_args=("--dev",),
     )
@@ -308,7 +383,7 @@ def test_optional_environment_flag_installs_and_verifies_playback_tools(tmp_path
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
             "CHORDIFIER_OPTIONAL": "1",
         }
     )
@@ -342,7 +417,7 @@ echo 'install ok installed'
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
         }
     )
     assert cp.returncode == 0, cp.stderr
@@ -369,7 +444,7 @@ exit 0
     cp = _run_setup(
         extra_env={
             "PATH": str(mock_bin),
-            "CHORDIFIER_VENV": str(tmp_path / "venv"),
+            "CHORDFLASK_VENV": str(tmp_path / "venv"),
         }
     )
     assert cp.returncode == 2
@@ -426,7 +501,7 @@ exit 0
     cp = _run_setup(
         extra_env={
             "PATH": str(mock_bin),
-            "CHORDIFIER_VENV": str(tmp_path / "venv"),
+            "CHORDFLASK_VENV": str(tmp_path / "venv"),
         }
     )
     assert cp.returncode == 1
@@ -452,7 +527,7 @@ exit 0
     cp = _run_setup(
         extra_env={
             "PATH": str(mock_bin),
-            "CHORDIFIER_VENV": str(tmp_path / "venv"),
+            "CHORDFLASK_VENV": str(tmp_path / "venv"),
         }
     )
     assert cp.returncode != 1
@@ -477,7 +552,7 @@ echo 'install ok installed'
     cp = _run_setup(
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDIFIER_VENV": str(venv_dir),
+            "CHORDFLASK_VENV": str(venv_dir),
         }
     )
     assert cp.returncode == 0, cp.stderr

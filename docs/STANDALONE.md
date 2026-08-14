@@ -17,10 +17,12 @@ make setup
 make standalone
 ```
 
-The build first runs the complete project checks. It then creates:
+The build first runs the complete project checks. It then creates an archive
+whose name records the build machine's distro, CPU architecture, and Python
+version, for example:
 
 ```text
-flask/dist/chordflask-linux-x86_64.tar.gz
+flask/dist/chordflask-debian13-x86_64-py3.12.tar.gz
 ```
 
 Run the freshly built local copy with:
@@ -31,13 +33,14 @@ make standalone-run
 
 ## Install on the target machine
 
-Copy `chordflask-linux-x86_64.tar.gz` to the target. Then run:
+Copy the archive (for example `chordflask-debian13-x86_64-py3.12.tar.gz`) to
+the target. Then run:
 
 ```bash
 sudo apt update
 sudo apt install --no-install-recommends ffmpeg curl
-tar -xzf chordflask-linux-x86_64.tar.gz
-cd chordflask-linux-x86_64
+tar -xzf chordflask-debian13-x86_64-py3.12.tar.gz
+cd chordflask-debian13-x86_64-py3.12
 ./install_vamp.sh
 ./chordflask --version
 ./chordflask.sh

@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_VENV_DIR="${HOME}/.venvs/chordifier"
-VENV_DIR="${CHORDIFIER_VENV:-${DEFAULT_VENV_DIR}}"
+DEFAULT_VENV_DIR="${HOME}/.venvs/chordflask"
+LEGACY_VENV_DIR="${HOME}/.venvs/chordifier"
+VENV_DIR="${CHORDFLASK_VENV:-${CHORDIFIER_VENV:-${DEFAULT_VENV_DIR}}}"
 REQUIREMENTS_FILE="${ROOT_DIR}/requirements.txt"
 DEV_REQUIREMENTS_FILE="${ROOT_DIR}/requirements-dev.txt"
 BUILD_REQUIREMENTS_FILE="${ROOT_DIR}/requirements-build.txt"
@@ -27,11 +28,30 @@ case "${CHORDIFIER_OPTIONAL:-0}" in
         ;;
 esac
 
+MINIMAL_SYSTEM_PACKAGES=(
+    python3
+    python3-venv
+    python3-dev
+    build-essential
+    pkg-config
+    ffmpeg
+    vamp-plugin-sdk
+    libasound2-dev
+    libcairo2-dev
+    curl
+)
+
+print_minimal_install() {
+    echo "On Debian/Ubuntu/Mint install the required system packages with:" >&2
+    echo "  sudo apt update" >&2
+    echo "  sudo apt install --no-install-recommends ${MINIMAL_SYSTEM_PACKAGES[*]}" >&2
+}
+
 usage() {
     cat <<USAGE
 Usage: $0 [--venv DIR] [--dev] [--optional] [--recreate]
 
-Creates or updates the Python virtual environment for the chordifier.
+Creates or updates the Python virtual environment for ChordFlask.
 
 Options:
   --venv DIR   Use DIR instead of ${DEFAULT_VENV_DIR}.
@@ -40,16 +60,19 @@ Options:
   --recreate   Delete and recreate the venv directory.
 
 Environment:
-  CHORDIFIER_VENV     Alternative venv directory.
+  CHORDFLASK_VENV     Alternative venv directory (takes precedence).
+  CHORDIFIER_VENV     Deprecated alias for CHORDFLASK_VENV.
   CHORDIFIER_PYTHON   Python executable to use, for example python3.12.
   CHORDIFIER_OPTIONAL Set to 1 to install optional dependencies.
 USAGE
 }
 
+VENV_EXPLICIT=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --venv)
             VENV_DIR="${2:?Missing directory after --venv}"
+            VENV_EXPLICIT=true
             shift 2
             ;;
         --recreate)
@@ -75,6 +98,14 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "$VENV_EXPLICIT" == false && -z "${CHORDFLASK_VENV:-}${CHORDIFIER_VENV:-}" ]]; then
+    if [[ ! -d "$VENV_DIR" && -d "$LEGACY_VENV_DIR" ]]; then
+        echo "Using the existing legacy virtual environment: ${LEGACY_VENV_DIR}" >&2
+        echo "Set CHORDFLASK_VENV or run 'make setup-recreate' to migrate." >&2
+        VENV_DIR="$LEGACY_VENV_DIR"
+    fi
+fi
 
 select_python() {
     if [[ -n "$PYTHON_BIN" ]]; then
@@ -143,17 +174,7 @@ run_setup_command() {
 }
 
 check_system_prerequisites() {
-    local required_packages=(
-        python3
-        python3-venv
-        python3-dev
-        build-essential
-        pkg-config
-        ffmpeg
-        vamp-plugin-sdk
-        libasound2-dev
-        libcairo2-dev
-    )
+    local required_packages=("${MINIMAL_SYSTEM_PACKAGES[@]}")
     local missing_packages=()
 
     local is_debian=false
@@ -174,6 +195,7 @@ check_system_prerequisites() {
         command -v pkg-config >/dev/null 2>&1      || missing_items+=("pkg-config")
         command -v ffmpeg >/dev/null 2>&1          || missing_items+=("ffmpeg")
         command -v cc >/dev/null 2>&1              || missing_items+=("build-essential (C compiler)")
+        command -v curl >/dev/null 2>&1            || command -v wget >/dev/null 2>&1 || missing_items+=("curl or wget (download tool)")
         local python_include=""
         if command -v python3 >/dev/null 2>&1; then
             python_include="$(python3 -c "import sysconfig; print(sysconfig.get_config_var('INCLUDEPY') or '')" 2>/dev/null || true)"
@@ -290,9 +312,14 @@ PY
 PYTHON_BIN="$(select_python || true)"
 
 if [[ -z "$PYTHON_BIN" ]]; then
-    echo "No supported Python interpreter found." >&2
-    echo "Install Python 3.10-3.13 and rerun:" >&2
+    echo "No supported Python interpreter found (Python 3.10-3.14)." >&2
+    echo "" >&2
+    print_minimal_install
+    echo "" >&2
+    echo "Then rerun:" >&2
     echo "  $(make_continuation_cmd)" >&2
+    echo "" >&2
+    echo "No virtual environment was created or modified." >&2
     exit 2
 fi
 

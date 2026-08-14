@@ -8,11 +8,15 @@ from chordflask_config import MEDIA_SUFFIX_PRIORITY, SUPPORTED_MEDIA_SUFFIXES
 def preferred_media_files(directory):
     """Return one supported file per stem, using the configured format priority."""
     root = Path(directory)
-    candidates = [
-        entry
-        for entry in root.iterdir()
-        if entry.is_file() and entry.suffix.lower() in SUPPORTED_MEDIA_SUFFIXES
-    ]
+    candidates = []
+
+    for entry in root.iterdir():
+        try:
+            if entry.is_file() and entry.suffix.lower() in SUPPORTED_MEDIA_SUFFIXES:
+                candidates.append(entry)
+        except (PermissionError, OSError):
+            continue
+
     candidates.sort(key=lambda entry: (
         entry.stem.casefold(),
         MEDIA_SUFFIX_PRIORITY[entry.suffix.lower()],

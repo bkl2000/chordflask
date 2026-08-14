@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ChordFlask.
 
 ```bash
 make setup
-source ~/.venvs/chordifier/bin/activate
+source ~/.venvs/chordflask/bin/activate
 ```
 
 Required system packages (Ubuntu/Debian):

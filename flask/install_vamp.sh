@@ -39,7 +39,7 @@ Options:
 Environment:
   NNLS_URL      Direct download URL for ${NNLS_ARCHIVE}.
   QM_URL        Direct download URL for ${QM_ARCHIVE}.
-  CHORDIFIER_VENV  Source-install environment used for plugin verification.
+  CHORDFLASK_VENV  Source-install environment used for plugin verification.
 
 The script never invokes sudo.
 USAGE
@@ -123,7 +123,12 @@ verify_plugins() {
         return
     fi
 
-    configured_python="${CHORDIFIER_VENV:-${HOME}/.venvs/chordifier}/bin/python"
+    venv_dir="${CHORDFLASK_VENV:-${CHORDIFIER_VENV:-${HOME}/.venvs/chordflask}}"
+    if [[ -z "${CHORDFLASK_VENV:-}${CHORDIFIER_VENV:-}" \
+        && ! -d "$venv_dir" && -d "${HOME}/.venvs/chordifier" ]]; then
+        venv_dir="${HOME}/.venvs/chordifier"
+    fi
+    configured_python="${venv_dir}/bin/python"
     if [[ -x "$configured_python" ]]; then
         python_cmd="$configured_python"
     elif command -v python3 >/dev/null 2>&1; then
@@ -193,6 +198,10 @@ if [[ -n "$LOCAL_DIR" ]]; then
 fi
 
 # ── network download path ───────────────────────────────────────────
+
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    fail "curl or wget is required to download the Vamp plugins. Install curl (sudo apt install curl) and rerun."
+fi
 
 TEMPDIR="$(mktemp -d)"
 cleanup() { rm -rf "$TEMPDIR"; }

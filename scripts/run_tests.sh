@@ -2,8 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_VENV_DIR="${HOME}/.venvs/chordifier"
-VENV_DIR="${CHORDIFIER_VENV:-${DEFAULT_VENV_DIR}}"
+DEFAULT_VENV_DIR="${HOME}/.venvs/chordflask"
+LEGACY_VENV_DIR="${HOME}/.venvs/chordifier"
+VENV_DIR="${CHORDFLASK_VENV:-${CHORDIFIER_VENV:-${DEFAULT_VENV_DIR}}}"
+if [[ -z "${CHORDFLASK_VENV:-}${CHORDIFIER_VENV:-}" \
+    && ! -d "$VENV_DIR" && -d "$LEGACY_VENV_DIR" ]]; then
+    VENV_DIR="$LEGACY_VENV_DIR"
+fi
 PYTHON_BIN="${VENV_DIR}/bin/python"
 
 if [[ ! -x "$PYTHON_BIN" ]]; then

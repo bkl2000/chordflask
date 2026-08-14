@@ -191,7 +191,10 @@ class FlaskMP4App:
     def _existing_directory(self, value):
         if not isinstance(value, str) or not value.strip():
             raise ValueError("dirname must be a non-empty string")
-        directory = Path(value).expanduser().resolve()
+        try:
+            directory = Path(value).expanduser().resolve()
+        except (OSError, RuntimeError) as error:
+            raise PermissionError(f"Directory cannot be resolved: {value}") from error
         if not directory.is_dir():
             raise FileNotFoundError("Directory does not exist")
         if not self._is_allowed_directory(directory):
@@ -220,7 +223,10 @@ class FlaskMP4App:
                 f"{preferred.name} takes precedence over {requested_media.name}"
             )
 
-        media = requested_media.resolve()
+        try:
+            media = requested_media.resolve()
+        except (OSError, RuntimeError) as error:
+            raise PermissionError(f"Media file cannot be resolved: {requested_media.name}") from error
         if not self._is_allowed_directory(media.parent):
             raise PermissionError("Media file is outside allowed media roots")
         if media.suffix.lower() not in SUPPORTED_MEDIA_SUFFIXES:
@@ -420,13 +426,20 @@ class FlaskMP4App:
 
         if structured:
             directories = []
-            for entry in sorted(os.scandir(dirname), key=lambda item: item.name.lower()):
-                if (
-                    not entry.is_dir()
-                    or entry.name in {ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME}
-                ):
+            try:
+                scan_entries = sorted(os.scandir(dirname), key=lambda item: item.name.lower())
+            except (PermissionError, OSError):
+                scan_entries = []
+            for entry in scan_entries:
+                try:
+                    if (
+                        not entry.is_dir()
+                        or entry.name in {ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME}
+                    ):
+                        continue
+                    stat = entry.stat()
+                except (PermissionError, OSError):
                     continue
-                stat = entry.stat()
                 directories.append({
                     "type": "directory",
                     "name": entry.name,
@@ -438,7 +451,10 @@ class FlaskMP4App:
 
             files = []
             for file in media_files:
-                stat = os.stat(file)
+                try:
+                    stat = os.stat(file)
+                except (PermissionError, OSError):
+                    continue
                 files.append({
                     "type": "file",
                     "media_kind": self._media_kind(file),
@@ -449,7 +465,10 @@ class FlaskMP4App:
                     "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
                     "mtime_epoch": stat.st_mtime,
                 })
-            parent = directory.parent.resolve()
+            try:
+                parent = directory.parent.resolve()
+            except (OSError, RuntimeError):
+                parent = directory
             parent_dir = None
             if parent != directory and self._is_allowed_directory(parent):
                 parent_dir = str(parent)
@@ -460,9 +479,13 @@ class FlaskMP4App:
                 "files": files,
             })
 
-        file_size_mb = [os.path.getsize(file) // 1000000 for file in media_files]
-        file_names = [os.path.basename(file) for file in media_files]
-        res = [f"{name} | {size}M" for name, size in zip(file_names, file_size_mb)]
+        res = []
+        for file in media_files:
+            try:
+                size_mb = os.path.getsize(file) // 1000000
+            except (PermissionError, OSError):
+                continue
+            res.append(f"{os.path.basename(file)} | {size_mb}M")
 
         return jsonify(res)
 
@@ -489,7 +512,12 @@ class FlaskMP4App:
         except (ValueError, FileNotFoundError, PermissionError) as error:
             return self._path_error(error)
 
-        available = {path.name: path.resolve() for path in preferred_media_files(directory)}
+        available = {}
+        for path in preferred_media_files(directory):
+            try:
+                available[path.name] = path.resolve()
+            except (OSError, RuntimeError):
+                continue
         ordered_media = []
         seen = set()
         for filename in filenames:
@@ -985,8 +1013,12 @@ class FlaskMP4App:
         seen = set()
         entries = []
         for root in roots:
-            resolved = Path(root).resolve()
-            if resolved in seen or not resolved.is_dir():
+            try:
+                resolved = Path(root).resolve()
+                if resolved in seen or not resolved.is_dir():
+                    continue
+                mtime_epoch = resolved.stat().st_mtime
+            except (OSError, RuntimeError):
                 continue
             seen.add(resolved)
             entries.append({
@@ -994,7 +1026,7 @@ class FlaskMP4App:
                 "name": resolved.name or str(resolved),
                 "path": str(resolved),
                 "mtime": "",
-                "mtime_epoch": resolved.stat().st_mtime,
+                "mtime_epoch": mtime_epoch,
             })
         return jsonify({"roots": entries})
 

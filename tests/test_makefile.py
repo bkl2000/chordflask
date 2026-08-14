@@ -99,7 +99,7 @@ def test_make_plugins_uses_configured_environment():
         "--no-print-directory", "-n", "plugins", "VENV_DIR=/tmp/chordflask-plugins"
     )
 
-    assert 'CHORDIFIER_VENV="/tmp/chordflask-plugins"' in output
+    assert 'CHORDFLASK_VENV="/tmp/chordflask-plugins"' in output
     assert "scripts/install_vamp_plugins.sh" in output
 
 
@@ -127,7 +127,7 @@ def test_make_dry_runs_preserve_target_order_and_variables():
     )
     cleanup = run_make("--no-print-directory", "-n", "clean")
 
-    assert 'CHORDIFIER_VENV="/tmp/chordflask-test-venv"' in setup
+    assert 'CHORDFLASK_VENV="/tmp/chordflask-test-venv"' in setup
     assert 'CHORDIFIER_PYTHON="python3.12"' in setup
     assert "--dev" in setup
     assert standalone.index("scripts/run_tests.sh") < standalone.index("compileall")
@@ -228,7 +228,8 @@ def test_standalone_run_does_not_implicitly_build():
 
     assert "build_standalone.sh" not in output
     assert "make standalone" in output
-    assert "chordflask-linux-x86_64/chordflask.sh" in output
+    assert ".latest-release" in output
+    assert "chordflask.sh" in output
 
 
 def test_make_all_runs_fix_permissions_before_setup_before_check():

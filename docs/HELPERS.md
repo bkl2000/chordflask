@@ -29,7 +29,7 @@ These are kept as usable command-line tools and have smoke-test coverage.
   never imports Flask or starts the server.
 
   ```bash
-  ~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py /path/to/collection
+  ~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py /path/to/collection
   ```
 
 - `create_sheet_pdf.py` - thin command-line wrapper around the shared PDF

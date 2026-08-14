@@ -19,6 +19,7 @@ from analysis_worker import AnalysisWorker
 from chorddata import ChordData
 from chordflask import FlaskMP4App
 from filerepr import FileRepr
+from media_library import preferred_media_files
 
 
 @pytest.fixture(autouse=True)
@@ -395,6 +396,50 @@ def test_list_files_can_return_structured_entries(tmp_path):
     assert files[0]["size_bytes"] == 3
     assert files[0]["mtime_epoch"] == media_file.stat().st_mtime
     datetime.strptime(files[0]["mtime"], "%Y-%m-%d %H:%M")
+
+
+def test_preferred_media_files_skips_inaccessible_entries(tmp_path, monkeypatch):
+    (tmp_path / "good.mp3").write_bytes(b"")
+    (tmp_path / "DumpStack.log.tmp").write_bytes(b"")
+    original_is_file = Path.is_file
+
+    def guarded_is_file(self):
+        if self.name == "DumpStack.log.tmp":
+            raise PermissionError(13, "Permission denied", str(self))
+        return original_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", guarded_is_file)
+    assert [p.name for p in preferred_media_files(tmp_path)] == ["good.mp3"]
+
+
+def test_list_files_structured_skips_inaccessible_entries(tmp_path, monkeypatch):
+    _, client = make_client()
+    (tmp_path / "alpha.mp3").write_bytes(b"")
+    subdir = tmp_path / "sub"
+    subdir.mkdir()
+    real_scandir = os.scandir
+
+    class ProtectedEntry:
+        name = "DumpStack.log.tmp"
+
+        def is_dir(self):
+            raise PermissionError(13, "Permission denied", self.name)
+
+    def guarded_scandir(path):
+        entries = list(real_scandir(path))
+        entries.append(ProtectedEntry())
+        return iter(entries)
+
+    monkeypatch.setattr(os, "scandir", guarded_scandir)
+    response = client.post(
+        "/list_files",
+        json={"dirname": str(tmp_path), "matchstring": "", "structured": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert [directory["name"] for directory in payload["directories"]] == ["sub"]
+    assert [file["name"] for file in payload["files"]] == ["alpha.mp3"]
 
 
 def test_list_files_prefers_mp4_then_webm_then_mp3_for_same_stem(tmp_path):

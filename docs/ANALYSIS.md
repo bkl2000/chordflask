@@ -76,14 +76,14 @@ unchanged.
 Start with nearest-beat display instead:
 
 ```bash
-~/.venvs/chordifier/bin/python flask/chordflask.py --no-metric-chords
+~/.venvs/chordflask/bin/python flask/chordflask.py --no-metric-chords
 ```
 
 A read-only diagnostic reports rhythm classification and displayed beats that
 differ:
 
 ```bash
-~/.venvs/chordifier/bin/python scripts/metric_chords_diff.py path/to/chords.json
+~/.venvs/chordflask/bin/python scripts/metric_chords_diff.py path/to/chords.json
 ```
 
 ## Saving a leadsheet

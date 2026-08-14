@@ -2,7 +2,14 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-VENV_DIR ?= $(HOME)/.venvs/chordifier
+ifndef VENV_DIR
+  VENV_DIR := $(HOME)/.venvs/chordflask
+  ifeq ($(wildcard $(VENV_DIR)/bin/python),)
+    ifneq ($(wildcard $(HOME)/.venvs/chordifier/bin/python),)
+      VENV_DIR := $(HOME)/.venvs/chordifier
+    endif
+  endif
+endif
 VENV_PYTHON := $(VENV_DIR)/bin/python
 PYTHON_BIN ?=
 TEST_ARGS ?=
@@ -40,7 +47,7 @@ help:
 		'  make clean-report        Show reclaimable space without deleting anything' \
 		'' \
 		'Variables:' \
-		'  VENV_DIR=/path           Virtual environment (default: ~/.venvs/chordifier)' \
+		'  VENV_DIR=/path           Virtual environment (default: ~/.venvs/chordflask)' \
 		'  PYTHON_BIN=python3.12     Interpreter used to create a virtual environment' \
 		'  TEST_ARGS="-q -k name"    Additional pytest arguments' \
 		'  CHORDIFIER_PORT=5050      Port used by make run' \
@@ -57,23 +64,23 @@ fix-permissions:
 	@bash "$(ROOT_DIR)/scripts/fix_permissions.sh"
 
 setup:
-	@CHORDIFIER_VENV="$(VENV_DIR)" CHORDIFIER_PYTHON="$(PYTHON_BIN)" \
+	@CHORDFLASK_VENV="$(VENV_DIR)" CHORDIFIER_PYTHON="$(PYTHON_BIN)" \
 		bash "$(ROOT_DIR)/scripts/setup_venv.sh" --dev
 
 install: setup
 
 setup-runtime:
-	@CHORDIFIER_VENV="$(VENV_DIR)" CHORDIFIER_PYTHON="$(PYTHON_BIN)" \
+	@CHORDFLASK_VENV="$(VENV_DIR)" CHORDIFIER_PYTHON="$(PYTHON_BIN)" \
 		bash "$(ROOT_DIR)/scripts/setup_venv.sh"
 
 setup-dev: setup
 
 setup-recreate:
-	@CHORDIFIER_VENV="$(VENV_DIR)" CHORDIFIER_PYTHON="$(PYTHON_BIN)" \
+	@CHORDFLASK_VENV="$(VENV_DIR)" CHORDIFIER_PYTHON="$(PYTHON_BIN)" \
 		bash "$(ROOT_DIR)/scripts/setup_venv.sh" --dev --recreate
 
 test:
-	@PYTHONPATH="$(EXTRA_PYTHONPATH)" CHORDIFIER_VENV="$(VENV_DIR)" \
+	@PYTHONPATH="$(EXTRA_PYTHONPATH)" CHORDFLASK_VENV="$(VENV_DIR)" \
 		bash "$(ROOT_DIR)/scripts/run_tests.sh" \
 		"$(ROOT_DIR)/tests" $(EXTRA_TEST_DIRS) $(TEST_ARGS)
 
@@ -96,14 +103,16 @@ standalone: check
 	@PATH="$(VENV_DIR)/bin:$$PATH" bash "$(ROOT_DIR)/flask/build_standalone.sh"
 
 standalone-run:
-	@if [[ ! -x "$(ROOT_DIR)/flask/dist/chordflask-linux-x86_64/chordflask.sh" ]]; then \
+	@release_name=$$(cat "$(ROOT_DIR)/flask/dist/.latest-release" 2>/dev/null || true); \
+	launcher="$(ROOT_DIR)/flask/dist/$${release_name}/chordflask.sh"; \
+	if [[ -z "$${release_name}" || ! -x "$${launcher}" ]]; then \
 		echo 'Standalone build not found. Run: make standalone' >&2; \
 		exit 1; \
-	fi
-	@cd "$(ROOT_DIR)" && flask/dist/chordflask-linux-x86_64/chordflask.sh
+	fi; \
+	cd "$(ROOT_DIR)" && "$${launcher}"
 
 plugins:
-	@CHORDIFIER_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/install_vamp_plugins.sh"
+	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/install_vamp_plugins.sh"
 
 status:
 	@git -C "$(ROOT_DIR)" status --short

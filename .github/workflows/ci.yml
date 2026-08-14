@@ -36,16 +36,16 @@ jobs:
 
       - name: Set up Python
         run: |
-          python3 -m venv ~/.venvs/chordifier
-          ~/.venvs/chordifier/bin/python -m pip install --upgrade pip setuptools wheel
+          python3 -m venv ~/.venvs/chordflask
+          ~/.venvs/chordflask/bin/python -m pip install --upgrade pip setuptools wheel
 
       - name: Install dependencies
         run: |
-          CHORDIFIER_VENV=~/.venvs/chordifier bash scripts/setup_venv.sh --dev
+          CHORDFLASK_VENV=~/.venvs/chordflask bash scripts/setup_venv.sh --dev
 
       - name: Install Vamp plugins
         run: |
-          CHORDIFIER_VENV=~/.venvs/chordifier \
+          CHORDFLASK_VENV=~/.venvs/chordflask \
             bash scripts/install_vamp_plugins.sh --dest "${RUNNER_TEMP}/vamp"
 
       - name: Check
@@ -54,4 +54,4 @@ jobs:
           CHORDIFIER_TEST_VAMP_PATH: ${{ runner.temp }}/vamp
           VAMP_PATH: ${{ runner.temp }}/vamp
         run: |
-          CHORDIFIER_VENV=~/.venvs/chordifier make check
+          CHORDFLASK_VENV=~/.venvs/chordflask make check

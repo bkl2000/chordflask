@@ -27,10 +27,10 @@ def test_readme_names_portable_archive_and_complete_guide():
     guide = (REPO_ROOT / "docs" / "STANDALONE.md").read_text()
 
     assert "source code only, not a ready-made executable" in readme
-    assert "flask/dist/chordflask-linux-x86_64.tar.gz" in readme
+    assert "flask/dist/chordflask-debian13-x86_64-py3.12.tar.gz" in readme
     assert "docs/STANDALONE.md" in readme
     for command in (
-        "tar -xzf chordflask-linux-x86_64.tar.gz",
+        "tar -xzf chordflask-debian13-x86_64-py3.12.tar.gz",
         "./install_vamp.sh",
         "./chordflask --version",
         "./chordflask.sh",
@@ -61,7 +61,7 @@ def test_readme_documents_batch_leadsheet_export():
     readme = (REPO_ROOT / "README.md").read_text()
 
     assert "Batch leadsheet export" in readme
-    assert "~/.venvs/chordifier/bin/python flask/helpers/chordleadsheet_batch.py ~/Music" in readme
+    assert "~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music" in readme
     assert "--sharps --transpose 2" in readme
     assert "--chord-track original --repeat-mode chords" in readme
     assert ".chordflask/<name>-chords-<track>.md" in readme
