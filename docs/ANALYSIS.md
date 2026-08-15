@@ -46,6 +46,10 @@ Each media directory receives a `.chordflask` subdirectory containing generated
 JSON, MusicXML, MIDI, and intermediate audio. ChordFlask does not alter the
 source media file.
 
+The queue, worker lock, and logs live in `~/.chordflask` in your home
+directory — a separate application-state area, not part of any media
+directory's `.chordflask`.
+
 A read-only report shows how much space one directory's analysis storage uses
 without deleting anything:
 

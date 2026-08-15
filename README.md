@@ -81,8 +81,12 @@ corrected beat by beat.
 Generated JSON, MusicXML, MIDI, and temporary audio are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
 permission for the media directory. Existing media files are not modified.
-The queue survives an application restart; interrupted work is returned to the
-queue and incomplete temporary output is discarded on retry.
+
+ChordFlask also keeps a small application-state directory, `~/.chordflask`, in
+your home folder. It holds the analysis queue, worker lock, and log files — not
+your analysis results. The queue survives an application restart; interrupted
+work is returned to the queue and incomplete temporary output is discarded on
+retry.
 
 ## Analysis storage
 
@@ -107,8 +111,10 @@ python3 scripts/chordflask_storage.py cleanup /path/to/music --corrupt-backups -
 ```
 
 Valid analysis JSON, source media, and user-edited chords are never deleted.
-See [Playback, analysis tracks, and chord display](docs/ANALYSIS.md) for the
-full storage description.
+These commands operate only on a media directory's local `.chordflask`; they
+never touch `~/.chordflask` or the source media. See
+[Playback, analysis tracks, and chord display](docs/ANALYSIS.md) for the full
+storage description.
 
 ## Batch leadsheet export
 
