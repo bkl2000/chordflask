@@ -10,6 +10,18 @@ ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 ChordFlask under WSL2 (tested) and open the local web interface from the
 Windows browser at localhost.
 
+<!-- standalone-download:start -->
+## Download
+
+A prebuilt Linux x86_64 bundle is available for users who do not want to build
+ChordFlask themselves:
+
+**[Download chordflask-mint22-x86_64-py3.12-v0.6.3.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.6.3/chordflask-mint22-x86_64-py3.12-v0.6.3.tar.gz)**
+
+Built on Linux Mint 22 / x86_64. FFmpeg and Vamp plugin binaries are not
+bundled; see the portable bundle guide for requirements.
+<!-- standalone-download:end -->
+
 ## Quick start
 
 This is the recommended installation method. On a fresh Debian 13 or WSL2
@@ -148,9 +160,9 @@ for the complete storage description.
 
 ## Build a portable Linux bundle
 
-GitHub releases contain source code only, not a ready-made executable. This
-advanced workflow builds ChordFlask on your machine for use on a compatible
-Linux x86_64 machine. It is not required for normal use.
+A prebuilt bundle is available from [Download](#download) above. This advanced
+workflow builds ChordFlask on your machine for use on a compatible Linux x86_64
+machine. It is not required for normal use.
 
 ```bash
 make setup
@@ -158,10 +170,10 @@ make standalone
 ```
 
 The transferable archive is named after the build machine's distro, CPU
-architecture, and Python version, for example:
+architecture, Python version, and ChordFlask version, for example:
 
 ```text
-flask/dist/chordflask-debian13-x86_64-py3.12.tar.gz
+flask/dist/chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz
 ```
 
 Test the unpackaged build locally with `make standalone-run`. The archive does

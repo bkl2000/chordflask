@@ -27,11 +27,11 @@ def test_readme_names_portable_archive_and_complete_guide():
     readme = (REPO_ROOT / "README.md").read_text()
     guide = (REPO_ROOT / "docs" / "STANDALONE.md").read_text()
 
-    assert "source code only, not a ready-made executable" in readme
-    assert "flask/dist/chordflask-debian13-x86_64-py3.12.tar.gz" in readme
+    assert "## Download" in readme
+    assert "flask/dist/chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz" in readme
     assert "docs/STANDALONE.md" in readme
     for command in (
-        "tar -xzf chordflask-debian13-x86_64-py3.12.tar.gz",
+        "tar -xzf chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz",
         "./install_vamp.sh",
         "./chordflask --version",
         "./chordflask.sh",

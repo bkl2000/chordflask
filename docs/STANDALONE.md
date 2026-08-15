@@ -1,8 +1,9 @@
 # Portable Linux bundle
 
 ChordFlask's portable bundle is useful when you want to build once and copy the
-application to another compatible Linux x86_64 machine. GitHub releases do not
-contain a prebuilt executable.
+application to another compatible Linux x86_64 machine. A prebuilt Linux x86_64
+bundle may be attached to a GitHub release, but you can also build it yourself
+with the steps below.
 
 The bundle contains ChordFlask and its Python runtime. It deliberately does not
 contain FFmpeg or Vamp plugin binaries, so the target machine must provide
@@ -18,11 +19,11 @@ make standalone
 ```
 
 The build first runs the complete project checks. It then creates an archive
-whose name records the build machine's distro, CPU architecture, and Python
-version, for example:
+whose name records the build machine's distro, CPU architecture, Python
+version, and ChordFlask version, for example:
 
 ```text
-flask/dist/chordflask-debian13-x86_64-py3.12.tar.gz
+flask/dist/chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz
 ```
 
 Run the freshly built local copy with:
@@ -33,14 +34,14 @@ make standalone-run
 
 ## Install on the target machine
 
-Copy the archive (for example `chordflask-debian13-x86_64-py3.12.tar.gz`) to
-the target. Then run:
+Copy the archive (for example `chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz`)
+to the target. Then run:
 
 ```bash
 sudo apt update
 sudo apt install --no-install-recommends ffmpeg curl
-tar -xzf chordflask-debian13-x86_64-py3.12.tar.gz
-cd chordflask-debian13-x86_64-py3.12
+tar -xzf chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz
+cd chordflask-debian13-x86_64-py3.12-v0.6.3
 ./install_vamp.sh
 ./chordflask --version
 ./chordflask.sh

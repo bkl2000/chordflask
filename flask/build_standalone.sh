@@ -23,8 +23,9 @@ detect_distro_token() {
 arch_token="$(uname -m)"
 py_token="py$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 distro_token="$(detect_distro_token)"
+semver="$(head -n1 "${PROJECT_ROOT}/VERSION")"
 
-RELEASE_NAME="chordflask-${distro_token}-${arch_token}-${py_token}"
+RELEASE_NAME="chordflask-${distro_token}-${arch_token}-${py_token}-v${semver}"
 RELEASE_DIR="${SCRIPT_DIR}/dist/${RELEASE_NAME}"
 RELEASE_ARCHIVE="${SCRIPT_DIR}/dist/${RELEASE_NAME}.tar.gz"
 
@@ -74,7 +75,6 @@ cp "${SCRIPT_DIR}/install_vamp.sh" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/docs/STANDALONE.md" "${RELEASE_DIR}/README.md"
 cp "${PROJECT_ROOT}/THIRD_PARTY_NOTICES.md" "${RELEASE_DIR}/"
 cp "${SCRIPT_DIR}/assets/fonts/LICENSE.txt" "${RELEASE_DIR}/LIBERATION-FONTS-LICENSE.txt"
-semver="$(head -n1 "${PROJECT_ROOT}/VERSION")"
 printf '%s %s %s\n' "$semver" "$(date -u +'%Y-%m-%d %H:%M')" "$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD)" \
     > "${RELEASE_DIR}/VERSION"
 chmod +x "${RELEASE_DIR}/chordflask" "${RELEASE_DIR}/chordflask.sh" "${RELEASE_DIR}/install_vamp.sh"
