@@ -17,7 +17,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from analysis_queue import AnalysisQueue
-from chordflask_config import ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME
+from chordflask_config import (
+    ANALYSIS_DIR_NAME,
+    DEFAULT_CHORD_TRACK,
+    DEFAULT_RHYTHM_TRACK,
+    LEGACY_ANALYSIS_DIR_NAME,
+)
 from filerepr import FileRepr
 
 
@@ -234,7 +239,7 @@ class AnalysisWorker:
         replacement_track = repository.load(temporary_json)
 
         for track_id in current_track.available_chord_track_ids:
-            if track_id == "chordino":
+            if track_id == DEFAULT_CHORD_TRACK:
                 continue
             if drop_edited and track_id == "user_edited":
                 continue
@@ -244,7 +249,7 @@ class AnalysisWorker:
                 metadata=current_track.chord_track_metadata(track_id),
             )
         for track_id in current_track.available_rhythm_track_ids:
-            if track_id == "qm_barbeattracker":
+            if track_id == DEFAULT_RHYTHM_TRACK:
                 continue
             rhythm = current_track.rhythm_track_data(track_id)
             replacement_track.set_rhythm_track(track_id, **rhythm)

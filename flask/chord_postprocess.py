@@ -96,7 +96,7 @@ class ChordPostProcessor:
             correction_margin=correction_margin,
         )
 
-    def process(self, chords, beat_times=None):
+    def process(self, chords):
         if not self.enabled:
             return chords
         if len(chords) < 2:
@@ -142,7 +142,7 @@ class ChordPostProcessor:
         self.estimated_key_pc = key_pc
         self.estimated_key_mode = key_mode
         corrected = []
-        for index, chord in enumerate(chords):
+        for index, _chord in enumerate(chords):
             corrected.append(self._correct_one_chord(chords, index, key_pc, key_mode))
         return corrected
 

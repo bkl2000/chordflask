@@ -176,9 +176,9 @@ ChordFlask has no authentication, TLS, or CSRF protection. Keep the default
 
 ChordFlask has been and continues to be developed through a maintainer-led,
 AI-assisted "vibe coding" workflow. The maintainer defines, leads, and reviews
-all changes and retains the testing and release decisions. AI assistance is
-provided by OpenAI Codex and OpenCode with DeepSeek V4. These tools are not
-authors, maintainers, partners, or endorsers of the project.
+all changes and retains the testing and release decisions. AI coding tools
+assist with development but are not authors, maintainers, partners, or
+endorsers of the project.
 
 ## License
 

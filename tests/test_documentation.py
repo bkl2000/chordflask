@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -109,3 +110,17 @@ def test_analysis_doc_describes_leadsheet_save_output():
     assert "one ZIP" in analysis
     assert "four framed measures" in analysis
     assert "15 rows per page" in analysis
+
+
+def test_helpers_doc_filenames_exist():
+    helpers = (REPO_ROOT / "docs" / "HELPERS.md").read_text()
+    listing = helpers.split("## Production Boundary", 1)[0]
+
+    found = []
+    for token in re.findall(r"`([^`]+)`", listing):
+        if re.fullmatch(r"[A-Za-z0-9_]+\.py", token):
+            found.append(token)
+
+    assert found, "HELPERS.md lists no bare .py helper filenames"
+    for name in found:
+        assert (REPO_ROOT / "flask" / "helpers" / name).is_file(), name

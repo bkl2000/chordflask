@@ -1,4 +1,5 @@
 import gc
+import logging
 import os
 import statistics
 import subprocess
@@ -52,7 +53,7 @@ class AudioAnalyzer:
         else:
             chord_source = "chordino"
             chords = self._extract_chords_vamp(y, sr)
-        chords = self.postprocessor.process(chords, beat_times=beat_times)
+        chords = self.postprocessor.process(chords)
 
         chord_data.set_chord_track(chord_source, chords)
         chord_data.set_rhythm_track(
@@ -94,12 +95,22 @@ class AudioAnalyzer:
         features = data.get("list", [])
         beat_times = []
         beat_numbers = []
+        malformed_count = 0
         for feature in features:
             beat_number = self._feature_beat_number(feature)
-            if beat_number is None or beat_number <= 0:
+            if beat_number is None:
+                malformed_count += 1
+                continue
+            if beat_number <= 0:
                 continue
             beat_times.append(float(feature["timestamp"]))
             beat_numbers.append(beat_number)
+
+        if malformed_count:
+            logging.warning(
+                "Ignored %d beat feature(s) with unparseable beat-number labels.",
+                malformed_count,
+            )
 
         if len(beat_times) < 2:
             # Keep unusual or beatless material analyzable. It cannot provide a
@@ -109,7 +120,7 @@ class AudioAnalyzer:
 
         intervals = [
             later - earlier
-            for earlier, later in zip(beat_times, beat_times[1:])
+            for earlier, later in zip(beat_times, beat_times[1:], strict=False)
             if later > earlier
         ]
         bpm = round(60 / statistics.median(intervals)) if intervals else None

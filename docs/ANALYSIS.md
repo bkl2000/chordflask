@@ -57,9 +57,16 @@ Schema v3 stores independent named analysis tracks:
   `chordino` track.
 - Rhythm tracks contain tempo, meter, beats, and downbeats. Built-in analysis
   produces a `qm_barbeattracker` track.
+- Beat numbers and downbeat positions assume the configured beats-per-bar value
+  (normally 4); the meter is not detected from the audio.
 - Beat-to-chord alignment is derived from the selected chord/rhythm combination
   and is not persisted.
 - Track selectors appear when multiple choices are available.
+
+The default chord analysis uses the Vamp Chordino plugin. The command-line
+analyzer additionally accepts an optional `madmom` mode, but `madmom` is not
+installed by the default or optional dependency sets; it must be installed
+separately to use that path.
 
 Schema v1, v2, and unversioned files remain readable. The next normal save
 writes schema v3. Reanalysis validates replacement data before atomically

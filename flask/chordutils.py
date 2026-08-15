@@ -20,9 +20,6 @@ from functools import lru_cache
 import atexit
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 # Mapping for converting flat and sharp symbols to Unicode
 FLAT_UNICODE = {
     'b': '♭',

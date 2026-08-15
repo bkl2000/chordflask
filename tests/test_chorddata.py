@@ -104,3 +104,16 @@ def test_repository_roundtrip_preserves_track_metadata(tmp_path):
         "transpose": -2,
         "notes": {"chorus": "practice slowly"},
     }
+
+
+def test_get_chords_returns_a_defensive_copy():
+    data = ChordData()
+    data.set_base_chords([
+        {"timestamp": 0.0, "chord": "C"},
+        {"timestamp": 1.0, "chord": "G"},
+    ])
+
+    first = data.get_chords()
+    first.append((2.0, "F"))
+
+    assert data.get_chords() == [(0.0, "C"), (1.0, "G")]

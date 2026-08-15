@@ -85,7 +85,7 @@ class ChordExporter:
             font = ImageFont.truetype("arial.ttf", font_size)
         except IOError:
             font = ImageFont.load_default()
-        for idx, (timestamp, chord_label) in enumerate(chords):
+        for idx, (_timestamp, chord_label) in enumerate(chords):
             col, row = idx % columns, idx // columns
             x, y = col * cell_width + padding, row * cell_height + padding
             draw.rectangle([col * cell_width, row * cell_height, (col + 1) * cell_width, (row + 1) * cell_height], outline="black", width=2)

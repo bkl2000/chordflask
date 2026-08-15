@@ -196,6 +196,54 @@ def test_forced_reanalysis_atomically_replaces_json_and_preserves_user_data(tmp_
     assert queue.status() == {"pending": [], "failed": []}
 
 
+def test_worker_preserves_foreign_tracks_during_reanalysis(tmp_path):
+    media, queue, analysis_dir = _setup_job(tmp_path, force=True)
+    json_path = analysis_dir / "song.json"
+
+    current = ChordData()
+    current.set_chord_track("chordino", [{"timestamp": 0.0, "chord": "C"}])
+    current.set_chord_track("pytorch", [{"timestamp": 0.0, "chord": "Am"}])
+    current.set_rhythm_track(
+        "qm_barbeattracker", bpm=120, meter_signature=4,
+        beat_times=[0.0, 0.5, 1.0], beat_numbers=[1, 2, 3],
+    )
+    current.set_rhythm_track(
+        "custom", bpm=100, meter_signature=3,
+        beat_times=[0.0, 0.6, 1.2], beat_numbers=[1, 2, 3],
+    )
+    current.transpose(-2)
+    current.set_prefer_flats(False)
+    current.user_data = {"note": "keep"}
+    current.save_to_file(json_path)
+
+    class ReplacementAnalyzer:
+        def __init__(self, media_path, data_dir):
+            self.data_dir = Path(data_dir)
+
+        def process(self):
+            track = ChordData()
+            track.set_chord_track("chordino", [{"timestamp": 0.0, "chord": "G"}])
+            track.set_rhythm_track(
+                "qm_barbeattracker", bpm=90, meter_signature=4,
+                beat_times=[0.0, 0.7], beat_numbers=[1, 2],
+            )
+            track.save_to_file(self.data_dir / "song.json")
+
+    worker = AnalysisWorker(queue=queue, analyzer_cls=ReplacementAnalyzer)
+    assert worker.run_once() is True
+
+    merged = ChordData(str(json_path))
+    assert set(merged.available_chord_track_ids) == {"chordino", "pytorch"}
+    assert merged.chord_track_chords("pytorch") == [{"timestamp": 0.0, "chord": "Am"}]
+    assert merged.chord_track_chords("chordino") == [{"timestamp": 0.0, "chord": "G"}]
+    assert set(merged.available_rhythm_track_ids) == {"qm_barbeattracker", "custom"}
+    assert merged.rhythm_track_data("custom")["bpm"] == 100
+    assert merged.rhythm_track_data("qm_barbeattracker")["bpm"] == 90
+    assert merged.transpose_semitones == -2
+    assert merged.prefer_flats is False
+    assert merged.user_data == {"note": "keep"}
+
+
 def test_failed_forced_reanalysis_keeps_old_json_and_cleans_temporary_files(tmp_path):
     media, queue, analysis_dir = _setup_job(tmp_path, force=True)
     json_path = analysis_dir / "song.json"

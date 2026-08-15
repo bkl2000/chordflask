@@ -11,9 +11,11 @@ from functools import lru_cache
 
 import chordutils
 
-from chordflask_config import ANALYSIS_SAMPLE_RATE
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from chordflask_config import (
+    ANALYSIS_SAMPLE_RATE,
+    DEFAULT_CHORD_TRACK,
+    DEFAULT_RHYTHM_TRACK,
+)
 
 class ChordTrackRepository:
     SCHEMA_VERSION = 3
@@ -54,7 +56,7 @@ class ChordTrackRepository:
         track.set_prefer_flats(data.get("prefer_flats", track.prefer_flats))
 
         track._rebuild_active_view()
-        track.get_chords.cache_clear()
+        track._get_chords_cached.cache_clear()
         return track
 
     @staticmethod
@@ -580,12 +582,12 @@ class ChordData:
             "metadata": copy.deepcopy(meta),
         }
         if self.__active_chord_track_id is None or (
-            track_id == "chordino" and not self.__chord_selection_explicit
+            track_id == DEFAULT_CHORD_TRACK and not self.__chord_selection_explicit
         ):
             self.__active_chord_track_id = track_id
         if self.__active_chord_track_id == track_id:
             self._rebuild_active_view()
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     def set_rhythm_track(self, track_id, *, bpm=None, meter_signature=None,
                          beat_times=None, beat_numbers=None, metadata=None):
@@ -638,19 +640,19 @@ class ChordData:
             "metadata": copy.deepcopy(meta),
         }
         if self.__active_rhythm_track_id is None or (
-            track_id == "qm_barbeattracker"
+            track_id == DEFAULT_RHYTHM_TRACK
             and not self.__rhythm_selection_explicit
         ):
             self.__active_rhythm_track_id = track_id
         if self.__active_rhythm_track_id == track_id:
             self._rebuild_active_view()
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     @property
     def available_chord_track_ids(self):
         ids = list(self.__chord_tracks.keys())
         preferred = []
-        for tid in ("chordino",):
+        for tid in (DEFAULT_CHORD_TRACK,):
             if tid in ids:
                 ids.remove(tid)
                 preferred.append(tid)
@@ -660,7 +662,7 @@ class ChordData:
     def available_rhythm_track_ids(self):
         ids = list(self.__rhythm_tracks.keys())
         preferred = []
-        for tid in ("qm_barbeattracker",):
+        for tid in (DEFAULT_RHYTHM_TRACK,):
             if tid in ids:
                 ids.remove(tid)
                 preferred.append(tid)
@@ -683,7 +685,7 @@ class ChordData:
             return
         self.__active_chord_track_id = track_id
         self._rebuild_active_view()
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     def select_rhythm_track(self, track_id):
         self.__validate_track_id(track_id)
@@ -694,7 +696,7 @@ class ChordData:
             return
         self.__active_rhythm_track_id = track_id
         self._rebuild_active_view()
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     def chord_track_metadata(self, track_id):
         if track_id not in self.__chord_tracks:
@@ -733,8 +735,8 @@ class ChordData:
 
     # ── beat-aligned chord editing ─────────────────────────────────────
 
-    def create_beat_aligned_track(self, track_id, source_chord_track_id="chordino",
-                                  source_rhythm_track_id="qm_barbeattracker",
+    def create_beat_aligned_track(self, track_id, source_chord_track_id=DEFAULT_CHORD_TRACK,
+                                  source_rhythm_track_id=DEFAULT_RHYTHM_TRACK,
                                   metadata=None):
         """Sample a chord track onto a rhythm grid and store it run-length encoded."""
         self.__validate_track_id(track_id)
@@ -750,7 +752,7 @@ class ChordData:
         for lookup in self._beat_lookup_times_for(beat_times):
             index = bisect.bisect_right(times, lookup) - 1
             labels.append(chords[index]["chord"] if 0 <= index < len(chords) else "N")
-        encoded = chordutils.rle_chord_labels(list(zip(beat_times, labels)))
+        encoded = chordutils.rle_chord_labels(list(zip(beat_times, labels, strict=True)))
         meta = copy.deepcopy(metadata) if metadata is not None else {}
         meta.setdefault("sources", {
             "chord": source_chord_track_id,
@@ -759,7 +761,7 @@ class ChordData:
         self.set_chord_track(track_id, encoded, metadata=meta)
 
     def edit_chord_track_beat(self, track_id, beat_index, label,
-                              rhythm_track_id="qm_barbeattracker"):
+                              rhythm_track_id=DEFAULT_RHYTHM_TRACK):
         """Change one beat's label on a beat-aligned track and re-compress it."""
         self.__validate_track_id(track_id)
         if track_id not in self.__chord_tracks:
@@ -777,7 +779,7 @@ class ChordData:
             self.chord_track_chords(track_id), beat_times
         )
         per_beat[beat_index] = normalized
-        encoded = chordutils.rle_chord_labels(list(zip(beat_times, per_beat)))
+        encoded = chordutils.rle_chord_labels(list(zip(beat_times, per_beat, strict=True)))
         self.set_chord_track(track_id, encoded, metadata=self.chord_track_metadata(track_id))
 
     def remove_chord_track(self, track_id):
@@ -790,7 +792,7 @@ class ChordData:
             self.__active_chord_track_id = None
             self.__chord_selection_explicit = False
             self._rebuild_active_view()
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     # ── active view rebuild ────────────────────────────────────────────
 
@@ -821,14 +823,14 @@ class ChordData:
 
     def _resolve_chord_default(self):
         ids = set(self.__chord_tracks.keys())
-        for tid in ("chordino",):
+        for tid in (DEFAULT_CHORD_TRACK,):
             if tid in ids:
                 return tid
         return next(iter(sorted(ids)), None)
 
     def _resolve_rhythm_default(self):
         ids = set(self.__rhythm_tracks.keys())
-        for tid in ("qm_barbeattracker",):
+        for tid in (DEFAULT_RHYTHM_TRACK,):
             if tid in ids:
                 return tid
         return next(iter(sorted(ids)), None)
@@ -850,15 +852,15 @@ class ChordData:
             t["beat_numbers"] = list(self._beat_numbers)
 
     def __ensure_compat_rhythm_track(self):
-        if self.__active_rhythm_track_id is None and "qm_barbeattracker" not in self.__rhythm_tracks:
-            self.__rhythm_tracks["qm_barbeattracker"] = {
+        if self.__active_rhythm_track_id is None and DEFAULT_RHYTHM_TRACK not in self.__rhythm_tracks:
+            self.__rhythm_tracks[DEFAULT_RHYTHM_TRACK] = {
                 "bpm": self._bpm,
                 "meter_signature": self._meter_signature,
                 "beat_times": list(self._beat_times),
                 "beat_numbers": list(self._beat_numbers),
                 "metadata": {},
             }
-            self.__active_rhythm_track_id = "qm_barbeattracker"
+            self.__active_rhythm_track_id = DEFAULT_RHYTHM_TRACK
 
     # ── repository helpers ─────────────────────────────────────────────
 
@@ -903,12 +905,12 @@ class ChordData:
             self.__ensure_compat_rhythm_track()
             self.__sync_beats_to_track()
             self._beat_chord_indexes = self._beat_times_to_chord_indexes()
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     def transpose(self, semitones):
         if self._transpose != semitones:
             self._transpose = semitones
-            self.get_chords.cache_clear()
+            self._get_chords_cached.cache_clear()
 
     @property
     def transpose_semitones(self):
@@ -916,11 +918,11 @@ class ChordData:
 
     def set_unicode(self, use_unicode):
         self.use_unicode = use_unicode
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     def set_prefer_flats(self, prefer_flats):
         self.prefer_flats = prefer_flats
-        self.get_chords.cache_clear()
+        self._get_chords_cached.cache_clear()
 
     # ── properties that operate on active tracks ───────────────────────
 
@@ -986,12 +988,15 @@ class ChordData:
 
     # ── chord display ──────────────────────────────────────────────────
 
-    @lru_cache(maxsize=None)
-    def get_chords(self):
+    @lru_cache(maxsize=None)  # noqa: B019 - cache is cleared explicitly on mutation
+    def _get_chords_cached(self):
         chords = self._transpose_chords()
         if self.use_unicode:
             chords = [(ts, self._ascii_to_unicode(ch)) for ts, ch in chords]
-        return chords
+        return tuple(chords)
+
+    def get_chords(self):
+        return list(self._get_chords_cached())
 
     def _transpose_chords(self):
         raw = [(entry['timestamp'], entry['chord']) for entry in self._base_chords]
@@ -1021,7 +1026,7 @@ class ChordData:
         ]
 
     def _sanitize_chords(self, chords):
-        return [{"timestamp": e.get("timestamp", 0), "chord": self._unicode_to_ascii(e.get("chord", ""))} for e in chords]
+        return [{"timestamp": e["timestamp"], "chord": self._unicode_to_ascii(e.get("chord", ""))} for e in chords]
 
     def get_chord_index_by_timestamp(self, timestamp):
         import bisect
@@ -1050,7 +1055,7 @@ class ChordData:
             return []
         lookup_times = [
             (current + following) / 2
-            for current, following in zip(beat_times, beat_times[1:])
+            for current, following in zip(beat_times, beat_times[1:], strict=False)
         ]
         if len(beat_times) == 1:
             lookup_times.append(beat_times[0])
@@ -1066,7 +1071,7 @@ class ChordData:
         chords = self.get_chords()
         times = self.chord_times
         beat_chords = []
-        for bt, lookup_time in zip(self._beat_times, self._beat_lookup_times()):
+        for bt, lookup_time in zip(self._beat_times, self._beat_lookup_times(), strict=True):
             idx = bisect.bisect_right(times, lookup_time) - 1
             if 0 <= idx < len(chords):
                 beat_chords.append((bt, chords[idx][1]))

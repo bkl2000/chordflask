@@ -688,3 +688,47 @@ def test_load_v3_clears_stale_dimension(tmp_path):
     assert track.bpm is None
     assert track.beat_times == []
     assert track.available_rhythm_track_ids == []
+
+
+# ── centralized default track identifiers ────────────────────────────
+
+
+def test_default_track_identifiers_are_centralized():
+    import chorddata
+
+    assert chorddata.DEFAULT_CHORD_TRACK == "chordino"
+    assert chorddata.DEFAULT_RHYTHM_TRACK == "qm_barbeattracker"
+
+
+def test_chord_default_selection_uses_configured_identity(monkeypatch):
+    import chorddata
+
+    track = ChordData()
+    monkeypatch.setattr(chorddata, "DEFAULT_CHORD_TRACK", "my-engine")
+
+    track.set_chord_track("other", [{"timestamp": 0.0, "chord": "C"}])
+    assert track.active_chord_track_id == "other"
+
+    track.set_chord_track("my-engine", [{"timestamp": 0.0, "chord": "G"}])
+    assert track.active_chord_track_id == "my-engine"
+    assert track.available_chord_track_ids[0] == "my-engine"
+
+
+def test_rhythm_default_selection_uses_configured_identity(monkeypatch):
+    import chorddata
+
+    track = ChordData()
+    monkeypatch.setattr(chorddata, "DEFAULT_RHYTHM_TRACK", "my-rhythm")
+
+    track.set_rhythm_track(
+        "other-rhythm", bpm=120, meter_signature=4,
+        beat_times=[0.0, 0.5], beat_numbers=[1, 2],
+    )
+    assert track.active_rhythm_track_id == "other-rhythm"
+
+    track.set_rhythm_track(
+        "my-rhythm", bpm=100, meter_signature=4,
+        beat_times=[0.0, 0.6], beat_numbers=[1, 2],
+    )
+    assert track.active_rhythm_track_id == "my-rhythm"
+    assert track.available_rhythm_track_ids[0] == "my-rhythm"

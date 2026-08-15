@@ -1,3 +1,4 @@
+import logging
 import subprocess
 import sys
 import types
@@ -86,6 +87,40 @@ def test_qm_meter_is_explicit_instead_of_guessed_from_beat_labels():
     assert analyzer.detect_meter("not-opened.mp3") == 3
 
 
+def test_feature_beat_number_parses_valid_labels():
+    assert AudioAnalyzer._feature_beat_number({"label": "4"}) == 4
+    assert AudioAnalyzer._feature_beat_number({"label": "1"}) == 1
+    assert AudioAnalyzer._feature_beat_number({"label": "", "values": [2.0]}) == 2
+
+
+def test_feature_beat_number_rejects_malformed_labels():
+    assert AudioAnalyzer._feature_beat_number({"label": "not-a-number"}) is None
+    assert AudioAnalyzer._feature_beat_number({"label": ""}) is None
+    assert AudioAnalyzer._feature_beat_number({"label": "1.5"}) is None
+    assert AudioAnalyzer._feature_beat_number({"label": "x", "values": [1.5]}) is None
+
+
+def test_detect_beat_grid_skips_malformed_labels_and_warns(monkeypatch, caplog):
+    features = [
+        {"timestamp": 0.1, "label": "1"},
+        {"timestamp": 0.6, "label": "not-a-number"},
+        {"timestamp": 1.1, "label": "2"},
+        {"timestamp": 1.6, "label": "3"},
+    ]
+    monkeypatch.setattr(
+        audio_analyzer_mod.vamp,
+        "collect",
+        lambda *args, **kwargs: {"list": features},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, beat_times, beat_numbers = AudioAnalyzer()._detect_beat_grid([0.0], 22050)
+
+    assert beat_times == [0.1, 1.1, 1.6]
+    assert beat_numbers == [1, 2, 3]
+    assert "unparseable beat-number" in caplog.text
+
+
 def test_chordino_uses_the_reviewed_analysis_parameters(monkeypatch):
     def collect(y, sr, plugin, parameters):
         assert y == [0.0]
@@ -114,8 +149,7 @@ def test_analyze_labels_chord_and_rhythm_sources(
 ):
     class PassThroughPostprocessor:
         @staticmethod
-        def process(chords, beat_times):
-            assert beat_times == [0.0, 0.5]
+        def process(chords):
             return chords
 
     monkeypatch.setattr(audio_analyzer_mod, "require_system_ffmpeg", lambda: None)

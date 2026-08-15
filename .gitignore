@@ -59,6 +59,10 @@ videos/**/*.webm
 videos/.chordflask/
 !videos/README.md
 
+# Local media-directory symlinks (never tracked or published).
+flask/videos
+flask/videos_2010
+
 # Local standalone binary output
 flask/dist/
 flask/templates/home.html.*

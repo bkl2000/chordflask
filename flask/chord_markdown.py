@@ -56,7 +56,7 @@ def _usable_beat_numbers(beat_numbers, meter):
         for number in beat_numbers
     ):
         return False
-    for previous, current in zip(beat_numbers, beat_numbers[1:]):
+    for previous, current in zip(beat_numbers, beat_numbers[1:], strict=False):
         if current != previous % meter + 1:
             return False
     return True
@@ -70,7 +70,7 @@ def _group_beats_with_positions(beats, meter=None, beat_numbers=None):
         measures = []
         current = []
         starting_beat = beat_numbers[0]
-        for chord, number in zip(beats, beat_numbers):
+        for chord, number in zip(beats, beat_numbers, strict=True):
             if number == 1 and current:
                 measures.append((starting_beat, current))
                 current = []

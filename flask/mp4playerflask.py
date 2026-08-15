@@ -349,7 +349,7 @@ class MP4PlayerFlask:
 
     def set_transpose(self, semitones):
         logging.info(f"Calling set_transpose({semitones})")
-        self.chord_data.get_chords.cache_clear()
+        self.chord_data._get_chords_cached.cache_clear()
         self.semitones = semitones
         self.chord_data.transpose(semitones)
         self.reset_render_cache()

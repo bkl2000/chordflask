@@ -69,8 +69,6 @@ are not required by the active GUI.
 
 - `convert_chordlabels_to_cnn.py` - converts ChordFlask chord JSON into a
   CNN-training-oriented format.
-- `patch_madmom_numpy_aliases.py` - local compatibility patch helper for older
-  madmom code with modern NumPy.
 - `romanize.py` - Thai romanization helper; requires `pythainlp`, which is not
   part of the active dependency set.
 

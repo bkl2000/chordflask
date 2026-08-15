@@ -33,7 +33,7 @@ class FileRepr:
         if create:
             self._data_path.mkdir(parents=True, exist_ok=True)
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=None)  # noqa: B019 - bounded, immutable per-file path cache
     def get(self, suffix=""):
         """
         Get the full path to the file, using the base filename and optional suffix.

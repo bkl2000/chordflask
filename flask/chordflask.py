@@ -132,15 +132,6 @@ class FlaskMP4App:
 
         self.stored_directories = self.default_video_directories()
 
-        # Set up file logging only
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]',
-            handlers=[
-                logging.FileHandler('/tmp/flask_app.log'),  # Log to the file
-            ]
-        )
-
         # Reduce verbosity of the werkzeug logging for Flask requests
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
@@ -175,7 +166,7 @@ class FlaskMP4App:
             require_system_ffmpeg()
         except RuntimeError as error:
             print(f"ERROR: {error}", file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
     def _is_allowed_directory(self, directory):
         if self.allowed_roots is None:
@@ -1080,12 +1071,25 @@ class FlaskMP4App:
         debug = os.environ.get(DEBUG_ENV, "0") == "1"
         if debug and not is_loopback:
             raise ValueError("Flask debug mode is only supported on loopback")
+        self._configure_web_logging()
         self.print_startup_message(host, port)
         self.app.run(
             host=host,
             port=port,
             debug=debug,
             use_reloader=False,
+        )
+
+    def _configure_web_logging(self):
+        log_dir = self.analysis_queue.queue_dir
+        log_dir.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]',
+            handlers=[
+                logging.FileHandler(log_dir / "web.log"),
+                logging.StreamHandler(),
+            ]
         )
 
 
@@ -1104,7 +1108,7 @@ if __name__ == "__main__":
             plugins = require_vamp_plugins()
         except (RuntimeError, ImportError, OSError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(1) from None
         print("Vamp plugin check passed:")
         for plugin in sorted(plugins):
             if plugin in REQUIRED_PLUGINS:
