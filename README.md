@@ -75,7 +75,8 @@ corrected beat by beat.
    unanalysed files from the currently filtered and sorted list; files already
    analysed or queued do not consume the limit.
 5. Use **Previous**, **Next**, **Repeat**, **Continue**, and **Transpose** while
-   playing the file.
+   playing the file. Press **A** and **B** to mark a loop segment and **⟳** to
+   repeat it.
 
 Generated JSON, MusicXML, MIDI, and temporary audio are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
