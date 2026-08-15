@@ -84,6 +84,32 @@ permission for the media directory. Existing media files are not modified.
 The queue survives an application restart; interrupted work is returned to the
 queue and incomplete temporary output is discarded on retry.
 
+## Analysis storage
+
+Each analyzed directory keeps its analysis in a local `.chordflask`
+subdirectory. A read-only report shows how much space it uses:
+
+```bash
+python3 scripts/chordflask_storage.py report /path/to/music
+```
+
+Cleanup is explicit and limited to one media directory:
+
+```bash
+# Remove orphaned temporary analysis directories.
+python3 scripts/chordflask_storage.py cleanup /path/to/music --orphan-temp
+
+# Remove cached audio that ChordFlask can regenerate from video sources.
+python3 scripts/chordflask_storage.py cleanup /path/to/music --cached-audio
+
+# Remove corrupt-analysis backups older than a retention age.
+python3 scripts/chordflask_storage.py cleanup /path/to/music --corrupt-backups --older-than-days 30
+```
+
+Valid analysis JSON, source media, and user-edited chords are never deleted.
+See [Playback, analysis tracks, and chord display](docs/ANALYSIS.md) for the
+full storage description.
+
 ## Batch leadsheet export
 
 A non-recursive helper turns every supported media file in a directory into
