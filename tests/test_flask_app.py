@@ -80,6 +80,42 @@ def test_index_contains_file_autoload_logic():
     assert "loadRequestInFlight" in body
 
 
+def test_index_contains_ab_loop_controls():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'id="loopStartButton"' in body
+    assert 'id="loopEndButton"' in body
+    assert 'id="loopToggleButton"' in body
+    assert "function toggleLoop()" in body
+    assert "function setLoop(enabled)" in body
+    assert "function setLoopStart()" in body
+    assert "function setLoopEnd()" in body
+    assert "function normalizeLoopPoints()" in body
+    assert "let loopStart = null;" in body
+    assert "let loopEnd = null;" in body
+    assert "let isLooping = false;" in body
+    assert "timeupdate" in body
+    assert "player.currentTime = loopStart" in body
+
+
+def test_ab_loop_is_mutually_exclusive_with_repeat_and_continue():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    loop_fn = body[body.index("function toggleLoop()"):body.index("function setLoopStart()")]
+    assert "setRepeat(false);" in loop_fn
+    assert "setContinue(false);" in loop_fn
+
+    repeat_fn = body[body.index("function toggleRepeat()"):body.index("function setLoop(enabled)")]
+    assert "setLoop(false);" in repeat_fn
+
+    continue_fn = body[body.index("function toggleContinue()"):body.index("function navigateFile(offset")]
+    assert "setLoop(false);" in continue_fn
+
+
 def test_continue_waits_for_missing_analysis_then_autoplays_new_song():
     _, client = make_client()
 

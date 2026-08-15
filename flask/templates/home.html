@@ -81,6 +81,32 @@
       opacity: 0.65;
     }
 
+    .loop-controls {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 6px;
+    }
+
+    .loop-controls button {
+      width: 32px;
+      min-width: 32px;
+      height: 28px;
+      padding: 0;
+      font-size: 13px;
+      line-height: 26px;
+    }
+
+    .loop-controls button.loop-on,
+    .loop-on {
+      background: #1b7a43;
+      border-color: #1b7a43;
+    }
+
+    .loop-controls button.loop-on:hover {
+      background: #135f33;
+      border-color: #135f33;
+    }
+
     .status {
       display: flex;
       flex: 0 0 auto;
@@ -836,6 +862,14 @@
         <button id="nextFileButton" type="button" onclick="navigateFile(1)"
                 title="Next file" aria-label="Next file" disabled>&#x23ED;</button>
       </nav>
+      <nav class="loop-controls" aria-label="A-B loop">
+        <button id="loopStartButton" type="button" title="Set loop start (A) at the current position"
+                aria-label="Set loop start" onclick="setLoopStart()">A</button>
+        <button id="loopEndButton" type="button" title="Set loop end (B) at the current position"
+                aria-label="Set loop end" onclick="setLoopEnd()">B</button>
+        <button id="loopToggleButton" type="button" title="Toggle A-B loop"
+                aria-label="Toggle A-B loop" onclick="toggleLoop()">⟳</button>
+      </nav>
       <div class="status">
         <span id="currentPosition">Position: 0.00s</span>
         <span id="bpmStatus">BPM: --</span>
@@ -995,6 +1029,9 @@
     let rhythmTrackSelect = document.getElementById('rhythmTrackSelect');
     let previousFileButton = document.getElementById('previousFileButton');
     let nextFileButton = document.getElementById('nextFileButton');
+    let loopStartButton = document.getElementById('loopStartButton');
+    let loopEndButton = document.getElementById('loopEndButton');
+    let loopToggleButton = document.getElementById('loopToggleButton');
     let batchLimitInput = document.getElementById('batchLimit');
     let queueNextButton = document.getElementById('queueNextButton');
     let editButton = document.getElementById('editButton');
@@ -1005,6 +1042,9 @@
 
     let isRepeating = false;
     let isContinuing = false;
+    let isLooping = false;
+    let loopStart = null;
+    let loopEnd = null;
     let repeatMode = 'changes';
     let preferFlats = true;
     let currentDirectories = [];
@@ -1697,6 +1737,9 @@
         video = nextPlayer;
       }
       video.loop = isRepeating;
+      loopStart = null;
+      loopEnd = null;
+      setLoop(false);
       const audioOnly = mediaKind === 'audio';
       videoPlayer.hidden = audioOnly;
       audioPlayerPanel.hidden = !audioOnly;
@@ -2382,7 +2425,7 @@
       // Project to the point at which the browser will paint the response.
       // This replaces the historical fixed 0.4 s anticipation with measured
       // local round-trip latency, bounded so a temporary stall cannot jump bars.
-      const displayLead = video.paused
+      const displayLead = video.paused || isLooping
         ? 0
         : Math.min(pollingLeadSeconds + estimatedRoundTripSeconds, 0.25);
       const position = video.currentTime + displayLead;
@@ -2524,6 +2567,42 @@
       setRepeat(!isRepeating);
       if (isRepeating) {
         setContinue(false);
+        setLoop(false);
+      }
+    }
+
+    function setLoop(enabled) {
+      isLooping = enabled;
+      loopToggleButton.classList.toggle('loop-on', isLooping);
+    }
+
+    function toggleLoop() {
+      setLoop(!isLooping);
+      if (isLooping) {
+        setRepeat(false);
+        setContinue(false);
+      }
+    }
+
+    function setLoopStart() {
+      if (isNaN(video.currentTime)) {
+        return;
+      }
+      loopStart = video.currentTime;
+      normalizeLoopPoints();
+    }
+
+    function setLoopEnd() {
+      if (isNaN(video.currentTime)) {
+        return;
+      }
+      loopEnd = video.currentTime;
+      normalizeLoopPoints();
+    }
+
+    function normalizeLoopPoints() {
+      if (loopStart != null && loopEnd != null && loopEnd <= loopStart) {
+        [loopStart, loopEnd] = [loopEnd, loopStart];
       }
     }
 
@@ -2549,6 +2628,7 @@
       setContinue(!isContinuing);
       if (isContinuing) {
         setRepeat(false);
+        setLoop(false);
       }
     }
 
@@ -2591,6 +2671,16 @@
 
     [videoPlayer, audioPlayer].forEach(player => {
       player.addEventListener('ended', playNextFileIfContinue);
+      player.addEventListener('timeupdate', () => {
+        if (
+          isLooping
+          && loopStart != null
+          && loopEnd != null
+          && player.currentTime >= loopEnd
+        ) {
+          player.currentTime = loopStart;
+        }
+      });
     });
 
     document.addEventListener('DOMContentLoaded', () => {

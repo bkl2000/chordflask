@@ -33,6 +33,8 @@ scanned recursively.
 - **Continue** starts the next visible file when the current one ends. If its
   analysis is missing, playback waits and starts after analysis succeeds.
 - **Repeat** repeats the current file.
+- **A** and **B** mark a loop segment, and **Loop** repeats only that segment.
+  Loop, Repeat, and Continue are mutually exclusive.
 - **Transpose** changes displayed chord names without changing the audio or
   stored analysis.
 - The small **↻** control requests fresh Chordino/QM analysis while playback and
