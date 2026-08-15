@@ -46,6 +46,32 @@ Each media directory receives a `.chordflask` subdirectory containing generated
 JSON, MusicXML, MIDI, and intermediate audio. ChordFlask does not alter the
 source media file.
 
+A read-only report shows how much space one directory's analysis storage uses
+without deleting anything:
+
+```bash
+~/.venvs/chordflask/bin/python scripts/chordflask_storage.py report /path/to/music
+```
+
+Cleanup is always explicit and limited to one media directory:
+
+```bash
+# Remove orphaned analysis/conversion temporary directories (refused while an
+# analysis worker is active).
+~/.venvs/chordflask/bin/python scripts/chordflask_storage.py cleanup /path/to/music --orphan-temp
+
+# Remove corrupt-analysis backups older than a retention age.
+~/.venvs/chordflask/bin/python scripts/chordflask_storage.py cleanup /path/to/music --corrupt-backups --older-than-days 30
+
+# Remove cached audio (.mp3) that is regenerable from a video source. This does
+# not delete the stored chord analysis; a later reanalysis may recreate the
+# audio cache. Refused while an analysis worker is active.
+~/.venvs/chordflask/bin/python scripts/chordflask_storage.py cleanup /path/to/music --cached-audio
+```
+
+Valid analysis JSON, source media, and user-edited data are never deleted.
+Cleanup stays limited to one media directory; there is no recursive cleanup yet.
+
 The local queue file is written atomically. When the worker restarts, a job left
 in `processing` returns to `pending`. Analysis runs in a per-song temporary
 directory; orphaned work directories are removed on retry, MP3/MusicXML/MIDI

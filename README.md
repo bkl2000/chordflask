@@ -158,6 +158,11 @@ guide is included as `README.md` inside the archive.
   in `.mp3`, `.mp4`, or `.webm`.
 - **Analysis cannot write files:** give your user write permission for the media
   directory so ChordFlask can create `.chordflask`.
+- **Inspect analysis storage:** run
+  `python3 scripts/chordflask_storage.py report /path/to/music` (read-only) to
+  see how much space the `.chordflask` analysis directories use. Explicit
+  cleanup is available via `cleanup --orphan-temp`,
+  `cleanup --cached-audio`, or `cleanup --corrupt-backups --older-than-days N`.
 - **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 make run` and open
   <http://localhost:5050>.
 

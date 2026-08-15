@@ -252,6 +252,7 @@ def test_permission_contract_matches_repair_targets():
         "scripts/setup_venv.sh",
         "scripts/metric_chords_diff.py",
         "scripts/compare_chord_json.py",
+        "scripts/chordflask_storage.py",
         "flask/build_standalone.sh",
         "flask/helpers/webm2mp4",
         "flask/helpers/youtube_donwload",
