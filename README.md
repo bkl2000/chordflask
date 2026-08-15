@@ -1,9 +1,9 @@
 # ChordFlask
 
-ChordFlask analyzes chords and beats in MP3 audio and MP4/WebM video files and
-shows them alongside browser playback. MP3 files play in the built-in audio
-player and are analyzed directly without video conversion. Everything runs
-locally; media and analysis data are not uploaded.
+ChordFlask analyzes the chords and beats in MP3, MP4, and WebM files and shows
+them in sync while you play the song in the browser. The displayed chords can
+be transposed, corrected, compared, and exported as Markdown or PDF. Everything
+runs locally; media and analysis data are never uploaded.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+. CPython 3.12 is the release-tested Python version. GitHub releases contain
@@ -33,9 +33,12 @@ make plugins
 make run
 ```
 
-Open <http://localhost:5000>. Stop ChordFlask with `Ctrl+C` in the terminal.
+Open <http://localhost:5000> and use **Browse** to select a directory with
+MP3, MP4, or WebM files. Stop ChordFlask with `Ctrl+C` in the terminal.
+
 The Make targets use `~/.venvs/chordflask` automatically; you do not need to
-activate that environment.
+activate that environment. If a command fails, see
+[Troubleshooting](#troubleshooting).
 
 ## Motivation
 
