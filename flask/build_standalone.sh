@@ -2,7 +2,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="${CHORDFLASK_PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+
+# A release artifact must represent one exact committed source revision. Refuse
+# to build when tracked source changes (staged or unstaged) are present, so the
+# embedded build commit can never claim a commit while carrying uncommitted edits.
+if [[ -n "$(git -C "$PROJECT_ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+    echo "ERROR: refusing to build a standalone release artifact from a dirty working tree." >&2
+    echo "Uncommitted tracked changes (staged or unstaged) are present:" >&2
+    git -C "$PROJECT_ROOT" status --short >&2
+    echo "Commit or stash the changes, then rerun 'make standalone'." >&2
+    exit 1
+fi
 
 detect_distro_token() {
     if [[ ! -r /etc/os-release ]]; then

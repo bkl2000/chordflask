@@ -253,6 +253,7 @@ def test_permission_contract_matches_repair_targets():
         "scripts/metric_chords_diff.py",
         "scripts/compare_chord_json.py",
         "scripts/chordflask_storage.py",
+        "scripts/publish_standalone_asset.sh",
         "flask/build_standalone.sh",
         "flask/helpers/webm2mp4",
         "flask/helpers/youtube_donwload",

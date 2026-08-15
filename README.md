@@ -13,13 +13,14 @@ Windows browser at localhost.
 <!-- standalone-download:start -->
 ## Download
 
-A prebuilt Linux x86_64 bundle is available for users who do not want to build
-ChordFlask themselves:
+A prebuilt Linux x86_64 bundle is available for users who do not want to
+build ChordFlask themselves:
 
 **[Download chordflask-mint22-x86_64-py3.12-v0.6.3.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.6.3/chordflask-mint22-x86_64-py3.12-v0.6.3.tar.gz)**
 
-Built on Linux Mint 22 / x86_64. FFmpeg and Vamp plugin binaries are not
-bundled; see the portable bundle guide for requirements.
+Built from the same tagged source revision as release v0.6.3. FFmpeg and
+Vamp plugin binaries are not bundled; see the portable bundle guide for
+requirements.
 <!-- standalone-download:end -->
 
 ## Quick start
