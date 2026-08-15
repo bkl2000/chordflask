@@ -6,8 +6,9 @@ be transposed, corrected, compared, and exported as Markdown or PDF. Everything
 runs locally; media and analysis data are never uploaded.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
-13+. CPython 3.12 is the release-tested Python version. GitHub releases contain
-source code only, not a ready-made executable.
+13+ (CPython 3.12). Native Windows is not supported; Windows users can run
+ChordFlask under WSL2 (tested) and open the local web interface from the
+Windows browser at localhost.
 
 ## Quick start
 
@@ -40,7 +41,7 @@ The Make targets use `~/.venvs/chordflask` automatically; you do not need to
 activate that environment. If a command fails, see
 [Troubleshooting](#troubleshooting).
 
-## Motivation
+## Why ChordFlask
 
 ChordFlask is a small local-first tool for working with a music collection you
 already have. Its emphasis is the workflow around chord analysis rather than a
@@ -50,10 +51,8 @@ generate reusable chord data only when it is useful.
 This local, on-demand workflow is the main reason ChordFlask exists:
 
 - prepare selected parts of a collection in bounded background batches;
-- keep each completed analysis beside the media for later sessions;
-- continue browsing and playing while other files are analyzed;
-- transpose, respell, compare, and correct the displayed chords; and
-- download the accepted beat-level result as matching Markdown and PDF.
+- keep each completed analysis beside the media for later sessions; and
+- continue browsing and playing while other files are analyzed.
 
 Automatic chord transcription is approximate, especially with dense mixes or
 unusual harmony. The current Chordino-based result is intended as a useful
@@ -62,7 +61,9 @@ When the result is close enough, this workflow can avoid repeated manual setup.
 When it is not, the original remains intact while an Edited version can be
 corrected beat by beat.
 
-## First use
+## Using ChordFlask
+
+### First use
 
 1. Select **Browse** and navigate to a directory containing MP3, MP4, or WebM
    files. You can still enter an absolute path directly.
@@ -78,7 +79,7 @@ corrected beat by beat.
    playing the file. Press **A** and **B** to mark a loop segment and **⟳** to
    repeat it.
 
-Generated JSON, MusicXML, MIDI, and temporary audio are stored in a
+Generated JSON, MusicXML, MIDI, and cached audio are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
 permission for the media directory. Existing media files are not modified.
 
@@ -88,54 +89,20 @@ your analysis results. The queue survives an application restart; interrupted
 work is returned to the queue and incomplete temporary output is discarded on
 retry.
 
-## Analysis storage
-
-Each analyzed directory keeps its analysis in a local `.chordflask`
-subdirectory. A read-only report shows how much space it uses:
-
-```bash
-python3 scripts/chordflask_storage.py report /path/to/music
-```
-
-Cleanup is explicit and limited to one media directory:
-
-```bash
-# Remove orphaned temporary analysis directories.
-python3 scripts/chordflask_storage.py cleanup /path/to/music --orphan-temp
-
-# Remove cached audio that ChordFlask can regenerate from video sources.
-python3 scripts/chordflask_storage.py cleanup /path/to/music --cached-audio
-
-# Remove corrupt-analysis backups older than a retention age.
-python3 scripts/chordflask_storage.py cleanup /path/to/music --corrupt-backups --older-than-days 30
-```
-
-Valid analysis JSON, source media, and user-edited chords are never deleted.
-These commands operate only on a media directory's local `.chordflask`; they
-never touch `~/.chordflask` or the source media. See
-[Playback, analysis tracks, and chord display](docs/ANALYSIS.md) for the full
-storage description.
-
-## Batch leadsheet export
+### Batch leadsheet export
 
 A non-recursive helper turns every supported media file in a directory into
-matching playable Markdown and print-ready PDF leadsheets. The Markdown has a
-title, tempo/meter metadata, the chord source, and a monospace chord block with
-two complete measures per line. The A4 PDF uses four framed measures per row,
-60 measures per page, numbered bars, and automatically fitted monospace chord
-text. Existing analyses are reused; missing files are analyzed serially only
-when needed, so a second run costs no new analysis time.
+matching playable Markdown and print-ready A4 PDF leadsheets. Existing analyses
+are reused; missing files are analyzed serially only when needed, so a second
+run costs no new analysis time.
 
 ```bash
 ~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music
 ```
 
-Both exported files land beside the analysis as
-`.chordflask/<name>-chords-<track>.md` and `.pdf` and are updated atomically.
-Defaults are
-the Edited version when present (otherwise Chordino), QM Bar/Beat Tracker
-rhythm, no transpose, Flats spelling, ASCII symbols, repeated-chord `changes`
-mode, and rhythm-aware smoothing. Examples:
+Both files land beside the analysis as `.chordflask/<name>-chords-<track>.md`
+and `.pdf`. Defaults are the Edited version when present (otherwise Chordino),
+no transpose, Flats spelling, and repeated-chord `changes` mode:
 
 ```bash
 # Sharps spelling and two semitones up
@@ -146,10 +113,8 @@ mode, and rhythm-aware smoothing. Examples:
 ```
 
 The browser **Save** button downloads one ZIP containing the matching `.md` and
-`.pdf` for the single file currently displayed, including its active track
-selection, spelling, and transpose state. It creates no server-side export
-files. In the default `changes` mode a held chord is written as `-`; `chords`
-writes the full chord symbol on every beat.
+`.pdf` for the single file currently displayed. Full format and option details
+are in [docs/ANALYSIS.md](docs/ANALYSIS.md).
 
 The PDF command-line helper is optional and uses the same renderer:
 
@@ -159,9 +124,32 @@ python flask/helpers/create_sheet_pdf.py leadsheet.md
 python flask/helpers/create_sheet_pdf.py leadsheet.md -o leadsheet.pdf
 ```
 
+### Analysis storage and cleanup
+
+Each analyzed directory owns an independent `.chordflask` subdirectory holding
+its analysis JSON, cached audio, and exports. A read-only report shows how much
+space one directory uses:
+
+```bash
+python3 scripts/chordflask_storage.py report /path/to/music
+```
+
+Cleanup is explicit and non-recursive, limited to one directory. For example,
+remove cached audio that ChordFlask can regenerate from video sources:
+
+```bash
+python3 scripts/chordflask_storage.py cleanup /path/to/music --cached-audio
+```
+
+Cleanup can also remove orphaned temporary work and corrupt-analysis backups
+(using an explicit retention age). Valid analysis JSON, source media, and
+user-edited chords are never deleted. See [docs/ANALYSIS.md](docs/ANALYSIS.md)
+for the complete storage description.
+
 ## Build a portable Linux bundle
 
-This advanced workflow builds ChordFlask on your machine for use on a compatible
+GitHub releases contain source code only, not a ready-made executable. This
+advanced workflow builds ChordFlask on your machine for use on a compatible
 Linux x86_64 machine. It is not required for normal use.
 
 ```bash
@@ -192,9 +180,7 @@ guide is included as `README.md` inside the archive.
   directory so ChordFlask can create `.chordflask`.
 - **Inspect analysis storage:** run
   `python3 scripts/chordflask_storage.py report /path/to/music` (read-only) to
-  see how much space the `.chordflask` analysis directories use. Explicit
-  cleanup is available via `cleanup --orphan-temp`,
-  `cleanup --cached-audio`, or `cleanup --corrupt-backups --older-than-days N`.
+  see how much space one directory's local `.chordflask` uses.
 - **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 make run` and open
   <http://localhost:5050>.
 
