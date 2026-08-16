@@ -16,7 +16,7 @@ for path in (FLASK_DIR, HELPERS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from chorddata import ChordData  # noqa: E402
+from chordflask_base import ChordData  # noqa: E402
 import chordleadsheet_batch  # noqa: E402
 from chordleadsheet_batch import (  # noqa: E402
     LeadsheetExportError,

@@ -17,6 +17,7 @@ import sys
 import tempfile
 
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -148,7 +149,7 @@ def _write_atomic(path, content):
 
 
 def _load_chord_data(json_path, args):
-    from chorddata import ChordData
+    from chordflask_base import ChordData
 
     cd = ChordData(prefer_flats=not args.sharps, use_unicode=args.unicode)
     cd.load_from_file(json_path)

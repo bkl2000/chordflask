@@ -3,16 +3,22 @@
 """Flask application for media chord analysis and playback."""
 
 import argparse
-import sys
-from io import BytesIO
-from zipfile import ZIP_DEFLATED, ZipFile
-
-from flask import Flask, render_template, jsonify, request, send_file, make_response
-import os
 import logging
 import math
+import os
+import sys
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
+
+# Ensure the repository root (and the neutral ``chordflask_base`` package) is
+# importable when this entry point is run directly as ``python flask/chordflask.py``.
+_root = Path(__file__).resolve().parents[1]
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
+from flask import Flask, render_template, jsonify, request, send_file, make_response
 
 from analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from chord_markdown import download_track_slug, format_chord_markdown
@@ -240,7 +246,7 @@ class FlaskMP4App:
     @staticmethod
     def __analysis_is_valid(json_path):
         try:
-            from chorddata import ChordTrackRepository
+            from chordflask_base import ChordTrackRepository
 
             ChordTrackRepository().load(json_path)
             return True
@@ -698,7 +704,7 @@ class FlaskMP4App:
 
     @staticmethod
     def _analysis_has_edited_track(json_path):
-        from chorddata import ChordData
+        from chordflask_base import ChordData
 
         try:
             track = ChordData(json_path)

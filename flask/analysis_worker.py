@@ -232,7 +232,7 @@ class AnalysisWorker:
 
     @staticmethod
     def __preserve_user_data(current_json, temporary_json, drop_edited=False):
-        from chorddata import ChordTrackRepository
+        from chordflask_base import ChordTrackRepository
 
         repository = ChordTrackRepository()
         current_track = repository.load(current_json)
@@ -294,7 +294,7 @@ class AnalysisWorker:
     @staticmethod
     def _json_validation_error(json_path):
         try:
-            from chorddata import ChordTrackRepository
+            from chordflask_base import ChordTrackRepository
             ChordTrackRepository().load(json_path)
             return None
         except (OSError, UnicodeError, ValueError, TypeError, KeyError) as error:

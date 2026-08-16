@@ -13,8 +13,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLASK_DIR = REPO_ROOT / "flask"
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
+for _path in (REPO_ROOT, FLASK_DIR):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 from chorddata import ChordData, ChordTrackRepository
 from metric_chords import filter_metric_chords

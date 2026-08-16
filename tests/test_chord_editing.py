@@ -14,7 +14,7 @@ if str(FLASK_DIR) not in sys.path:
 import chordutils
 from analysis_queue import AnalysisQueue
 from analysis_worker import AnalysisWorker
-from chorddata import ChordData, ChordTrackRepository
+from chordflask_base import ChordData, ChordTrackRepository
 from chordflask import FlaskMP4App
 from filerepr import FileRepr
 from mp4playerflask import MP4PlayerFlask
@@ -32,7 +32,8 @@ def isolate_default_analysis_queue(monkeypatch, tmp_path):
 
 def test_validate_chord_label_accepts_ascii_accidentals_and_qualities():
     for label in ("C", "Am7", "Bb", "F#m7b5", "Cmaj7", "E/G", "G#sus4",
-                  "Ddim", "Aaug", "F7", "G7#9", "C#m7/G#"):
+                  "Ddim", "Aaug", "F7", "G7#9", "C#m7/G#",
+                  "Cmmaj7", "F#mmaj7", "Bbmmaj7"):
         assert chordutils.validate_chord_label(label) == label
 
 
@@ -222,16 +223,21 @@ def test_player_start_editing_creates_and_selects_edited(tmp_path):
     assert state["has_edited"] is True
     assert state["active_chord_version"] == "edited"
     assert state["active_chord_track_id"] == "user_edited"
-    assert all(t["id"] != "user_edited" for t in state["available_chord_tracks"])
+    assert any(
+        t["id"] == "user_edited" and t["display_name"] == "Own modification"
+        for t in state["available_chord_tracks"]
+    )
 
 
-def test_player_edited_excluded_from_selector(tmp_path):
+def test_player_edited_shown_as_own_modification(tmp_path):
     _, _, player = _make_player(tmp_path)
     player.start_chord_editing()
 
     state = player.analysis_track_state()
 
-    assert [t["id"] for t in state["available_chord_tracks"]] == ["chordino"]
+    tracks = {t["id"]: t["display_name"] for t in state["available_chord_tracks"]}
+    assert tracks["chordino"] == "Chordino"
+    assert tracks["user_edited"] == "Own modification"
 
 
 def test_player_set_chord_version_toggles(tmp_path):
@@ -1069,8 +1075,6 @@ def test_index_contains_chord_editing_controls():
 
     assert 'id="editButton"' in body
     assert 'aria-label="Edit chords"' in body
-    assert 'id="versionButton"' in body
-    assert 'aria-label="Original/Edited chord version"' in body
     assert 'id="editGridContainer" hidden' in body
     assert 'id="editGrid"' in body
     assert 'id="editTools" hidden' in body
@@ -1087,7 +1091,6 @@ def test_index_contains_editing_fetch_and_flow_contract():
     body = client.get("/").get_data(as_text=True)
 
     assert "fetch('/start_chord_editing'" in body
-    assert "fetch('/set_chord_version'" in body
     assert "fetch('/edit_chord'" in body
     assert "fetch('/reset_edited_chords'" in body
     assert "function updateEditControls()" in body
@@ -1096,19 +1099,18 @@ def test_index_contains_editing_fetch_and_flow_contract():
     assert "function openEditDialog(cell)" in body
     assert "function undoLastEdit()" in body
     assert "function resetEditedChords()" in body
-    assert "function toggleChordVersion()" in body
     assert "discard_edits: discardEdits" in body
     assert "discards your Edited chords" in body
     assert "has_edited" in body
-    assert "active_chord_version" in body
 
 
-def test_index_keeps_user_edited_out_of_generic_selector():
+def test_index_uses_unified_chord_selector():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
 
-    assert "activeChord === 'user_edited' ? 'chordino' : activeChord" in body
+    assert 'id="chordTrackSelect"' in body
+    assert "activeChord === 'user_edited' ? 'chordino' : activeChord" not in body
     assert "desiredChordTrackId !== 'chordino'" in body
 
 

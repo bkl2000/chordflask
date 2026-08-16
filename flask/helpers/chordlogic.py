@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from chorddata import ChordData
+from chordflask_base import ChordData
 
 class ChordAnalyzer:
     def __init__(self):

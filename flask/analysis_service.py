@@ -6,7 +6,7 @@ behavior. This service does not turn failed analysis into an empty result.
 
 import os
 
-from chorddata import ChordData
+from chordflask_base import ChordData
 
 
 class ChordAnalysisService:

@@ -8,7 +8,7 @@ import tempfile
 import librosa
 import vamp
 
-from chorddata import ChordData
+from chordflask_base import ChordData
 from chord_postprocess import ChordPostProcessor
 from chordutils import detect_tempo_from_audio
 from chordflask_config import ANALYSIS_SAMPLE_RATE

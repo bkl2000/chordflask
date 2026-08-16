@@ -6,8 +6,8 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "flask"))
 
-import chorddata
-from chorddata import ChordTrackRepository, ChordData
+from chordflask_base import schema as chordflask_schema
+from chordflask_base import ChordTrackRepository, ChordData
 
 
 def _build_valid():
@@ -309,7 +309,7 @@ def test_save_failure_preserves_existing_file_and_cleans_temp(tmp_path, monkeypa
     def fail_replace(source, destination):
         raise OSError("simulated replace failure")
 
-    monkeypatch.setattr(chorddata.os, "replace", fail_replace)
+    monkeypatch.setattr(chordflask_schema.os, "replace", fail_replace)
     with pytest.raises(OSError, match="simulated replace failure"):
         ChordTrackRepository().save(track, path)
 

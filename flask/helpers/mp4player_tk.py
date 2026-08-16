@@ -24,7 +24,7 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from chorddata import ChordData
+from chordflask_base import ChordData
 
 class MP4Player:
     def __init__(self, mp4_file, json_filename=None, position_callback=None, semitones=0, use_unicode=True):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from chorddata import ChordData
+from chordflask_base import ChordData
 from songdata import SongData
 from playbackview import PlaybackView
 from collections import deque
@@ -8,15 +8,22 @@ import logging
 
 import chordutils
 
+from chordflask_base import (
+    DEFAULT_CHORD_TRACK,
+    DEFAULT_RHYTHM_TRACK,
+    MADMOM_TRACK_ID,
+    USER_EDITED_TRACK_ID,
+)
+
 _BUILTIN_TRACK_NAMES = {
-    "chordino": "Chordino",
-    "madmom": "Madmom",
-    "qm_barbeattracker": "QM Bar/Beat Tracker",
+    DEFAULT_CHORD_TRACK: "Chordino",
+    MADMOM_TRACK_ID: "Madmom",
+    DEFAULT_RHYTHM_TRACK: "QM Bar/Beat Tracker",
 }
 
-_EDITED_TRACK_ID = "user_edited"
-_EDITED_SOURCE_CHORD = "chordino"
-_EDITED_SOURCE_RHYTHM = "qm_barbeattracker"
+_EDITED_TRACK_ID = USER_EDITED_TRACK_ID
+_EDITED_SOURCE_CHORD = DEFAULT_CHORD_TRACK
+_EDITED_SOURCE_RHYTHM = DEFAULT_RHYTHM_TRACK
 _EDIT_GRID_ROWS = 16
 _EDIT_GRID_MEASURES_PER_ROW = 2
 
@@ -56,14 +63,12 @@ class MP4PlayerFlask:
         cd = self.chord_data
         chord_tracks = []
         for tid in cd.available_chord_track_ids:
-            if tid == _EDITED_TRACK_ID:
-                continue
-            chord_tracks.append({
-                "id": tid,
-                "display_name": self.__track_display_name(
-                    tid, cd.chord_track_metadata(tid)
-                ),
-            })
+            display_name = (
+                "Own modification"
+                if tid == _EDITED_TRACK_ID
+                else self.__track_display_name(tid, cd.chord_track_metadata(tid))
+            )
+            chord_tracks.append({"id": tid, "display_name": display_name})
         rhythm_tracks = []
         for tid in cd.available_rhythm_track_ids:
             rhythm_tracks.append({

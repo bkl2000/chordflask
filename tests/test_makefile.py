@@ -75,6 +75,12 @@ def test_default_make_target_only_shows_documented_commands():
     assert "Show this help (no changes)" in output
 
 
+def test_public_makefile_has_no_btc_references():
+    text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "btc" not in text.lower()
+    assert "EXTRA_HELP_ARGS" in text
+
+
 def test_make_setup_is_full_setup():
     setup = run_make("--no-print-directory", "-n", "setup")
     assert "--dev" in setup

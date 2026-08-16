@@ -13,7 +13,7 @@ if str(FLASK_DIR) not in sys.path:
 import analysis_worker
 from analysis_queue import AnalysisQueue
 from analysis_worker import AnalysisWorker, WorkerSupervisor
-from chorddata import ChordData
+from chordflask_base import ChordData
 from chordflask_config import ANALYSIS_DIR_NAME
 from filerepr import FileRepr
 

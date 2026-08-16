@@ -14,7 +14,7 @@ from pathlib import Path
 from analysis_service import ChordAnalysisService
 from audio_analyzer import AudioAnalyzer
 from chord_exporter import ChordExporter
-from chorddata import ChordData
+from chordflask_base import ChordData
 from chordflask_config import ANALYSIS_DIR_NAME
 from filerepr import FileRepr
 from media_converter import MediaConverter

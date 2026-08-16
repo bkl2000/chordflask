@@ -14,7 +14,7 @@ from mido import MidiFile, tick2second
 from music21 import converter
 
 from chordanalyzer import ChordAnalysisService, ChordAnalyzer, ChordExporter
-from chorddata import ChordData
+from chordflask_base import ChordData
 from filerepr import FileRepr
 
 

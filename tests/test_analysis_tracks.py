@@ -12,7 +12,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from chorddata import ChordData, ChordTrackRepository
+from chordflask_base import ChordData, ChordTrackRepository
 
 
 # ── helpers ───────────────────────────────────────────────────────────
@@ -694,14 +694,14 @@ def test_load_v3_clears_stale_dimension(tmp_path):
 
 
 def test_default_track_identifiers_are_centralized():
-    import chorddata
+    import chordflask_base.model as chorddata
 
     assert chorddata.DEFAULT_CHORD_TRACK == "chordino"
     assert chorddata.DEFAULT_RHYTHM_TRACK == "qm_barbeattracker"
 
 
 def test_chord_default_selection_uses_configured_identity(monkeypatch):
-    import chorddata
+    import chordflask_base.model as chorddata
 
     track = ChordData()
     monkeypatch.setattr(chorddata, "DEFAULT_CHORD_TRACK", "my-engine")
@@ -715,7 +715,7 @@ def test_chord_default_selection_uses_configured_identity(monkeypatch):
 
 
 def test_rhythm_default_selection_uses_configured_identity(monkeypatch):
-    import chorddata
+    import chordflask_base.model as chorddata
 
     track = ChordData()
     monkeypatch.setattr(chorddata, "DEFAULT_RHYTHM_TRACK", "my-rhythm")

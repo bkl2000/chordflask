@@ -45,6 +45,7 @@ help:
 		'  make status              Show Git status (read-only)' \
 		'  make clean               Remove build output and developer caches [destructive]' \
 		'  make clean-report        Show reclaimable space without deleting anything' \
+		$(EXTRA_HELP_ARGS) \
 		'' \
 		'Variables:' \
 		'  VENV_DIR=/path           Virtual environment (default: ~/.venvs/chordflask)' \
@@ -86,18 +87,18 @@ test:
 
 check: test lint
 	@"$(VENV_PYTHON)" -m compileall -q "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" \
-		"$(ROOT_DIR)/tests" $(EXTRA_SRC_DIRS)
+		"$(ROOT_DIR)/tests" "$(ROOT_DIR)/chordflask_base" $(EXTRA_SRC_DIRS)
 	@git -C "$(ROOT_DIR)" diff --check
 
 lint:
 	@"$(VENV_PYTHON)" -m ruff check "$(ROOT_DIR)/flask" "$(ROOT_DIR)/tests" \
-		"$(ROOT_DIR)/scripts" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
+		"$(ROOT_DIR)/scripts" "$(ROOT_DIR)/chordflask_base" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
 
 run:
 	@cd "$(ROOT_DIR)" && PYTHON_BIN="$(VENV_PYTHON)" bash scripts/chordflask.sh
 
 worker:
-	@cd "$(ROOT_DIR)/flask" && "$(VENV_PYTHON)" chordflask.py --worker
+	@cd "$(ROOT_DIR)/flask" && PYTHONPATH="$(ROOT_DIR)$${PYTHONPATH:+:$${PYTHONPATH}}" "$(VENV_PYTHON)" chordflask.py --worker
 
 standalone: check
 	@PATH="$(VENV_DIR)/bin:$$PATH" bash "$(ROOT_DIR)/flask/build_standalone.sh"
@@ -128,8 +129,10 @@ clean:
 		"$(ROOT_DIR)/htmlcov" \
 		"$(ROOT_DIR)/.coverage"
 	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
+		"$(ROOT_DIR)/chordflask_base" \
 		-type d -name __pycache__ -prune -exec rm -rf {} +
 	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
+		"$(ROOT_DIR)/chordflask_base" \
 		-type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
 clean-report:

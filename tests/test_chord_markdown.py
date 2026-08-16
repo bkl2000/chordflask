@@ -12,7 +12,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from chorddata import ChordData
+from chordflask_base import ChordData
 from chordflask import FlaskMP4App
 from chord_markdown import (
     download_track_slug,

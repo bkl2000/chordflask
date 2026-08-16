@@ -50,6 +50,7 @@ fi
 pyinstaller \
     --name chordflask \
     --onefile \
+    --paths "${PROJECT_ROOT}" \
     --hidden-import=numba \
     --hidden-import=numba.core \
     --hidden-import=numba.core.types \

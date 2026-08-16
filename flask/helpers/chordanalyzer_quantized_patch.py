@@ -64,7 +64,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from chorddata import ChordData
+from chordflask_base import ChordData
 from chordutils import fix_chord_label, inv_fix_chord_label, detect_tempo_from_audio
 from chordflask_config import ANALYSIS_DIR_NAME
 from filerepr import FileRepr

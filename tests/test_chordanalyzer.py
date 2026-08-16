@@ -15,7 +15,7 @@ if str(FLASK_DIR) not in sys.path:
 
 import audio_analyzer as audio_analyzer_mod
 from chordanalyzer import AudioAnalyzer
-from chorddata import ChordData
+from chordflask_base import ChordData
 from chordflask_config import ANALYSIS_SAMPLE_RATE
 
 

@@ -6,7 +6,7 @@ import simpleaudio as sa
 from pydub import AudioSegment
 import time
 import tempfile
-from chorddata import ChordData  # Importing the ChordData class
+from chordflask_base import ChordData  # Importing the ChordData class
 
 class MP3Player:
     def __init__(self, mp3_file, position_callback, chord_data=None):

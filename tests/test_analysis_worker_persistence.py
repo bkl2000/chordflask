@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "flask"))
 
 from analysis_queue import AnalysisQueue
 from analysis_worker import AnalysisWorker
-from chorddata import ChordData
+from chordflask_base import ChordData
 
 
 def _setup_job(tmp_path, force=False):

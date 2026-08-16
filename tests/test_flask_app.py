@@ -16,7 +16,7 @@ if str(FLASK_DIR) not in sys.path:
 import chordflask
 from analysis_queue import AnalysisQueue
 from analysis_worker import AnalysisWorker
-from chorddata import ChordData
+from chordflask_base import ChordData
 from chordflask import FlaskMP4App
 from filerepr import FileRepr
 from media_library import preferred_media_files

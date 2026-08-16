@@ -8,7 +8,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from chorddata import ChordData, ChordTrackRepository
+from chordflask_base import ChordData, ChordTrackRepository
 
 
 def test_chord_lookup_uses_latest_chord_before_position():

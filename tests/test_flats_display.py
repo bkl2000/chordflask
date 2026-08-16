@@ -11,7 +11,7 @@ if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
 import chordutils
-from chorddata import ChordData
+from chordflask_base import ChordData
 
 
 # ── pure pitch respelling ────────────────────────────────────────────
@@ -88,6 +88,25 @@ def test_respell_chord_label_roots_and_basses(label, prefer_flats, expected):
 )
 def test_respell_chord_label_preserves_quality_alterations(label, prefer_flats, expected):
     assert chordutils.respell_chord_label(label, prefer_flats) == expected
+
+
+@pytest.mark.parametrize(
+    ("label", "prefer_flats", "expected"),
+    [
+        ("Cmmaj7", True, "Cmmaj7"),
+        ("Cmmaj7", False, "Cmmaj7"),
+        ("F#mmaj7", True, "Gbmmaj7"),
+        ("Bbmmaj7", False, "A#mmaj7"),
+    ],
+)
+def test_respell_chord_label_preserves_mmaj7_suffix(label, prefer_flats, expected):
+    assert chordutils.respell_chord_label(label, prefer_flats) == expected
+
+
+def test_transpose_chord_pitches_preserves_mmaj7_suffix():
+    assert chordutils.transpose_chord_pitches("Cmmaj7", 2, False) == "Dmmaj7"
+    assert chordutils.transpose_chord_pitches("F#mmaj7", 1, False) == "Gmmaj7"
+    assert chordutils.transpose_chord_pitches("Bbmmaj7", 2, True) == "Cmmaj7"
 
 
 def test_respell_chord_label_respells_slash_bass_only():

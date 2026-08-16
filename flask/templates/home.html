@@ -257,7 +257,6 @@
     }
 
     #editButton,
-    #versionButton,
     #saveButton {
       width: auto;
       min-width: 22px;
@@ -272,7 +271,6 @@
     }
 
     #editButton:hover:not(:disabled),
-    #versionButton:hover:not(:disabled),
     #saveButton:hover:not(:disabled) {
       border-color: #9eabb8;
       background: #313944;
@@ -280,16 +278,9 @@
     }
 
     #editButton:disabled,
-    #versionButton:disabled,
     #saveButton:disabled {
       cursor: default;
       opacity: 0.4;
-    }
-
-    #versionButton.display-on {
-      border-color: #1b7a43;
-      background: #1b7a43;
-      color: #fff;
     }
 
     #editTools {
@@ -902,8 +893,6 @@
             </span>
             <button id="editButton" type="button" title="Edit chords beat by beat"
                     aria-label="Edit chords" hidden disabled>Edit</button>
-            <button id="versionButton" type="button" title="Switch between Original and Edited chords"
-                    aria-label="Original/Edited chord version" hidden>Original</button>
             <button id="saveButton" type="button" title="Download current chords as Markdown and PDF"
                     aria-label="Download chords as Markdown and PDF" hidden disabled>Save</button>
             <span id="queueStatus"></span>
@@ -1035,7 +1024,6 @@
     let batchLimitInput = document.getElementById('batchLimit');
     let queueNextButton = document.getElementById('queueNextButton');
     let editButton = document.getElementById('editButton');
-    let versionButton = document.getElementById('versionButton');
     let saveButton = document.getElementById('saveButton');
     let undoEditButton = document.getElementById('undoEditButton');
     let resetEditButton = document.getElementById('resetEditButton');
@@ -1090,7 +1078,6 @@
 
     let editMode = false;
     let hasEditedChords = false;
-    let activeChordVersion = 'original';
     let editGridData = null;
     let editBeatCount = 0;
     let editUndoStack = [];
@@ -1108,7 +1095,6 @@
       activeChordTrackId = activeChord;
       activeRhythmTrackId = activeRhythm;
       hasEditedChords = payload.has_edited === true;
-      activeChordVersion = payload.active_chord_version || 'original';
       chordTrackSelectOptions = availableChord;
       rhythmTrackSelectOptions = availableRhythm;
 
@@ -1124,8 +1110,7 @@
         selectEl.hidden = tracks.length <= 1;
       }
 
-      populateSelect(chordTrackSelect, chordTrackSelectOptions,
-        activeChord === 'user_edited' ? 'chordino' : activeChord);
+      populateSelect(chordTrackSelect, chordTrackSelectOptions, activeChord);
       populateSelect(rhythmTrackSelect, rhythmTrackSelectOptions, activeRhythmTrackId);
       rhythmTrackSelect.disabled = activeChord === 'user_edited';
       updateEditControls();
@@ -1173,8 +1158,7 @@
           available_rhythm_tracks: rhythmTrackSelectOptions,
           active_chord_track_id: activeChordTrackId,
           active_rhythm_track_id: activeRhythmTrackId,
-          has_edited: hasEditedChords,
-          active_chord_version: activeChordVersion
+          has_edited: hasEditedChords
         });
       })
       .finally(() => {
@@ -2009,11 +1993,6 @@
       editButton.disabled = editRequestInFlight || !canEdit;
       editButton.textContent = editMode ? 'Done' : 'Edit';
 
-      versionButton.hidden = !hasEditedChords;
-      versionButton.textContent = activeChordVersion === 'edited' ? 'Edited' : 'Original';
-      versionButton.classList.toggle('display-on', activeChordVersion === 'edited');
-      versionButton.disabled = editRequestInFlight || loadRequestInFlight;
-
       undoEditButton.disabled = editRequestInFlight || !editUndoStack.length;
       resetEditButton.disabled = editRequestInFlight;
       updateSaveButton();
@@ -2103,7 +2082,6 @@
 
     function applyChordEditingState(data) {
       hasEditedChords = data.has_edited === true;
-      activeChordVersion = data.active_chord_version || 'original';
       updateTrackSelectors(data);
       if (data.grid) {
         renderEditGrid(data.grid);
@@ -2334,47 +2312,6 @@
       .catch(error => {
         console.error('Error resetting edited chords:', error);
         alert(`Could not reset edited chords: ${error.error || 'Unknown error'}`);
-      })
-      .finally(() => {
-        editRequestInFlight = false;
-        updateEditControls();
-      });
-    }
-
-    function toggleChordVersion() {
-      const nextVersion = activeChordVersion === 'edited' ? 'original' : 'edited';
-      setChordVersion(nextVersion);
-    }
-
-    function setChordVersion(version) {
-      if (editRequestInFlight) {
-        return;
-      }
-      editRequestInFlight = true;
-      updateEditControls();
-      fetch('/set_chord_version', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-        body: JSON.stringify({
-          dirname: loadedFileDirectory,
-          filename: loadedFileName,
-          version: version
-        })
-      })
-      .then(response => {
-        if (!response.ok) {
-          return response.json().then(error => { throw error; });
-        }
-        return response.json();
-      })
-      .then(data => {
-        exitEditMode();
-        applyChordEditingState(data);
-        syncPlaybackPosition(true);
-      })
-      .catch(error => {
-        console.error('Error switching chord version:', error);
-        alert(`Could not switch chord version: ${error.error || 'Unknown error'}`);
       })
       .finally(() => {
         editRequestInFlight = false;
@@ -2712,7 +2649,6 @@
       reanalyzeButton.addEventListener('click', reanalyzeCurrentFile);
       updateReanalyzeButton();
       editButton.addEventListener('click', toggleEditMode);
-      versionButton.addEventListener('click', toggleChordVersion);
       saveButton.addEventListener('click', downloadChords);
       undoEditButton.addEventListener('click', undoLastEdit);
       resetEditButton.addEventListener('click', resetEditedChords);
