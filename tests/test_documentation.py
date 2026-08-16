@@ -44,6 +44,7 @@ def test_public_documentation_links_resolve():
     linked_files = (
         "SECURITY.md",
         "docs/ANALYSIS.md",
+        "docs/MAINTENANCE.md",
         "docs/HELPERS.md",
         "docs/VAMP.md",
         "docs/STANDALONE.md",
@@ -62,21 +63,22 @@ def test_readme_documents_batch_leadsheet_export():
     readme = (REPO_ROOT / "README.md").read_text()
 
     assert "Batch leadsheet export" in readme
-    assert "~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music" in readme
+    assert "scripts/chordflask-export ~/Music" in readme
     assert "--sharps --transpose 2" in readme
     assert "--chord-track original --repeat-mode chords" in readme
     assert ".chordflask/<name>-chords-<track>.md" in readme
     assert "one ZIP" in readme
-    assert "create_sheet_pdf.py leadsheet.md -o leadsheet.pdf" in readme
-    assert "python -m pip install Pillow" in readme
+    assert "--format markdown" in readme
+    assert "--format pdf" in readme
     assert "reused" in readme.lower()
 
 
-def test_helpers_doc_describes_batch_helper_options_and_exit_codes():
+def test_helpers_doc_describes_export_options_and_exit_codes():
     helpers = (REPO_ROOT / "docs" / "HELPERS.md").read_text()
 
-    assert "chordleadsheet_batch.py" in helpers
+    assert "export_cli.py" in helpers
     for option in (
+        "--format",
         "--chord-track",
         "--rhythm-track",
         "--transpose",
@@ -86,11 +88,10 @@ def test_helpers_doc_describes_batch_helper_options_and_exit_codes():
         "--no-metric-chords",
     ):
         assert option in helpers
-    assert "non-recursively" in helpers
+    assert "non-recursive" in helpers
     assert "Exit code 0" in helpers
     assert "1 means partial" in helpers
     assert "2 means invalid invocation" in helpers
-    assert "create_sheet_pdf.py" in helpers
     assert "matching" in helpers
     assert ".pdf" in helpers
 
@@ -124,3 +125,93 @@ def test_helpers_doc_filenames_exist():
     assert found, "HELPERS.md lists no bare .py helper filenames"
     for name in found:
         assert (REPO_ROOT / "flask" / "helpers" / name).is_file(), name
+
+
+def test_readme_documents_command_line_tools_block():
+    readme = (REPO_ROOT / "README.md").read_text()
+
+    assert "### Command-line tools" in readme
+    assert "scripts/chordflask.sh" in readme
+    assert "scripts/chordflask-analyze song.mp4" in readme
+    assert "scripts/chordflask-analyze /music/videos" in readme
+    assert "scripts/chordflask-export" in readme
+    assert "scripts/chordflask-maintain doctor" in readme
+    assert "Chordino is the built-in, default" in readme
+
+
+def test_analysis_doc_documents_command_line_analysis():
+    analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
+
+    assert "## Command-line analysis" in analysis
+    assert "scripts/chordflask-analyze song.mp4" in analysis
+    assert "Chordino is the default." in analysis
+    assert "--dry-run" in analysis
+    assert "--replace" in analysis
+
+
+def test_public_docs_describe_btc_as_optional():
+    readme = (REPO_ROOT / "README.md").read_text()
+    analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
+
+    # BTC is documented as an explicit, optional analyzer, not the default.
+    assert "make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1" in readme
+    assert "make btc-check" in readme
+    assert "scripts/chordflask-analyze --analyzer btc song.mp4" in readme
+    assert "Chordino is the default." in analysis
+    assert "Optional BTC analyzer" in analysis
+    assert "chordflask-analyze-btc" not in readme
+    assert "chordflask-analyze-btc" not in analysis
+
+
+def test_maintenance_doc_documents_real_subcommands():
+    maintenance = (REPO_ROOT / "docs" / "MAINTENANCE.md").read_text()
+
+    for sub in ("storage report", "storage cleanup", "migrate-schema", "validate", "doctor"):
+        assert sub in maintenance
+    assert "read-only" in maintenance
+    assert "modifies files" in maintenance.lower()
+
+
+def test_user_docs_do_not_reference_deleted_scripts():
+    deleted = (
+        "chordbatch.py",
+        "chordbatch_mp.py",
+        "create_sheet_pdf.py",
+        "chordflask_storage.py",
+        "install_vamp_plugins.sh",
+        "compare_chord_json.py",
+        "getscale.py",
+        "analyze_pitch.py",
+        "process_audio.py",
+        "liverecord.py",
+        "mp4player_tk.py",
+        "romanize.py",
+        "webm2mp4",
+        "youtube_donwload",
+        "install_codex.sh",
+        "start_agents.sh",
+        "analysis_storage.py",
+    )
+    user_docs = (
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "docs" / "ANALYSIS.md",
+        REPO_ROOT / "docs" / "MAINTENANCE.md",
+        REPO_ROOT / "docs" / "HELPERS.md",
+        REPO_ROOT / "docs" / "VAMP.md",
+        REPO_ROOT / "docs" / "COMPATIBILITY.md",
+    )
+    for doc in user_docs:
+        text = doc.read_text()
+        for name in deleted:
+            assert name not in text, f"{doc.name} references deleted {name}"
+
+
+def test_no_primary_recommendation_for_backend_commands():
+    for doc in (
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "docs" / "ANALYSIS.md",
+        REPO_ROOT / "docs" / "MAINTENANCE.md",
+    ):
+        text = doc.read_text()
+        assert "chordflask-analyze-btc" not in text, doc
+        assert "chordflask-migrate-schema" not in text, doc

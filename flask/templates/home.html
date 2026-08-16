@@ -1757,9 +1757,7 @@
         body: JSON.stringify({
           dirname: dirname,
           filename: filename,
-          chord_track_id: (desiredChordTrackId && desiredChordTrackId !== 'chordino')
-            ? desiredChordTrackId
-            : undefined,
+          chord_track_id: desiredChordTrackId || undefined,
           rhythm_track_id: desiredRhythmTrackId || undefined
         })
       })

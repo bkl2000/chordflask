@@ -76,6 +76,58 @@ corrected beat by beat.
 
 ## Using ChordFlask
 
+### Command-line tools
+
+Four commands cover the main workflows. Chordino is the built-in, default
+analyzer. The scripts are run from the repository root (they are not installed
+on your `PATH`).
+
+```bash
+# Start the player / web app
+scripts/chordflask.sh
+
+# Analyze with the built-in Chordino analyzer
+scripts/chordflask-analyze song.mp4
+scripts/chordflask-analyze /music/videos
+
+# Preview without changing anything, or replace an existing analysis
+scripts/chordflask-analyze --dry-run /music/videos
+scripts/chordflask-analyze --replace song.mp4
+
+# Export leadsheets (Markdown and/or PDF)
+scripts/chordflask-export song.mp4
+scripts/chordflask-export --format markdown song.mp4
+scripts/chordflask-export --format pdf song.mp4
+
+# Maintenance
+scripts/chordflask-maintain doctor
+scripts/chordflask-maintain validate /music/videos
+scripts/chordflask-maintain migrate-schema /music/videos
+scripts/chordflask-maintain storage report /music/videos
+```
+
+Details are in [docs/ANALYSIS.md](docs/ANALYSIS.md) (analysis and export),
+[docs/MAINTENANCE.md](docs/MAINTENANCE.md) (maintenance), and
+[docs/HELPERS.md](docs/HELPERS.md) (the underlying helper modules).
+
+### Optional BTC analyzer
+
+Chordino is the built-in default analyzer. The optional BTC analyzer runs a
+pretrained model in a separate environment and adds its result as an
+additional `btc` chord track, without touching the Chordino track. Install and
+use it explicitly:
+
+```bash
+make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1   # one-time: environment + model download
+make btc-check                             # diagnose the runtime (CPU/CUDA, model)
+
+scripts/chordflask-analyze --analyzer btc song.mp4
+```
+
+Chordino and BTC are stored as separate tracks; switch between them with the
+track selector next to the chord grid. BTC never replaces Chordino and is not
+part of the portable bundle.
+
 ### First use
 
 1. Select **Browse** and navigate to a directory containing MP3, MP4, or WebM
@@ -104,13 +156,14 @@ retry.
 
 ### Batch leadsheet export
 
-A non-recursive helper turns every supported media file in a directory into
-matching playable Markdown and print-ready A4 PDF leadsheets. Existing analyses
-are reused; missing files are analyzed serially only when needed, so a second
-run costs no new analysis time.
+The `chordflask-export` command turns one media file or every supported media
+file in a directory into matching playable Markdown and print-ready A4 PDF
+leadsheets. Existing analyses are reused; missing files are analyzed serially
+only when needed, so a second run costs no new analysis time.
 
 ```bash
-~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music
+scripts/chordflask-export ~/Music
+scripts/chordflask-export song.mp4
 ```
 
 Both files land beside the analysis as `.chordflask/<name>-chords-<track>.md`
@@ -119,23 +172,19 @@ no transpose, Flats spelling, and repeated-chord `changes` mode:
 
 ```bash
 # Sharps spelling and two semitones up
-~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --sharps --transpose 2
+scripts/chordflask-export ~/Music --sharps --transpose 2
 
 # The unedited Chordino version with every beat written out
-~/.venvs/chordflask/bin/python flask/helpers/chordleadsheet_batch.py ~/Music --chord-track original --repeat-mode chords
+scripts/chordflask-export ~/Music --chord-track original --repeat-mode chords
+
+# Write only one format
+scripts/chordflask-export ~/Music --format markdown
+scripts/chordflask-export ~/Music --format pdf
 ```
 
 The browser **Save** button downloads one ZIP containing the matching `.md` and
 `.pdf` for the single file currently displayed. Full format and option details
 are in [docs/ANALYSIS.md](docs/ANALYSIS.md).
-
-The PDF command-line helper is optional and uses the same renderer:
-
-```bash
-python -m pip install Pillow
-python flask/helpers/create_sheet_pdf.py leadsheet.md
-python flask/helpers/create_sheet_pdf.py leadsheet.md -o leadsheet.pdf
-```
 
 ### Analysis storage and cleanup
 
@@ -144,14 +193,14 @@ its analysis JSON, cached audio, and exports. A read-only report shows how much
 space one directory uses:
 
 ```bash
-python3 scripts/chordflask_storage.py report /path/to/music
+scripts/chordflask-maintain storage report /path/to/music
 ```
 
 Cleanup is explicit and non-recursive, limited to one directory. For example,
 remove cached audio that ChordFlask can regenerate from video sources:
 
 ```bash
-python3 scripts/chordflask_storage.py cleanup /path/to/music --cached-audio
+scripts/chordflask-maintain storage cleanup /path/to/music --cached-audio
 ```
 
 Cleanup can also remove orphaned temporary work and corrupt-analysis backups
@@ -192,7 +241,7 @@ guide is included as `README.md` inside the archive.
 - **Analysis cannot write files:** give your user write permission for the media
   directory so ChordFlask can create `.chordflask`.
 - **Inspect analysis storage:** run
-  `python3 scripts/chordflask_storage.py report /path/to/music` (read-only) to
+  `scripts/chordflask-maintain storage report /path/to/music` (read-only) to
   see how much space one directory's local `.chordflask` uses.
 - **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 make run` and open
   <http://localhost:5050>.
@@ -206,6 +255,7 @@ ChordFlask has no authentication, TLS, or CSRF protection. Keep the default
 ## More documentation
 
 - [Playback, analysis tracks, and chord display](docs/ANALYSIS.md)
+- [Maintenance commands](docs/MAINTENANCE.md)
 - [Supported command-line helpers](docs/HELPERS.md)
 - [Vamp plugin installation and verification](docs/VAMP.md)
 - [Portable bundle guide](docs/STANDALONE.md)

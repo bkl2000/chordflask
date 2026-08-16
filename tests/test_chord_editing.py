@@ -1111,7 +1111,7 @@ def test_index_uses_unified_chord_selector():
 
     assert 'id="chordTrackSelect"' in body
     assert "activeChord === 'user_edited' ? 'chordino' : activeChord" not in body
-    assert "desiredChordTrackId !== 'chordino'" in body
+    assert "chord_track_id: desiredChordTrackId || undefined" in body
 
 
 def test_index_contains_editing_session_state_contract():

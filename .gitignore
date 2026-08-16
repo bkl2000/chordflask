@@ -63,6 +63,11 @@ videos/.chordflask/
 flask/videos
 flask/videos_2010
 
+# BTC runtime: checkpoint weights and downloads stay local (never tracked or
+# published; the checkpoint has no explicit redistribution license).
+chordflask_btc/model/btc_model_large_voca.pt
+chordflask_btc/model/*.download.*
+
 # Local standalone binary output
 flask/dist/
 flask/templates/home.html.*

@@ -13,6 +13,9 @@ endif
 VENV_PYTHON := $(VENV_DIR)/bin/python
 PYTHON_BIN ?=
 TEST_ARGS ?=
+ANALYZE_ARGS ?=
+EXPORT_ARGS ?=
+MAINTAIN_ARGS ?=
 EXTRA_TEST_DIRS ?=
 EXTRA_SRC_DIRS ?=
 EXTRA_PYTHONPATH ?=
@@ -21,7 +24,7 @@ EXTRA_PYTHONPATH ?=
 
 .PHONY: help all install setup setup-runtime setup-dev setup-recreate \
 	fix-permissions test check lint run worker standalone standalone-run \
-	plugins status clean clean-report
+	plugins analyze export maintain setup-btc btc-check status clean clean-report
 
 help:
 	@printf '%s\n' \
@@ -39,6 +42,11 @@ help:
 		'  make check               Run tests, lint, compile checks, and git diff checks' \
 		'  make run                 Start the worker and web app' \
 		'  make worker              Start only the analysis worker' \
+		'  make analyze             Analyze media (chordflask-analyze)' \
+		'  make export              Export leadsheets (chordflask-export)' \
+		'  make maintain            Maintain data/installation (chordflask-maintain)' \
+		'  make setup-btc           Set up the optional BTC analyzer runtime [installs]' \
+		'  make btc-check           Diagnose the optional BTC analyzer runtime' \
 		'  make standalone          Check, build, and package the standalone release [long]' \
 		'  make standalone-run      Start an already-built standalone release' \
 		'  make plugins             Install Vamp plugins into the user plugin directory [network]' \
@@ -87,18 +95,35 @@ test:
 
 check: test lint
 	@"$(VENV_PYTHON)" -m compileall -q "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" \
-		"$(ROOT_DIR)/tests" "$(ROOT_DIR)/chordflask_base" $(EXTRA_SRC_DIRS)
+		"$(ROOT_DIR)/tests" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
+		"$(ROOT_DIR)/chordflask_btc" $(EXTRA_SRC_DIRS)
 	@git -C "$(ROOT_DIR)" diff --check
 
 lint:
 	@"$(VENV_PYTHON)" -m ruff check "$(ROOT_DIR)/flask" "$(ROOT_DIR)/tests" \
-		"$(ROOT_DIR)/scripts" "$(ROOT_DIR)/chordflask_base" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
+		"$(ROOT_DIR)/scripts" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
+		"$(ROOT_DIR)/chordflask_btc" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
 
 run:
 	@cd "$(ROOT_DIR)" && PYTHON_BIN="$(VENV_PYTHON)" bash scripts/chordflask.sh
 
 worker:
 	@cd "$(ROOT_DIR)/flask" && PYTHONPATH="$(ROOT_DIR)$${PYTHONPATH:+:$${PYTHONPATH}}" "$(VENV_PYTHON)" chordflask.py --worker
+
+analyze:
+	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask-analyze" $(ANALYZE_ARGS)
+
+export:
+	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask-export" $(EXPORT_ARGS)
+
+maintain:
+	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask-maintain" $(MAINTAIN_ARGS)
+
+setup-btc:
+	@bash "$(ROOT_DIR)/scripts/setup-btc.sh"
+
+btc-check:
+	@bash "$(ROOT_DIR)/scripts/btc-check.sh"
 
 standalone: check
 	@PATH="$(VENV_DIR)/bin:$$PATH" bash "$(ROOT_DIR)/flask/build_standalone.sh"
@@ -113,7 +138,7 @@ standalone-run:
 	cd "$(ROOT_DIR)" && "$${launcher}"
 
 plugins:
-	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/install_vamp_plugins.sh"
+	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/flask/install_vamp.sh"
 
 status:
 	@git -C "$(ROOT_DIR)" status --short
@@ -129,10 +154,12 @@ clean:
 		"$(ROOT_DIR)/htmlcov" \
 		"$(ROOT_DIR)/.coverage"
 	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
-		"$(ROOT_DIR)/chordflask_base" \
+		"$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
+		"$(ROOT_DIR)/chordflask_btc" \
 		-type d -name __pycache__ -prune -exec rm -rf {} +
 	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
-		"$(ROOT_DIR)/chordflask_base" \
+		"$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
+		"$(ROOT_DIR)/chordflask_btc" \
 		-type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
 clean-report:

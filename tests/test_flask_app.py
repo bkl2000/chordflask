@@ -364,6 +364,17 @@ def test_index_contains_analysis_track_switching_contract():
     assert "localStorage.setItem(storageKey, newId)" in body
 
 
+def test_index_preserves_explicit_chordino_track_selection():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # An explicit chordino preference is sent as-is so the server does not
+    # auto-select an edited track; an empty preference stays undefined.
+    assert "chord_track_id: desiredChordTrackId || undefined" in body
+    assert "desiredChordTrackId !== 'chordino'" not in body
+
+
 def test_index_contains_audio_player_and_web_directory_browser():
     _, client = make_client()
 
@@ -458,15 +469,32 @@ def test_list_files_structured_skips_inaccessible_entries(tmp_path, monkeypatch)
     class ProtectedEntry:
         name = "DumpStack.log.tmp"
 
+        def __init__(self, parent):
+            self.path = os.path.join(os.fspath(parent), self.name)
+
         def is_dir(self):
             raise PermissionError(13, "Permission denied", self.name)
 
-    def guarded_scandir(path):
-        entries = list(real_scandir(path))
-        entries.append(ProtectedEntry())
-        return iter(entries)
+    class GuardedScandir:
+        """os.scandir-compatible iterator/context manager yielding real
+        entries plus one protected entry."""
 
-    monkeypatch.setattr(os, "scandir", guarded_scandir)
+        def __init__(self, path):
+            self._iterator = iter(list(real_scandir(path)) + [ProtectedEntry(path)])
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return next(self._iterator)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+    monkeypatch.setattr(os, "scandir", GuardedScandir)
     response = client.post(
         "/list_files",
         json={"dirname": str(tmp_path), "matchstring": "", "structured": True},
@@ -1425,7 +1453,9 @@ def test_update_analysis_tracks_rejects_one_valid_one_invalid(tmp_path):
     assert response.status_code == 400
     assert "not available" in response.get_json()["error"]
     assert app_wrapper.player.chord_data.active_chord_track_id == "chordino"
-    assert app_wrapper.player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
+    # The chord-only fixture has no rhythm track (empty rhythm_tracks stays
+    # empty), so the rejected update leaves the active rhythm track unset.
+    assert app_wrapper.player.chord_data.active_rhythm_track_id is None
 
 
 def test_update_analysis_tracks_success_rerenders_position(tmp_path):

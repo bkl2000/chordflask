@@ -1,0 +1,369 @@
+"""Tests for the public ``chordflask-analyze`` CLI dispatcher."""
+
+import os
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+for _path in (REPO_ROOT / "flask", REPO_ROOT / "flask" / "helpers"):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
+import analyze_cli  # noqa: E402
+
+
+class FakeAnalysisWorker:
+    """Records analyze calls without running any real analysis."""
+
+    analyzed = []
+    valid = True
+
+    def __init__(self, analyzer_cls=None):
+        self.analyzer_cls = analyzer_cls
+
+    @classmethod
+    def _json_is_valid(cls, json_path):
+        return cls.valid
+
+    def _analyze(self, media, force=False):
+        type(self).analyzed.append((str(media), force))
+
+
+@pytest.fixture(autouse=True)
+def reset_fake_worker():
+    FakeAnalysisWorker.analyzed = []
+    FakeAnalysisWorker.valid = True
+    yield
+
+
+def _patch_worker(monkeypatch):
+    monkeypatch.setattr("analysis_worker.AnalysisWorker", FakeAnalysisWorker)
+    monkeypatch.setattr(
+        "chordflask_base.analysis_json_path", lambda media: media.parent / ".chordflask" / "x.json"
+    )
+
+
+# ── entry point / launcher ───────────────────────────────────────────
+
+
+def test_launcher_is_executable_shell_script():
+    launcher = REPO_ROOT / "scripts" / "chordflask-analyze"
+    assert launcher.is_file()
+    assert launcher.stat().st_mode & stat.S_IXUSR
+    assert launcher.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
+
+
+def test_cli_module_has_main_entry():
+    assert callable(analyze_cli.main)
+    assert callable(analyze_cli.build_parser)
+
+
+def test_launcher_bash_syntax():
+    result = subprocess.run(
+        ["bash", "-n", str(REPO_ROOT / "scripts" / "chordflask-analyze")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_cli_runs_with_launcher_path_setup(tmp_path):
+    # The launcher only puts the repository root on PYTHONPATH; the CLI module
+    # must make its sibling flask/ modules importable on its own.
+    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT)}
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "flask" / "helpers" / "analyze_cli.py"),
+            "--analyzer",
+            "chordino",
+            "--dry-run",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+    assert "Chordino dry-run complete" in result.stdout
+
+
+# ── parser ───────────────────────────────────────────────────────────
+
+
+def test_default_analyzer_is_chordino():
+    args = analyze_cli.build_parser().parse_args(["song.mp4"])
+    assert args.analyzer == "chordino"
+
+
+def test_no_args_shows_help_and_exits_zero(capsys):
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "chordflask-analyze" in out
+    assert "--analyzer" in out
+
+
+def test_missing_target_with_analyzer_is_error(capsys):
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--analyzer", "chordino"])
+    assert exc.value.code == 2
+
+
+def test_explicit_chordino_analyzer():
+    args = analyze_cli.build_parser().parse_args(["--analyzer", "chordino", "song.mp4"])
+    assert args.analyzer == "chordino"
+
+
+def test_explicit_btc_analyzer_when_backend_available(monkeypatch, tmp_path):
+    _fake_backend(monkeypatch, tmp_path)
+    args = analyze_cli.build_parser().parse_args(["--analyzer", "btc", "song.mp4"])
+    assert args.analyzer == "btc"
+
+
+def test_unknown_analyzer_exits_two():
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.build_parser().parse_args(["--analyzer", "xyz", "song.mp4"])
+    assert exc.value.code == 2
+
+
+def test_help_hides_btc_without_backend(monkeypatch, capsys, tmp_path):
+    _no_backend(monkeypatch, tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "--analyzer {chordino}" in out
+    assert "Chordino is the default built-in analyzer." in out
+    assert "btc" not in out
+
+
+def test_help_shows_btc_with_backend(monkeypatch, capsys, tmp_path):
+    _fake_backend(monkeypatch, tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "--analyzer {chordino,btc}" in out
+    assert "BTC is an optional analyzer" in out
+    assert "chordflask-analyze --analyzer btc song.mp4" in out
+
+
+def test_btc_rejected_when_backend_missing(monkeypatch, capsys, tmp_path):
+    _no_backend(monkeypatch, tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--analyzer", "btc", "song.mp4"])
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "invalid choice" in err
+    assert "chordflask-setup-btc" not in err
+
+
+def test_btc_hidden_when_backend_not_executable(monkeypatch, tmp_path):
+    script = tmp_path / "btc-predict-raw"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o644)  # present but not executable
+    monkeypatch.setattr("chordflask_btc.runtime.wrapper_path", lambda: script)
+    parser = analyze_cli.build_parser()
+    assert parser._option_string_actions["--analyzer"].choices == ("chordino",)
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["--analyzer", "btc", "song.mp4"])
+    assert exc.value.code == 2
+
+
+# ── chordino dispatch ────────────────────────────────────────────────
+
+
+def test_chordino_file_analyzes_via_worker(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    FakeAnalysisWorker.valid = False  # no analysis yet
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(media)])
+
+    assert exc.value.code == 0
+    assert FakeAnalysisWorker.analyzed == [(str(media), False)]
+    assert "OK" in capsys.readouterr().out
+
+
+def test_chordino_replace_with_existing_analysis_forces_reanalysis(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    FakeAnalysisWorker.valid = True
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--replace", str(media)])
+
+    assert exc.value.code == 0
+    assert FakeAnalysisWorker.analyzed == [(str(media), True)]
+
+
+def test_chordino_replace_without_analysis_is_first_run(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    FakeAnalysisWorker.valid = False  # no analysis yet
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--replace", str(media)])
+
+    assert exc.value.code == 0
+    assert FakeAnalysisWorker.analyzed == [(str(media), False)]
+    assert "OK" in capsys.readouterr().out
+
+
+def test_chordino_skips_existing_analysis(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    FakeAnalysisWorker.valid = True
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(media)])
+
+    assert exc.value.code == 0
+    assert FakeAnalysisWorker.analyzed == []
+    assert "SKIP: analysis already exists" in capsys.readouterr().out
+
+
+def test_chordino_directory_dispatches(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    FakeAnalysisWorker.valid = False
+    (tmp_path / "a.mp4").write_bytes(b"a")
+    (tmp_path / "b.mp3").write_bytes(b"b")
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(tmp_path)])
+
+    assert exc.value.code == 0
+    assert {m for m, _ in FakeAnalysisWorker.analyzed} == {
+        str(tmp_path / "a.mp4"),
+        str(tmp_path / "b.mp3"),
+    }
+
+
+def test_chordino_dry_run_classifies_without_side_effects(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+
+    FakeAnalysisWorker.valid = False
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--dry-run", str(media)])
+    assert exc.value.code == 0
+    assert "TODO" in capsys.readouterr().out
+    assert FakeAnalysisWorker.analyzed == []
+
+    FakeAnalysisWorker.valid = True
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--dry-run", str(media)])
+    assert exc.value.code == 0
+    assert "CURRENT" in capsys.readouterr().out
+    assert FakeAnalysisWorker.analyzed == []
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--dry-run", "--replace", str(media)])
+    assert exc.value.code == 0
+    assert "REANALYZE" in capsys.readouterr().out
+    assert FakeAnalysisWorker.analyzed == []
+
+
+def test_chordino_invalid_target_exits_two(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(tmp_path / "missing.mp4")])
+    assert exc.value.code == 2
+    assert "not a file or directory" in capsys.readouterr().err
+
+
+def test_chordino_unsupported_suffix_exits_two(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    not_media = tmp_path / "notes.txt"
+    not_media.write_bytes(b"x")
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(not_media)])
+    assert exc.value.code == 2
+    assert "not a supported media file" in capsys.readouterr().err
+
+
+# ── btc delegation ───────────────────────────────────────────────────
+
+
+def _fake_backend(monkeypatch, tmp_path):
+    script = tmp_path / "btc-predict-raw"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    monkeypatch.setattr("chordflask_btc.runtime.wrapper_path", lambda: script)
+    return script
+
+
+def _no_backend(monkeypatch, tmp_path):
+    monkeypatch.setattr("chordflask_btc.runtime.wrapper_path", lambda: tmp_path / "nope")
+
+
+def test_btc_delegates_to_backend_with_flags(monkeypatch, tmp_path):
+    _fake_backend(monkeypatch, tmp_path)
+    calls = {}
+
+    def fake_analyze(target, *, replace, dry_run):
+        calls["target"] = target
+        calls["replace"] = replace
+        calls["dry_run"] = dry_run
+        return 0
+
+    monkeypatch.setattr("chordflask_btc.analyze.analyze_btc", fake_analyze)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--analyzer", "btc", "--replace", "--dry-run", "song.mp4"])
+
+    assert exc.value.code == 0
+    assert calls == {
+        "target": Path("song.mp4"),
+        "replace": True,
+        "dry_run": True,
+    }
+
+
+def test_btc_forwards_backend_exit_code(monkeypatch, tmp_path):
+    _fake_backend(monkeypatch, tmp_path)
+    monkeypatch.setattr("chordflask_btc.analyze.analyze_btc", lambda target, *, replace, dry_run: 7)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--analyzer", "btc", "song.mp4"])
+
+    assert exc.value.code == 7
+
+
+# ── architecture boundaries ──────────────────────────────────────────
+
+
+def test_dispatcher_has_no_torch_or_training_import():
+    src = (REPO_ROOT / "flask" / "helpers" / "analyze_cli.py").read_text(encoding="utf-8")
+    assert "chordflask_training" not in src
+    assert "import torch" not in src
+    assert "from torch" not in src
+    # BTC availability comes from the installed runtime wrapper, never a
+    # private source-tree script.
+    assert "chordflask-analyze-btc" not in src
+    assert "chordflask-training" not in src
+
+
+def test_dispatcher_reuses_worker_and_batch_core():
+    src = (REPO_ROOT / "flask" / "helpers" / "analyze_cli.py").read_text(encoding="utf-8")
+    assert "from analysis_worker import AnalysisWorker" in src
+    assert "from batch_core import find_media_files" in src
+    assert "from chordanalyzer import ChordAnalyzer" in src
+    assert "from chordflask_btc.analyze import analyze_btc" in src
+    # No re-implementation of the chordino analysis itself.
+    assert "def analyze_chords" not in src
+    assert "def _extract_chords" not in src
+    assert "def ensure_analyzed" not in src

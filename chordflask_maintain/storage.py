@@ -1,15 +1,19 @@
-"""Pure, Flask-free inspection of one media directory's analysis storage.
+"""Framework-free inspection and cleanup of one media directory's analysis storage.
 
 ChordFlask stores analysis and derived artifacts in a per-media-directory
 ``.chordflask`` directory. This module inspects exactly one such directory
-without changing anything, so a user can see how much space it uses and how
-each artifact is classified before any future cleanup.
+without changing anything (inspection) or removes only explicitly requested,
+reproducible leftover categories (cleanup).
 
-It is deliberately independent of Flask, the queue, and the analysis engine.
-``~/.chordflask`` (global queue/log state) and the legacy ``.chordy`` directory
-are out of scope and are never inspected here.
+It imports only the Python standard library — no Flask, queue, analysis engine,
+torch, librosa, or music21. The only runtime coupling is the analysis-worker
+lock file under ``~/.chordflask`` (or ``CHORDFLASK_QUEUE_DIR``), checked with a
+plain ``fcntl.flock`` so cleanup refuses to run while a worker is active.
 """
 
+from __future__ import annotations
+
+import fcntl
 import os
 import re
 import shutil
@@ -19,10 +23,18 @@ from pathlib import Path
 
 CHORDFLASK_DIR_NAME = ".chordflask"
 
+# MediaConverter creates a hidden conversion temp file
+# ``.<stem>.convert-<random>.mp3`` in the analysis directory. Match exactly that
+# producer format so a media file whose stem merely contains ".convert-" (and
+# its analysis JSON) is never misclassified as a temporary file.
+_CONVERT_TEMP_RE = re.compile(r"^\..+\.convert-[0-9A-Za-z_]+\.mp3$")
+
 # Classification status values used in reports.
 PROTECTED = "protected"
 RECLAIMABLE = "reclaimable"
 REVIEW = "review"
+
+_WORKER_LOCK_NAME = "analysis_worker.lock"
 
 
 @dataclass
@@ -71,7 +83,7 @@ def _classify_entry(entry: Path, media_dir: Path) -> tuple[str, str]:
     if ".corrupt-" in name and name.endswith(".json"):
         return "corrupt backups", REVIEW
 
-    if ".convert-" in name:
+    if _CONVERT_TEMP_RE.match(name):
         return "temporary files", REVIEW
 
     suffix = entry.suffix.lower()
@@ -136,13 +148,12 @@ def inspect_storage(media_dir) -> StorageInspection:
     chordflask = media / CHORDFLASK_DIR_NAME
 
     if chordflask.is_symlink():
-        inspection = StorageInspection(
+        return StorageInspection(
             media_dir=media,
             chordflask_path=chordflask,
             exists=False,
             notes=["skipped (symbolic link)"],
         )
-        return inspection
 
     if not chordflask.is_dir():
         return StorageInspection(
@@ -281,11 +292,29 @@ def _storage_directory(media_dir):
     return chordflask
 
 
-def _worker_is_active():
-    from analysis_queue import AnalysisQueue
-    from analysis_worker import AnalysisWorker
+def queue_dir() -> Path:
+    """Return the global ChordFlask state directory (worker lock, queue, logs)."""
+    base = os.environ.get("CHORDFLASK_QUEUE_DIR")
+    if base:
+        return Path(base).expanduser()
+    return Path.home() / ".chordflask"
 
-    return AnalysisWorker.is_running(AnalysisQueue())
+
+def worker_is_active() -> bool:
+    """Return whether an analysis worker currently holds the worker lock."""
+    lock_file = queue_dir() / _WORKER_LOCK_NAME
+    if not lock_file.exists():
+        return False
+    try:
+        with lock_file.open("a+") as handle:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            return False
+    except OSError:
+        return False
 
 
 def _is_orphan_temp_dir(name):
@@ -293,7 +322,7 @@ def _is_orphan_temp_dir(name):
 
 
 def _is_convert_temp_file(name):
-    return ".convert-" in name
+    return bool(_CONVERT_TEMP_RE.match(name))
 
 
 def cleanup_orphan_temp(media_dir):
@@ -307,7 +336,7 @@ def cleanup_orphan_temp(media_dir):
     if chordflask is None:
         return result
 
-    if _worker_is_active():
+    if worker_is_active():
         result.refused = True
         result.reason = "an analysis worker is active; temporary artifacts were not deleted"
         return result
@@ -408,7 +437,7 @@ def cleanup_cached_audio(media_dir):
     if chordflask is None:
         return result
 
-    if _worker_is_active():
+    if worker_is_active():
         result.refused = True
         result.reason = (
             "an analysis worker is active; cached audio may be in use or "

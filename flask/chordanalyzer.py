@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""CLI entry point and backward-compatible analyzer facade.
+"""Backward-compatible analyzer facade.
 
 New orchestration uses :class:`ChordAnalysisService`, whose failures propagate.
 The older ``analyze_chords()`` method deliberately retains its boolean result
@@ -7,7 +6,6 @@ and console diagnostic for compatibility with existing callers.
 """
 
 import os
-import sys
 import bisect
 from pathlib import Path
 
@@ -114,30 +112,3 @@ class ChordAnalyzer:
     def load_chords_from_file(self):
         self.chord_data.load_from_file(self.file_repr.get("json"))
         print(f"Chord data loaded from {self.file_repr.get('json')}")
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python chordanalyzer.py <mp4_filename> [data_directory] [madmom]")
-        sys.exit(1)
-    mp4_filename = sys.argv[1]
-    data_dir = sys.argv[2] if len(sys.argv) > 2 else ""
-    use_madmom = sys.argv[3].lower() in ["true", "1", "yes"] if len(sys.argv) > 3 else False
-
-    analyzer = ChordAnalyzer(mp4_filename, data_dir)
-    analyzer.process(use_madmom=use_madmom)
-
-    try:
-        transpose_input = input("Enter the number of semitones to transpose (positive for up, negative for down): ").strip()
-        if transpose_input:
-            transpose_by = int(transpose_input)
-            analyzer.transpose_chords(transpose_by)
-            analyzer.save_chords_to_file()
-    except ValueError as e:
-        print(f"Invalid input for transposition: {e}")
-
-    analyzer.create_png("chord_chart.png")
-
-    play_input = input("Do you want to play the video with chords displayed? (y/n): ").strip().lower()
-    if play_input == 'y':
-        analyzer.play_mp4_with_chords()

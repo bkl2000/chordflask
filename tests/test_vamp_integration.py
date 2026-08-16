@@ -42,7 +42,7 @@ def plugins_exist():
     if not nnls.exists() or not qm.exists():
         _unavailable(
             "Vamp plugins not found in {}; set CHORDIFIER_TEST_VAMP_PATH to "
-            "their directory or run scripts/install_vamp_plugins.sh --dest {} "
+            "their directory or run flask/install_vamp.sh --dest {} "
             "first".format(
                 PLUGIN_DIR, VENDOR_DIR
             )

@@ -15,6 +15,47 @@ If files with the same base name have different supported extensions, only one
 appears because they would share an analysis sidecar. The deterministic order
 is MP4, then WebM, then MP3; source files are never removed.
 
+## Command-line analysis
+
+The command-line analyzer is `scripts/chordflask-analyze`. Chordino is the
+built-in, default analyzer, so a plain target uses Chordino:
+
+```bash
+scripts/chordflask-analyze song.mp4
+scripts/chordflask-analyze /music/videos
+```
+
+`--analyzer chordino` is only the explicit spelling of that default.
+
+- **Chordino is the default.** It runs the normal Chordino/QM analysis and is
+  the basis of the standalone.
+- **`--dry-run`** previews what would happen without changing anything.
+- **`--replace`** renews only the chosen analyzer's analysis. For Chordino it
+  re-runs Chordino/QM while preserving other tracks (reference, Edited),
+  display preferences, and user data. Other existing tracks are never deleted.
+- **Directory processing is non-recursive.** Only files directly inside the
+  target directory are considered; subdirectories are skipped. Where several
+  extensions share one base name, MP4 wins over WebM over MP3.
+
+### Optional BTC analyzer
+
+The optional BTC analyzer is available only after the user has installed its
+separate runtime with `make setup-btc` (and `make btc-check` to diagnose it):
+
+```bash
+make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1
+make btc-check
+
+scripts/chordflask-analyze --analyzer btc song.mp4
+scripts/chordflask-analyze --analyzer btc /music/videos
+```
+
+BTC runs a pretrained model in an isolated environment and adds its result as a
+separate `btc` chord track to an existing ChordFlask analysis; it never
+replaces Chordino. Without the runtime, `--analyzer btc` is not offered.
+Chordino and BTC are both stored in the analysis file and can be switched in
+the browser with the chord-track selector.
+
 ## Batch queue
 
 **Queue next** adds up to N new analyses from the current visible file list.
@@ -54,7 +95,7 @@ A read-only report shows how much space one directory's analysis storage uses
 without deleting anything:
 
 ```bash
-~/.venvs/chordflask/bin/python scripts/chordflask_storage.py report /path/to/music
+scripts/chordflask-maintain storage report /path/to/music
 ```
 
 Cleanup is always explicit and limited to one media directory:
@@ -62,15 +103,15 @@ Cleanup is always explicit and limited to one media directory:
 ```bash
 # Remove orphaned analysis/conversion temporary directories (refused while an
 # analysis worker is active).
-~/.venvs/chordflask/bin/python scripts/chordflask_storage.py cleanup /path/to/music --orphan-temp
+scripts/chordflask-maintain storage cleanup /path/to/music --orphan-temp
 
 # Remove corrupt-analysis backups older than a retention age.
-~/.venvs/chordflask/bin/python scripts/chordflask_storage.py cleanup /path/to/music --corrupt-backups --older-than-days 30
+scripts/chordflask-maintain storage cleanup /path/to/music --corrupt-backups --older-than-days 30
 
 # Remove cached audio (.mp3) that is regenerable from a video source. This does
 # not delete the stored chord analysis; a later reanalysis may recreate the
 # audio cache. Refused while an analysis worker is active.
-~/.venvs/chordflask/bin/python scripts/chordflask_storage.py cleanup /path/to/music --cached-audio
+scripts/chordflask-maintain storage cleanup /path/to/music --cached-audio
 ```
 
 Valid analysis JSON, source media, and user-edited data are never deleted.
@@ -95,10 +136,10 @@ Schema v3 stores independent named analysis tracks:
   and is not persisted.
 - Track selectors appear when multiple choices are available.
 
-The default chord analysis uses the Vamp Chordino plugin. The command-line
-analyzer additionally accepts an optional `madmom` mode, but `madmom` is not
-installed by the default or optional dependency sets; it must be installed
-separately to use that path.
+The default chord analysis uses the Vamp Chordino plugin. An older,
+experimental `madmom` analyzer path exists in the internal analyzer modules,
+but it is not installed by the default or optional dependency sets and is not
+part of the normal `chordflask-analyze` workflow.
 
 Schema v1, v2, and unversioned files remain readable. The next normal save
 writes schema v3. Reanalysis validates replacement data before atomically
@@ -115,7 +156,7 @@ unchanged.
 Start with nearest-beat display instead:
 
 ```bash
-~/.venvs/chordflask/bin/python flask/chordflask.py --no-metric-chords
+scripts/chordflask.sh --no-metric-chords
 ```
 
 A read-only diagnostic reports rhythm classification and displayed beats that
@@ -147,10 +188,46 @@ separate, count-aligned row marked once as `Auftakt (Zählzeiten …)`. Incomple
 final measures and an unpaired last measure contain only empty remainder
 fields. Analyses without usable beat numbers fall back to the meter (or four
 beats per measure). Chord qualities, extensions, slash basses, `N`, and `X`
-remain unchanged. The batch helper documented in the README writes the same
-format.
+remain unchanged. The command-line export below writes the same format.
 
 The PDF keeps the Markdown beat text verbatim and uses four framed measures per
 row, 15 rows per page, bar numbers, continuation headings, and automatically
 fitted monospace chords. A pickup has its own `Auftakt` box before measure 1;
 incomplete endings retain a full measure box with empty remaining beat fields.
+
+## Command-line export
+
+The same leadsheet export is available as a command:
+
+```bash
+scripts/chordflask-export song.mp4
+scripts/chordflask-export /music/videos
+scripts/chordflask-export --format markdown song.mp4
+scripts/chordflask-export --format pdf song.mp4
+scripts/chordflask-export --format both song.mp4
+```
+
+The default format is `both` (Markdown and PDF). A directory is processed
+non-recursively; a missing analysis is created serially only when needed, and a
+second run reuses it. One failing file does not stop later files.
+
+Options:
+
+- `--chord-track auto|original|edited|TRACK_ID` — which chord track to export
+  (default `auto` = Edited when present, otherwise Chordino). Use a named track
+  ID such as `reference` to export that track.
+- `--rhythm-track TRACK_ID` — beat grid source (default `qm_barbeattracker`).
+- `--transpose N` — display transposition in semitones (default `0`).
+- `--sharps` — spell chord roots with sharps instead of flats.
+- `--unicode` — render accidentals as Unicode symbols.
+- `--repeat-mode changes|chords` — `changes` writes held beats as `-`,
+  `chords` writes every beat (default `changes`).
+- `--no-metric-chords` — use the unfiltered nearest-beat display instead of the
+  enabled-by-default rhythm-aware smoothing.
+
+Output files land beside the analysis, named
+`.chordflask/<name>-chords-<track>.md` and `.pdf`. Existing files are replaced
+atomically. The target media must already have an analysis (or ChordFlask
+creates one); a requested chord/rhythm track that is not present fails that
+file with an error. Exit code 0 means all exports succeeded, 1 means one or
+more files failed, and 2 means an invalid invocation.

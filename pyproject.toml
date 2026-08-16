@@ -1,6 +1,7 @@
 [tool.ruff]
 line-length = 110
 target-version = "py312"
+extend-exclude = ["flask/helpers/private/**", "chordflask_btc/model/**"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "B"]
@@ -10,9 +11,6 @@ ignore = []
 "scripts/*.py" = ["E402"]
 "tests/*.py" = ["E402"]
 "flask/chordflask.py" = ["E402"]
-"flask/helpers/chordanalyzer_mp.py" = ["F841"]
-"flask/helpers/chordanalyzer_quantized_patch.py" = ["F401", "F811", "F541", "F841", "B007"]
-"flask/helpers/liverecord.py" = ["F401", "F811"]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -1,6 +1,5 @@
 from pathlib import Path
 import re
-import subprocess
 import sys
 
 import pytest
@@ -9,7 +8,6 @@ from PIL import ImageDraw, ImageFont
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLASK_DIR = REPO_ROOT / "flask"
-HELPER = FLASK_DIR / "helpers" / "create_sheet_pdf.py"
 REFERENCE = REPO_ROOT / "tests" / "fixtures" / "chord_sheet_reference.md"
 
 if str(FLASK_DIR) not in sys.path:
@@ -126,30 +124,6 @@ def test_render_rejects_missing_or_empty_chord_blocks():
 def test_render_requires_bundled_fonts(tmp_path):
     with pytest.raises(FileNotFoundError, match="Bundled PDF font"):
         ChordSheetPdfRenderer(font_dir=tmp_path)
-
-
-def test_pdf_cli_supports_default_and_output_option(tmp_path):
-    source = tmp_path / "song.md"
-    source.write_text(REFERENCE.read_text(encoding="utf-8"), encoding="utf-8")
-    explicit = tmp_path / "explicit.pdf"
-
-    default_run = subprocess.run(
-        [sys.executable, str(HELPER), str(source)],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
-    explicit_run = subprocess.run(
-        [sys.executable, str(HELPER), str(source), "-o", str(explicit)],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
-
-    assert default_run.returncode == 0, default_run.stderr
-    assert explicit_run.returncode == 0, explicit_run.stderr
-    assert source.with_suffix(".pdf").read_bytes().startswith(b"%PDF")
-    assert explicit.read_bytes().startswith(b"%PDF")
 
 
 def test_bundled_fonts_are_open_licensed_and_loadable():

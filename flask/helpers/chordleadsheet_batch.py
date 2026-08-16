@@ -35,6 +35,12 @@ _BUILTIN_TRACK_NAMES = {
     QM_RHYTHM_TRACK_ID: "QM Bar/Beat Tracker",
 }
 
+_FORMAT_FILES = {
+    "markdown": {"md"},
+    "pdf": {"pdf"},
+    "both": {"md", "pdf"},
+}
+
 
 class LeadsheetExportError(Exception):
     """A per-file failure with the completed analysis action, if any."""
@@ -44,14 +50,7 @@ class LeadsheetExportError(Exception):
         self.analysis_action = analysis_action
 
 
-def build_argument_parser():
-    parser = argparse.ArgumentParser(
-        description="Export playable Markdown leadsheets for all media in a directory."
-    )
-    parser.add_argument(
-        "directory",
-        help="Directory with MP3/MP4/WebM files (non-recursive)",
-    )
+def add_export_options(parser):
     parser.add_argument(
         "--chord-track",
         default="auto",
@@ -92,6 +91,24 @@ def build_argument_parser():
         action="store_true",
         help="Use the unfiltered nearest-beat chord display instead of metric smoothing",
     )
+    parser.add_argument(
+        "--format",
+        choices=("markdown", "pdf", "both"),
+        default="both",
+        help="Leadsheet format to write (default: both)",
+    )
+    return parser
+
+
+def build_argument_parser():
+    parser = argparse.ArgumentParser(
+        description="Export playable Markdown leadsheets for all media in a directory."
+    )
+    parser.add_argument(
+        "directory",
+        help="Directory with MP3/MP4/WebM files (non-recursive)",
+    )
+    add_export_options(parser)
     return parser
 
 
@@ -228,9 +245,12 @@ def export_file(media_path, args):
             file_repr.datapath,
             f"{file_repr.basename}-chords-{download_track_slug(chord_track_id)}",
         )
-        pdf = ChordSheetPdfRenderer().render_markdown(markdown)
-        _write_atomic(f"{output_stem}.md", markdown)
-        _write_atomic(f"{output_stem}.pdf", pdf)
+        formats = _FORMAT_FILES[getattr(args, "format", "both")]
+        pdf = ChordSheetPdfRenderer().render_markdown(markdown) if "pdf" in formats else None
+        if "md" in formats:
+            _write_atomic(f"{output_stem}.md", markdown)
+        if "pdf" in formats:
+            _write_atomic(f"{output_stem}.pdf", pdf)
     except LeadsheetExportError:
         raise
     except Exception as error:

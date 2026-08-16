@@ -44,7 +44,7 @@ The expected files are:
 To use another user-writable directory:
 
 ```bash
-scripts/install_vamp_plugins.sh --dest /path/to/vamp/plugins
+flask/install_vamp.sh --dest /path/to/vamp/plugins
 export VAMP_PATH=/path/to/vamp/plugins
 make run
 ```
@@ -67,7 +67,7 @@ are supported:
 ```bash
 NNLS_URL=https://example.invalid/nnls.tar.bz2 \
 QM_URL=https://example.invalid/qm.tar.gz \
-scripts/install_vamp_plugins.sh
+flask/install_vamp.sh
 ```
 
 ## Validation

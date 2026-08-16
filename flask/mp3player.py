@@ -1,12 +1,8 @@
-#!/usr/bin/env python3
-
-import sys
 import multiprocessing as mp
 import simpleaudio as sa
 from pydub import AudioSegment
 import time
 import tempfile
-from chordflask_base import ChordData  # Importing the ChordData class
 
 class MP3Player:
     def __init__(self, mp3_file, position_callback, chord_data=None):
@@ -83,21 +79,4 @@ class MP3Player:
 # Function to be called for displaying position
 def print_position(position):
     print(f"Current position: {position:.2f} seconds")
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: mp3player.py <mp3_file> <chord_data_file>")
-        sys.exit(1)
-
-    mp3_file = sys.argv[1]
-
-    # Load chord data if provided
-    chord_data = None
-    if len(sys.argv) > 2:
-        chord_data_file = sys.argv[2]
-        chord_data = ChordData()
-        chord_data.load_from_file(chord_data_file)
-
-    player = MP3Player(mp3_file, print_position, chord_data)
-    player.run()
 

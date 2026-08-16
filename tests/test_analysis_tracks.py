@@ -151,6 +151,35 @@ def test_v3_load_roundtrips_track_ids(tmp_path):
     assert track.chord_track_metadata("chordino") == {"model": "vamp"}
 
 
+def test_v3_loads_existing_btc_track(tmp_path):
+    path = _write_json(tmp_path / "btc.json", _v3_fixture(
+        chord_tracks={
+            "btc": {"chords": [{"timestamp": 0.0, "chord": "C:maj"}], "metadata": {"engine": "BTC"}},
+        },
+        rhythm_tracks={},
+    ))
+
+    track = _load_track(path)
+    assert "btc" in track.available_chord_track_ids
+    assert track.chord_track_metadata("btc") == {"engine": "BTC"}
+
+
+def test_v3_empty_rhythm_tracks_roundtrip_stays_empty(tmp_path):
+    path = _write_json(tmp_path / "empty_rhythm.json", _v3_fixture(
+        chord_tracks={
+            "chordino": {"chords": [{"timestamp": 0.0, "chord": "C"}], "metadata": {}},
+        },
+        rhythm_tracks={},
+    ))
+
+    track = _load_track(path)
+    out = tmp_path / "out.json"
+    track.save_to_file(str(out))
+
+    raw = json.loads(Path(out).read_text())
+    assert raw["rhythm_tracks"] == {}
+
+
 def test_v3_save_does_not_persist_beat_chord_indexes(tmp_path):
     track = ChordData()
     track.set_chord_track("chordino", [{"timestamp": 0.0, "chord": "A"}])

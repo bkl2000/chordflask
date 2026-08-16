@@ -75,9 +75,14 @@ def test_default_make_target_only_shows_documented_commands():
     assert "Show this help (no changes)" in output
 
 
-def test_public_makefile_has_no_btc_references():
+def test_public_makefile_has_btc_runtime_targets():
     text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "btc" not in text.lower()
+    assert "make setup-btc" in text
+    assert "make btc-check" in text
+    assert "scripts/setup-btc.sh" in text
+    assert "scripts/btc-check.sh" in text
+    # The public BTC package is linted/compiled like the other top-level packages.
+    assert "chordflask_btc" in text
     assert "EXTRA_HELP_ARGS" in text
 
 
@@ -106,7 +111,7 @@ def test_make_plugins_uses_configured_environment():
     )
 
     assert 'CHORDFLASK_VENV="/tmp/chordflask-plugins"' in output
-    assert "scripts/install_vamp_plugins.sh" in output
+    assert "flask/install_vamp.sh" in output
 
 
 def test_make_setup_dev_is_alias_for_setup():
@@ -252,23 +257,17 @@ def test_make_all_runs_fix_permissions_before_setup_before_check():
 def test_permission_contract_matches_repair_targets():
     executable_targets = (
         "scripts/chordflask.sh",
+        "scripts/chordflask-analyze",
+        "scripts/chordflask-export",
+        "scripts/chordflask-maintain",
         "scripts/fix_permissions.sh",
-        "scripts/install_vamp_plugins.sh",
         "scripts/run_tests.sh",
         "scripts/setup_venv.sh",
         "scripts/metric_chords_diff.py",
-        "scripts/compare_chord_json.py",
-        "scripts/chordflask_storage.py",
         "flask/build_standalone.sh",
-        "flask/helpers/webm2mp4",
-        "flask/helpers/youtube_donwload",
     )
     for rel in executable_targets:
         assert (REPO_ROOT / rel).stat().st_mode & stat.S_IXUSR, rel
-    assert not (
-        (REPO_ROOT / "flask/install_dependencies.sh").stat().st_mode
-        & stat.S_IXUSR
-    )
     assert not (REPO_ROOT / "flask/chordanalyzer.py").stat().st_mode & stat.S_IXUSR
 
 
@@ -276,7 +275,7 @@ def test_public_ci_installs_vamp_plugins_outside_repository():
     workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text()
 
     assert '--dest "${RUNNER_TEMP}/vamp"' in workflow
-    assert "bash scripts/install_vamp_plugins.sh" in workflow
+    assert "bash flask/install_vamp.sh" in workflow
     assert "--dest vendor/vamp/linux-x86_64" not in workflow
     assert 'CHORDIFIER_REQUIRE_VAMP: "1"' in workflow
     assert "CHORDIFIER_TEST_VAMP_PATH: ${{ runner.temp }}/vamp" in workflow
@@ -292,6 +291,18 @@ def test_launchers_delegate_worker_ownership_to_chordflask():
     for launcher in (source_launcher, standalone_builder):
         assert "--worker &" not in launcher
         assert "WORKER_PID" not in launcher
+
+
+def test_chordflask_launcher_resolves_project_venv():
+    launcher = (REPO_ROOT / "scripts/chordflask.sh").read_text()
+
+    assert 'DEFAULT_VENV_DIR="${HOME}/.venvs/chordflask"' in launcher
+    assert "CHORDFLASK_VENV" in launcher
+    assert "CHORDIFIER_VENV" in launcher
+    assert "LEGACY_VENV_DIR" in launcher
+    # The bare system-python fallback must be gone.
+    assert 'PYTHON_BIN="${PYTHON_BIN:-python3}"' not in launcher
+    assert 'PYTHON_BIN="${PYTHON_BIN:-${VENV_DIR}/bin/python}"' in launcher
 
 
 def test_fix_permissions_repairs_once_and_is_then_idempotent(tmp_path):

@@ -10,7 +10,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from analysis_storage import (  # noqa: E402
+from chordflask_maintain.storage import (  # noqa: E402
     PROTECTED,
     RECLAIMABLE,
     REVIEW,
@@ -110,6 +110,28 @@ def test_orphan_temp_dir_size_and_classification(tmp_path):
     assert by_name["orphan temp dirs"].status == REVIEW
     assert by_name["orphan temp dirs"].count == 2
     assert by_name["orphan temp dirs"].bytes == 250
+
+
+def test_convert_temp_file_classified_as_temporary(tmp_path):
+    media = tmp_path / "album"
+    _write(media / ".chordflask" / ".song.convert-abc123.mp3", 50)
+
+    inspection = inspect_storage(media)
+    by_name = {c.name: c for c in inspection.categories}
+    assert by_name["temporary files"].status == REVIEW
+    assert by_name["temporary files"].count == 1
+    assert by_name["temporary files"].bytes == 50
+
+
+def test_analysis_json_with_convert_stem_classified_as_analysis(tmp_path):
+    media = tmp_path / "album"
+    _write(media / ".chordflask" / "song.convert-demo.json", 40)
+
+    inspection = inspect_storage(media)
+    by_name = {c.name: c for c in inspection.categories}
+    assert "temporary files" not in by_name
+    assert by_name["analysis JSON"].status == PROTECTED
+    assert by_name["analysis JSON"].bytes == 40
 
 
 def test_chordy_is_not_inspected(tmp_path):

@@ -98,8 +98,9 @@ executable. Forward compatibility concerns:
 
 The core audio pipeline uses `librosa` for BPM/meter analysis and `vamp` for
 chord/beat extraction from the system Vamp host. The optional `pydub` path
-(used by `mp3player.py` and historical batch helpers) relies on Python's
-`audioop` module, which was removed from the standard library after Python 3.12.
+(used by the legacy `mp3player.py` playback module, which no longer runs as a
+standalone CLI) relies on Python's `audioop` module, which was removed from the
+standard library after Python 3.12.
 This path is not part of the default setup and is gated behind
 `CHORDIFIER_OPTIONAL=1`. Python 3.13+ users who need optional playback can
 either omit the optional group or install a third-party `audioop` backport.

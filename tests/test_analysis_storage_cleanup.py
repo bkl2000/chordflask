@@ -1,21 +1,11 @@
 import fcntl
 import os
-import subprocess
-import sys
 import time
-from pathlib import Path
 
 import pytest
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-SCRIPT = REPO_ROOT / "scripts" / "chordflask_storage.py"
-
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
-
-from analysis_storage import (  # noqa: E402
+from chordflask_maintain.storage import (  # noqa: E402
     cleanup_cached_audio,
     cleanup_corrupt_backups,
     cleanup_orphan_temp,
@@ -73,6 +63,31 @@ def test_convert_temp_file_removed(tmp_path):
     assert result.removed_count == 1
     assert result.removed_bytes == 50
     assert not temp.exists()
+
+
+def test_analysis_json_with_convert_stem_not_removed(tmp_path):
+    media = tmp_path / "album"
+    analysis = _write(media / ".chordflask" / "song.convert-demo.json", 40)
+
+    result = cleanup_orphan_temp(media)
+
+    assert result.removed_count == 0
+    assert analysis.exists()
+
+
+def test_similarly_named_non_temp_files_not_removed(tmp_path):
+    media = tmp_path / "album"
+    store = media / ".chordflask"
+    cache = _write(store / "song.convert-demo.mp3", 30)
+    xml = _write(store / "song.convert-demo.xml", 20)
+    non_hidden_mp3 = _write(store / "song.convert-abc123.mp3", 40)
+
+    result = cleanup_orphan_temp(media)
+
+    assert result.removed_count == 0
+    assert cache.exists()
+    assert xml.exists()
+    assert non_hidden_mp3.exists()
 
 
 def test_unrelated_hidden_directory_untouched(tmp_path):
@@ -389,38 +404,43 @@ def test_source_media_unchanged(tmp_path):
 # ── CLI validation ──────────────────────────────────────────────────
 
 
-def _run_cli(*args):
-    return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True,
+def _run_maintain_cli(capsys, *args):
+    from chordflask_maintain import cli
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(list(args))
+    return exc.value.code, capsys.readouterr()
+
+
+def test_cli_cleanup_requires_category(tmp_path, capsys):
+    media = tmp_path / "album"
+    media.mkdir()
+
+    code, captured = _run_maintain_cli(capsys, "storage", "cleanup", str(media))
+
+    assert code == 2
+    assert "cleanup category" in captured.err
+
+
+def test_cli_older_than_days_requires_corrupt_backups(tmp_path, capsys):
+    media = tmp_path / "album"
+    media.mkdir()
+
+    code, captured = _run_maintain_cli(
+        capsys, "storage", "cleanup", str(media), "--orphan-temp", "--older-than-days", "30"
     )
 
+    assert code == 2
+    assert "--older-than-days requires --corrupt-backups" in captured.err
 
-def test_cli_cleanup_requires_category(tmp_path):
+
+def test_cli_corrupt_backups_requires_age(tmp_path, capsys):
     media = tmp_path / "album"
     media.mkdir()
 
-    result = _run_cli("cleanup", str(media))
+    code, captured = _run_maintain_cli(
+        capsys, "storage", "cleanup", str(media), "--corrupt-backups"
+    )
 
-    assert result.returncode == 2
-    assert "cleanup category" in result.stderr
-
-
-def test_cli_older_than_days_requires_corrupt_backups(tmp_path):
-    media = tmp_path / "album"
-    media.mkdir()
-
-    result = _run_cli("cleanup", str(media), "--orphan-temp", "--older-than-days", "30")
-
-    assert result.returncode == 2
-    assert "--older-than-days requires --corrupt-backups" in result.stderr
-
-
-def test_cli_corrupt_backups_requires_age(tmp_path):
-    media = tmp_path / "album"
-    media.mkdir()
-
-    result = _run_cli("cleanup", str(media), "--corrupt-backups")
-
-    assert result.returncode == 2
-    assert "--older-than-days" in result.stderr
+    assert code == 2
+    assert "--older-than-days" in captured.err

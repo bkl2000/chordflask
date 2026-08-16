@@ -119,7 +119,12 @@ class ChordTrackRepository:
                 "chords": copy.deepcopy(chord_data._base_chords),
                 "metadata": {},
             }
-        if not rhythm_entries:
+        if not rhythm_entries and (
+            chord_data._bpm is not None
+            or chord_data._meter_signature is not None
+            or chord_data._beat_times
+            or chord_data._beat_numbers
+        ):
             rhythm_entries["qm_barbeattracker"] = {
                 "bpm": chord_data._bpm,
                 "meter_signature": chord_data._meter_signature,
