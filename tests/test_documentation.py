@@ -139,6 +139,23 @@ def test_readme_documents_command_line_tools_block():
     assert "Chordino is the built-in, default" in readme
 
 
+def test_readme_documents_responsive_support_and_lan_usage():
+    readme = (REPO_ROOT / "README.md").read_text()
+    text = re.sub(r"\s+", " ", readme)
+
+    assert (
+        "Responsive layouts for desktop, tablet and smartphone are included. "
+        "Mobile support is functional but still undergoing broader real-device "
+        "testing." in text
+    )
+    assert "CHORDIFIER_MEDIA_ROOTS" in readme
+    assert "--listen" in readme
+    assert "--port" in readme
+    assert "--listen 0.0.0.0 --port 5000" in text
+    assert "platform path separator" in readme
+    assert "not automatically exposed" in readme
+
+
 def test_analysis_doc_documents_command_line_analysis():
     analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
 

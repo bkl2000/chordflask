@@ -1071,8 +1071,18 @@ class FlaskMP4App:
         is_loopback = host in {"127.0.0.1", "localhost", "::1"}
         if not is_loopback and self.allowed_roots is None:
             raise ValueError(
-                f"{ALLOWED_MEDIA_ROOTS_ENV} must contain at least one directory "
-                "before ChordFlask can listen beyond loopback"
+                "Listening beyond localhost requires at least one allowed "
+                "media root.\n\n"
+                f"Set {ALLOWED_MEDIA_ROOTS_ENV}, for example:\n\n"
+                f"    {ALLOWED_MEDIA_ROOTS_ENV}=/home/user/Music "
+                "chordflask --listen 0.0.0.0\n\n"
+                "Multiple directories are separated using the platform path "
+                "separator:\n"
+                "    Linux/macOS: :\n"
+                "    Windows:     ;\n\n"
+                "Example with multiple directories:\n\n"
+                f"    {ALLOWED_MEDIA_ROOTS_ENV}=\"/home/user/Music:/mnt/media/videos\" "
+                "chordflask --listen 0.0.0.0"
             )
         debug = os.environ.get(DEBUG_ENV, "0") == "1"
         if debug and not is_loopback:
@@ -1122,7 +1132,11 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     quiet = args.worker
-    flask_app = FlaskMP4App(quiet=quiet, metric_chords=args.metric_chords)
+    try:
+        flask_app = FlaskMP4App(quiet=quiet, metric_chords=args.metric_chords)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from None
     flask_app.setup_vamp_plugins()
     if args.worker:
         from analysis_worker import AnalysisWorker
@@ -1137,6 +1151,9 @@ if __name__ == "__main__":
 
     try:
         flask_app.run(listen=args.listen, port=args.port)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from None
     finally:
         if supervisor:
             supervisor.stop()

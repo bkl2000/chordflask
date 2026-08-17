@@ -144,6 +144,9 @@ part of the portable bundle.
    playing the file. Press **A** and **B** to mark a loop segment and **⟳** to
    repeat it.
 
+Responsive layouts for desktop, tablet and smartphone are included. Mobile
+support is functional but still undergoing broader real-device testing.
+
 Generated JSON, MusicXML, MIDI, and cached audio are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
 permission for the media directory. Existing media files are not modified.
@@ -251,6 +254,25 @@ guide is included as `README.md` inside the archive.
 ChordFlask has no authentication, TLS, or CSRF protection. Keep the default
 `127.0.0.1` listener unless every device on the network is trusted. Read
 [SECURITY.md](SECURITY.md) before enabling LAN access.
+
+A LAN listener requires at least one allowed media root. Use `--listen` to
+select the bind address/interface and `--port` to select the TCP port:
+
+```bash
+CHORDIFIER_MEDIA_ROOTS=/home/user/Music \
+    chordflask --listen 0.0.0.0 --port 5000
+```
+
+Separate multiple roots with the platform path separator (`:` on
+Linux/macOS, `;` on Windows):
+
+```bash
+CHORDIFIER_MEDIA_ROOTS="/home/user/Music:/mnt/media/videos" \
+    chordflask --listen 0.0.0.0 --port 5000
+```
+
+Only media below these roots is served on the network. The home directory or
+the whole filesystem is not automatically exposed.
 
 ## More documentation
 

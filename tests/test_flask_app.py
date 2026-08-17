@@ -1,5 +1,6 @@
 import os
 import fcntl
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -168,6 +169,32 @@ def test_index_contains_accessible_previous_and_next_controls():
     assert ".playback-navigation button:disabled" in body
     assert "width: 32px" in body
     assert "height: 28px" in body
+
+
+def test_desktop_moves_navigation_into_playback_bar():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Desktop keeps the same navigation functions behind distinct IDs.
+    assert 'id="previousFileButtonBar"' in body
+    assert 'id="nextFileButtonBar"' in body
+    assert 'onclick="navigateFile(-1)"' in body
+    assert 'onclick="navigateFile(1)"' in body
+    # The desktop media query hides the header navigation and shows the bar
+    # navigation; mobile/tablet keep the header navigation.
+    assert "@media (min-width: 1024px)" in body
+    desktop_rule = body[body.index("@media (min-width: 1024px)"):]
+    assert ".bar-navigation" in desktop_rule
+    assert ".topbar .playback-navigation" in desktop_rule
+    assert "display: none" in desktop_rule
+    # Both pairs are kept disabled together.
+    update_function = body[
+        body.index("function updateNavigationButtons"):
+        body.index("function normalizedBatchLimit")
+    ]
+    assert "previousFileButtonBar.disabled" in update_function
+    assert "nextFileButtonBar.disabled" in update_function
 
 
 def test_manual_navigation_uses_visible_order_and_waits_for_analysis():
@@ -1226,6 +1253,60 @@ def test_run_rejects_lan_bind_without_allowed_roots(monkeypatch):
     assert called is False
 
 
+def test_lan_startup_without_media_roots_prints_clear_error():
+    env = dict(os.environ)
+    env.pop("CHORDIFIER_MEDIA_ROOTS", None)
+
+    result = subprocess.run(
+        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--no-worker",
+         "--listen", "0.0.0.0"],
+        capture_output=True, text=True, env=env,
+    )
+
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert "ERROR:" in result.stderr
+    assert "CHORDIFIER_MEDIA_ROOTS" in result.stderr
+    assert "allowed media root" in result.stderr
+    assert "Multiple directories" in result.stderr
+    assert "path separator" in result.stderr
+    assert "Linux/macOS" in result.stderr
+    assert "Windows" in result.stderr
+    assert "/home/user/Music:/mnt/media/videos" in result.stderr
+
+
+def test_lan_startup_rejects_invalid_media_root_without_traceback():
+    env = dict(os.environ)
+    env["CHORDIFIER_MEDIA_ROOTS"] = "/nonexistent/chordflask-root"
+
+    result = subprocess.run(
+        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--no-worker",
+         "--listen", "0.0.0.0"],
+        capture_output=True, text=True, env=env,
+    )
+
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert "ERROR:" in result.stderr
+    assert "Media root is not a directory" in result.stderr
+
+
+def test_lan_startup_rejects_empty_media_root_entry_without_traceback(tmp_path):
+    env = dict(os.environ)
+    env["CHORDIFIER_MEDIA_ROOTS"] = f"{tmp_path}{os.pathsep}"
+
+    result = subprocess.run(
+        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--no-worker",
+         "--listen", "0.0.0.0"],
+        capture_output=True, text=True, env=env,
+    )
+
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert "ERROR:" in result.stderr
+    assert "empty path entry" in result.stderr
+
+
 def test_run_no_security_warning_for_loopback(monkeypatch, capsys):
     app_wrapper, _ = make_client()
 
@@ -1584,3 +1665,139 @@ def test_chord_grid_stays_plain_text_with_one_container_reference():
         if "callbackContainer" in line and "getElementById" in line
     ]
     assert len(declarations) == 1
+
+
+def test_index_declares_mobile_viewport():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert '<meta name="viewport"' in body
+    assert 'width=device-width, initial-scale=1' in body
+
+
+def test_index_groups_song_playback_and_analysis_zones():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Song/file zone, playback zone, and analysis/display zone markers.
+    assert 'class="song-bar"' in body
+    assert 'id="currentPath"' in body
+    assert 'id="dirname"' in body
+    assert 'class="playback-controls"' in body
+    assert 'id="playPauseButton"' in body
+    assert 'class="chord-tools-row"' in body
+    assert 'class="display-tools"' in body
+    # Transpose now lives beside the chord display.
+    assert 'id="semitones"' in body
+
+
+def test_index_contains_mobile_menu_markup_and_rules():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'id="mobileMenuButton"' in body
+    assert 'aria-expanded="false"' in body
+    assert 'id="mobileMenuClose"' in body
+    assert "function toggleMobileMenu" in body
+    assert "function togglePlayPause" in body
+    assert "@media (max-width: 640px)" in body
+    assert "body.drawer-open .song-bar" in body
+
+
+def test_index_browse_prefers_current_directory_over_home():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert "function openBrowseRoots" in body
+    # Browse opens the current/known directory first and only falls back to
+    # the allowed roots (or HOME) when no current directory is available or
+    # it is not accessible.
+    assert "function browseDirectories" in body
+    assert "localStorage.getItem(storageKeys.dirname)" in body
+    assert "openBrowseRoots();" in body
+
+
+def test_index_keeps_track_switching_visible_with_labels():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'id="chordTrackSelect"' in body
+    assert 'id="rhythmTrackSelect"' in body
+    assert 'class="track-label"' in body
+    assert "function switchTrack(kind)" in body
+
+
+def test_index_file_browser_is_collapsible_and_below_playback():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Collapsible Files/Browse bar below the playback bar.
+    assert 'id="filesToggle"' in body
+    assert 'id="filePanel"' in body
+    assert 'class="files-toggle"' in body
+    assert "function toggleFilesPanel" in body
+    assert ".song-bar.open .file-panel" in body
+    # The song-bar must come after the playback control-bar in the document.
+    assert body.index('class="song-bar"') > body.index('class="control-bar"')
+
+
+def test_index_compact_desktop_controls_do_not_override_mobile():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Compact desktop file table and playback controls.
+    assert "font-size: 12px" in body
+    assert "max-height: clamp(152px, 22vh, 260px)" in body
+    # Mobile keeps larger touch targets.
+    assert "@media (max-width: 640px)" in body
+    assert "width: 44px" in body
+    assert "height: 38px" in body
+
+
+def test_mobile_hides_editing_controls():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Editing controls are hidden only inside the smartphone media query.
+    mobile_block = body[body.index("@media (max-width: 640px)"):]
+    assert "#editButton" in mobile_block
+    assert "#saveButton" in mobile_block
+    assert "#editTools" in mobile_block
+    assert "display: none" in mobile_block
+    # The reanalyze button stays available.
+    assert "#reanalyzeButton" in body
+
+
+def test_mobile_chord_reflow_is_guarded_and_safe():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert "function reflowGridForMobile" in body
+    assert "function splitGridLine" in body
+    assert "window.matchMedia('(max-width: 640px)')" in body
+    # The safe-split guard only splits on exact field boundaries and otherwise
+    # leaves a line unchanged, so a chord label is never cut.
+    assert "% 7 === 0" in body
+    assert "line.length % 14 === 0" in body
+
+
+def test_mobile_control_bar_stays_in_normal_flow_with_video_space():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    mobile_block = body[body.index("@media (max-width: 640px)"):]
+    # The playback bar must not overlay the video.
+    assert "position: sticky" not in mobile_block
+    # The video keeps a guaranteed visible height on mobile.
+    assert "height: clamp(120px, 34vw, 200px)" in mobile_block
+    assert "min-height: 120px" in mobile_block

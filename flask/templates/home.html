@@ -196,9 +196,8 @@
 
     .chord-header {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
+      flex-direction: column;
+      gap: 6px;
       padding: 6px 12px;
       border-bottom: 1px solid #2a3038;
       color: var(--chord-muted);
@@ -616,7 +615,7 @@
     }
 
     .file-table-wrap {
-      max-height: 172px;
+      max-height: clamp(152px, 22vh, 260px);
       overflow: auto;
       border: 1px solid var(--line);
       border-radius: 5px;
@@ -627,12 +626,12 @@
       width: 100%;
       border-collapse: collapse;
       table-layout: fixed;
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .file-table th,
     .file-table td {
-      padding: 6px 8px;
+      padding: 4px 8px;
       border-bottom: 1px solid #e2e7ec;
       text-align: left;
       white-space: nowrap;
@@ -646,7 +645,7 @@
       z-index: 1;
       background: #f2f5f8;
       color: var(--muted);
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
     }
 
@@ -716,6 +715,289 @@
       color: var(--muted);
       font-size: 12px;
       min-height: 15px;
+    }
+
+    .song-path {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    #currentPath:empty {
+      display: none;
+    }
+
+    #mobileMenuButton,
+    #mobileMenuClose {
+      display: none;
+      width: 44px;
+      height: 34px;
+      padding: 0;
+      font-size: 18px;
+      line-height: 32px;
+      background: transparent;
+      border-color: var(--line);
+      color: var(--text);
+    }
+
+    .song-bar {
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+    }
+
+    .files-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      height: 26px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .files-toggle:hover {
+      background: var(--panel-soft);
+      color: var(--accent-dark);
+    }
+
+    .files-toggle-chevron {
+      font-size: 11px;
+      transition: transform 0.12s ease;
+    }
+
+    .song-bar.open .files-toggle-chevron {
+      transform: rotate(90deg);
+    }
+
+    .file-panel {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      padding: 6px 10px 8px;
+      border-top: 1px solid var(--line);
+    }
+
+    .song-bar.open .file-panel {
+      display: flex;
+    }
+
+    .song-tools-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .song-bar .directory-tools {
+      flex: 1;
+      grid-template-columns: 1fr 1fr auto auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .song-bar .directory-tools input,
+    .song-bar .directory-tools select {
+      grid-column: auto;
+      height: 28px;
+      font-size: 13px;
+    }
+
+    .song-bar .directory-tools .browse-button,
+    .song-bar .directory-tools .load-button {
+      grid-column: auto;
+      grid-row: auto;
+      height: 28px;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+
+    .chord-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .chord-tools-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      text-transform: none;
+    }
+
+    .track-selectors {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      text-transform: none;
+      color: var(--chord-muted);
+    }
+
+    .track-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .track-label {
+      color: var(--chord-muted);
+      font-size: 11px;
+      text-transform: none;
+    }
+
+    .display-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .display-tools button {
+      height: 22px;
+      min-width: 22px;
+      padding: 0 6px;
+      border-color: #69727d;
+      background: transparent;
+      color: var(--chord-muted);
+      font-size: 12px;
+      line-height: 18px;
+      text-transform: none;
+    }
+
+    .display-tools button:hover:not(:disabled) {
+      border-color: #9eabb8;
+      background: #313944;
+      color: #fff;
+    }
+
+    .display-tools button.display-on {
+      background: #1b7a43;
+      border-color: #1b7a43;
+      color: #fff;
+    }
+
+    .chord-panel .transpose-control {
+      display: grid;
+      grid-template-columns: 24px 44px 24px;
+      gap: 3px;
+      align-items: center;
+    }
+
+    .chord-panel .transpose-control button {
+      width: 24px;
+      min-width: 24px;
+      height: 22px;
+      padding: 0;
+      border-color: #69727d;
+      background: transparent;
+      color: var(--chord-muted);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .chord-panel .transpose-control button:hover {
+      border-color: #9eabb8;
+      background: #313944;
+      color: #fff;
+    }
+
+    #semitones {
+      height: 22px;
+      padding: 0 2px;
+      text-align: center;
+      border: 1px solid #2a3038;
+      background: #1c2128;
+      color: #d0d8e0;
+      font-size: 12px;
+    }
+
+    .chord-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .playback-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .bar-navigation {
+      display: none;
+      flex: 0 0 auto;
+      gap: 6px;
+    }
+
+    .bar-navigation button {
+      width: 32px;
+      min-width: 32px;
+      height: 28px;
+      padding: 0;
+      font-size: 15px;
+      line-height: 26px;
+    }
+
+    .bar-navigation button:disabled,
+    .bar-navigation button:disabled:hover {
+      cursor: default;
+      border-color: #9ca8b4;
+      background: #b3bdc7;
+      opacity: 0.65;
+    }
+
+    #playPauseButton {
+      width: 30px;
+      height: 30px;
+      min-width: 30px;
+      padding: 0;
+      border-radius: 50%;
+      font-size: 13px;
+      line-height: 28px;
+    }
+
+    .control-bar .controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 4px 0;
+    }
+
+    .control-bar .loop-controls button,
+    .control-bar #repeatButton,
+    .control-bar #continueButton {
+      height: 28px;
+      font-size: 13px;
+    }
+
+    .control-bar .loop-controls button {
+      width: 30px;
+      min-width: 30px;
+    }
+
+    .control-bar #repeatButton,
+    .control-bar #continueButton {
+      padding: 0 10px;
     }
 
     @media (min-width: 801px) and (min-height: 600px) {
@@ -841,30 +1123,224 @@
         height: 34px;
       }
     }
+
+    @media (min-width: 801px) and (max-width: 1023px) {
+      .workspace {
+        grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
+      }
+
+      #callbackOutput {
+        font-size: clamp(13px, 1.5vw, 17px);
+      }
+    }
+
+    @media (min-width: 641px) and (max-width: 800px) {
+      #videoPlayer,
+      .audio-player-panel {
+        max-height: 300px;
+      }
+
+      #callbackContainer {
+        min-height: 420px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body {
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .app {
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        padding: 4px 0 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .topbar {
+        flex: 0 0 auto;
+        gap: 6px;
+        padding: 0 8px;
+      }
+
+      .song-path {
+        display: none;
+      }
+
+      #mobileMenuButton {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      .song-bar {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        margin: 0;
+        padding: 12px;
+        border-radius: 0;
+        overflow: auto;
+        background: var(--bg);
+      }
+
+      body.drawer-open .song-bar {
+        display: flex;
+      }
+
+      #filesToggle {
+        display: none;
+      }
+
+      body.drawer-open .song-bar .file-panel {
+        display: flex;
+      }
+
+      .song-bar .directory-tools input,
+      .song-bar .directory-tools select,
+      .song-bar .directory-tools .browse-button,
+      .song-bar .directory-tools .load-button {
+        height: 40px;
+        font-size: 16px;
+      }
+
+      .file-table th,
+      .file-table td {
+        padding: 8px;
+        font-size: 13px;
+      }
+
+      #mobileMenuClose {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      .workspace {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .chord-panel {
+        order: 1;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .video-panel {
+        order: 2;
+        flex: 0 0 auto;
+      }
+
+      #videoPlayer,
+      .audio-player-panel {
+        width: 100%;
+        height: clamp(120px, 34vw, 200px);
+        min-height: 120px;
+        aspect-ratio: auto;
+      }
+
+      #callbackContainer {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+
+      #callbackOutput {
+        font-size: clamp(12px, 4.6vw, 16px);
+      }
+
+      .chord-header {
+        padding: 4px 8px;
+      }
+
+      .chord-tools-row {
+        gap: 6px;
+      }
+
+      #editButton,
+      #saveButton,
+      #editTools {
+        display: none;
+      }
+
+      .control-bar {
+        flex: 0 0 auto;
+      }
+
+      .controls {
+        width: 100%;
+        padding: 4px;
+      }
+
+      .playback-controls {
+        gap: 6px;
+      }
+
+      #playPauseButton {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        line-height: 42px;
+      }
+
+      .control-bar .loop-controls button {
+        width: 38px;
+        min-width: 38px;
+        height: 38px;
+      }
+
+      .control-bar #repeatButton,
+      .control-bar #continueButton {
+        height: 38px;
+        padding: 0 8px;
+      }
+
+      .status {
+        display: none;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .bar-navigation {
+        display: flex;
+      }
+
+      .topbar .playback-navigation {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
   <main class="app">
     <header class="topbar">
       <h1 id="pageTitle">ChordFlask</h1>
+      <div class="song-path">
+        <span id="currentPath" title=""></span>
+      </div>
       <nav class="playback-navigation" aria-label="Playlist navigation">
         <button id="previousFileButton" type="button" onclick="navigateFile(-1)"
                 title="Previous file" aria-label="Previous file" disabled>&#x23EE;</button>
         <button id="nextFileButton" type="button" onclick="navigateFile(1)"
                 title="Next file" aria-label="Next file" disabled>&#x23ED;</button>
       </nav>
-      <nav class="loop-controls" aria-label="A-B loop">
-        <button id="loopStartButton" type="button" title="Set loop start (A) at the current position"
-                aria-label="Set loop start" onclick="setLoopStart()">A</button>
-        <button id="loopEndButton" type="button" title="Set loop end (B) at the current position"
-                aria-label="Set loop end" onclick="setLoopEnd()">B</button>
-        <button id="loopToggleButton" type="button" title="Toggle A-B loop"
-                aria-label="Toggle A-B loop" onclick="toggleLoop()">⟳</button>
-      </nav>
-      <div class="status">
-        <span id="currentPosition">Position: 0.00s</span>
-        <span id="bpmStatus">BPM: --</span>
-      </div>
+      <button id="mobileMenuButton" type="button" aria-label="Open menu"
+              aria-expanded="false" title="Menu">&#9776;</button>
     </header>
 
     <section class="workspace">
@@ -883,22 +1359,41 @@
 
       <aside class="chord-panel">
         <div class="chord-header">
-          <span>Chord Grid</span>
-          <div class="chord-status">
-            <span class="track-selectors">
-              <select id="chordTrackSelect" hidden onchange="switchTrack('chord')"
-                      aria-label="Select chord analysis source"></select>
-              <select id="rhythmTrackSelect" hidden onchange="switchTrack('rhythm')"
-                      aria-label="Select rhythm analysis source"></select>
-            </span>
-            <button id="editButton" type="button" title="Edit chords beat by beat"
-                    aria-label="Edit chords" hidden disabled>Edit</button>
-            <button id="saveButton" type="button" title="Download current chords as Markdown and PDF"
-                    aria-label="Download chords as Markdown and PDF" hidden disabled>Save</button>
-            <span id="queueStatus"></span>
-            <button id="reanalyzeButton" type="button" title="Chordino/QM reanalysis of current file"
-                    aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
+          <div class="chord-title-row">
+            <span>Chord Grid</span>
             <span id="fileStatus">No file loaded</span>
+          </div>
+          <div class="chord-tools-row">
+            <span class="track-selectors">
+              <span class="track-field">
+                <span class="track-label" hidden>Chord</span>
+                <select id="chordTrackSelect" hidden onchange="switchTrack('chord')"
+                        aria-label="Select chord analysis source"></select>
+              </span>
+              <span class="track-field">
+                <span class="track-label" hidden>Rhythm</span>
+                <select id="rhythmTrackSelect" hidden onchange="switchTrack('rhythm')"
+                        aria-label="Select rhythm analysis source"></select>
+              </span>
+            </span>
+            <span class="display-tools">
+              <span class="transpose-control">
+                <button type="button" onclick="stepSemitones(-1)" aria-label="Transpose down">-</button>
+                <input type="number" id="semitones" value="0" oninput="updateSemitones()" />
+                <button type="button" onclick="stepSemitones(1)" aria-label="Transpose up">+</button>
+              </span>
+              <button id="repeatDisplayButton" type="button" onclick="toggleRepeatDisplay()">Chords</button>
+              <button id="accidentalButton" type="button" onclick="toggleAccidentals()">Flats ♭</button>
+            </span>
+            <span class="chord-actions">
+              <button id="editButton" type="button" title="Edit chords beat by beat"
+                      aria-label="Edit chords" hidden disabled>Edit</button>
+              <button id="saveButton" type="button" title="Download current chords as Markdown and PDF"
+                      aria-label="Download chords as Markdown and PDF" hidden disabled>Save</button>
+              <span id="queueStatus"></span>
+              <button id="reanalyzeButton" type="button" title="Chordino/QM reanalysis of current file"
+                      aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
+            </span>
           </div>
         </div>
         <div id="callbackContainer">
@@ -919,8 +1414,39 @@
 
   <div class="control-bar">
     <div class="controls">
-      <div class="control">
-        <label for="dirname">Directory</label>
+      <div class="playback-controls">
+        <nav class="bar-navigation" aria-label="Playlist navigation">
+          <button id="previousFileButtonBar" type="button" onclick="navigateFile(-1)"
+                  title="Previous file" aria-label="Previous file" disabled>&#x23EE;</button>
+          <button id="nextFileButtonBar" type="button" onclick="navigateFile(1)"
+                  title="Next file" aria-label="Next file" disabled>&#x23ED;</button>
+        </nav>
+        <button id="playPauseButton" type="button" aria-label="Play" title="Play/Pause">&#9654;</button>
+        <nav class="loop-controls" aria-label="A-B loop">
+          <button id="loopStartButton" type="button" title="Set loop start (A) at the current position"
+                  aria-label="Set loop start" onclick="setLoopStart()">A</button>
+          <button id="loopEndButton" type="button" title="Set loop end (B) at the current position"
+                  aria-label="Set loop end" onclick="setLoopEnd()">B</button>
+          <button id="loopToggleButton" type="button" title="Toggle A-B loop"
+                  aria-label="Toggle A-B loop" onclick="toggleLoop()">⟳</button>
+        </nav>
+        <button id="repeatButton" type="button" onclick="toggleRepeat()">Repeat Off</button>
+        <button id="continueButton" type="button" onclick="toggleContinue()">Continue Off</button>
+        <div class="status">
+          <span id="currentPosition">Position: 0.00s</span>
+          <span id="bpmStatus">BPM: --</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="song-bar">
+    <button id="filesToggle" type="button" class="files-toggle" aria-expanded="false">
+      <span class="files-toggle-label">Files / Browse</span>
+      <span class="files-toggle-chevron" aria-hidden="true">&#9656;</span>
+    </button>
+    <div class="file-panel" id="filePanel">
+      <div class="song-tools-head">
         <div class="directory-tools">
           <input type="text" id="dirname" />
           <select id="storedDirs" onchange="selectStoredDirectory()">
@@ -929,8 +1455,8 @@
           <button class="browse-button" type="button" onclick="browseDirectories()">Browse</button>
           <button class="load-button" type="button" onclick="loadFiles({ autoload: false })">Load</button>
         </div>
+        <button id="mobileMenuClose" type="button" aria-label="Close menu">&#10005;</button>
       </div>
-
       <div class="control file-browser">
         <div class="browser-head">
           <label for="matchstring">Files</label>
@@ -969,21 +1495,8 @@
           </table>
         </div>
       </div>
-
-      <div class="control playback-tools">
-        <label for="semitones">Transpose</label>
-        <div class="transpose-control">
-          <button type="button" onclick="stepSemitones(-1)">-</button>
-          <input type="number" id="semitones" value="0" oninput="updateSemitones()" />
-          <button type="button" onclick="stepSemitones(1)">+</button>
-        </div>
-        <button id="repeatButton" type="button" onclick="toggleRepeat()">Repeat Off</button>
-        <button id="continueButton" type="button" onclick="toggleContinue()">Continue Off</button>
-        <button id="repeatDisplayButton" type="button" onclick="toggleRepeatDisplay()">Chords</button>
-        <button id="accidentalButton" type="button" onclick="toggleAccidentals()">Flats ♭</button>
-      </div>
     </div>
-  </div>
+  </section>
 
   <dialog id="editChordDialog" aria-labelledby="editChordDialogTitle">
     <div class="dialog-head" id="editChordDialogTitle">Edit chord <span id="editDialogBeat"></span></div>
@@ -1018,6 +1531,8 @@
     let rhythmTrackSelect = document.getElementById('rhythmTrackSelect');
     let previousFileButton = document.getElementById('previousFileButton');
     let nextFileButton = document.getElementById('nextFileButton');
+    let previousFileButtonBar = document.getElementById('previousFileButtonBar');
+    let nextFileButtonBar = document.getElementById('nextFileButtonBar');
     let loopStartButton = document.getElementById('loopStartButton');
     let loopEndButton = document.getElementById('loopEndButton');
     let loopToggleButton = document.getElementById('loopToggleButton');
@@ -1027,6 +1542,12 @@
     let saveButton = document.getElementById('saveButton');
     let undoEditButton = document.getElementById('undoEditButton');
     let resetEditButton = document.getElementById('resetEditButton');
+    let mobileMenuButton = document.getElementById('mobileMenuButton');
+    let mobileMenuClose = document.getElementById('mobileMenuClose');
+    let playPauseButton = document.getElementById('playPauseButton');
+    let currentPath = document.getElementById('currentPath');
+    let filesToggle = document.getElementById('filesToggle');
+    let songBar = document.querySelector('.song-bar');
 
     let isRepeating = false;
     let isContinuing = false;
@@ -1087,6 +1608,43 @@
     let saveRequestInFlight = false;
     let trackRequestInFlight = false;
 
+    function updateCurrentPath() {
+      const value = (dirnameInput.value || '').trim();
+      currentPath.textContent = value;
+      currentPath.title = value;
+    }
+
+    function toggleMobileMenu(open) {
+      const shouldOpen = open === undefined
+        ? !document.body.classList.contains('drawer-open')
+        : open;
+      document.body.classList.toggle('drawer-open', shouldOpen);
+      mobileMenuButton.setAttribute('aria-expanded', String(shouldOpen));
+    }
+
+    function toggleFilesPanel(open) {
+      const shouldOpen = open === undefined
+        ? !songBar.classList.contains('open')
+        : open;
+      songBar.classList.toggle('open', shouldOpen);
+      filesToggle.setAttribute('aria-expanded', String(shouldOpen));
+    }
+
+    function updatePlayPauseButton() {
+      const playing = !video.paused && !video.ended;
+      playPauseButton.textContent = playing ? '\u23f8' : '\u25b6';
+      playPauseButton.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
+    function togglePlayPause() {
+      if (video.paused) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+      updatePlayPauseButton();
+    }
+
     function updateTrackSelectors(payload) {
       const availableChord = payload.available_chord_tracks || [];
       const availableRhythm = payload.available_rhythm_tracks || [];
@@ -1108,6 +1666,8 @@
         });
         selectEl.value = activeId;
         selectEl.hidden = tracks.length <= 1;
+        const label = selectEl.closest('.track-field')?.querySelector('.track-label');
+        if (label) label.hidden = selectEl.hidden;
       }
 
       populateSelect(chordTrackSelect, chordTrackSelectOptions, activeChord);
@@ -1200,6 +1760,8 @@
       const currentIndex = currentFiles.findIndex(file => file.name === anchor);
       previousFileButton.disabled = currentIndex <= 0;
       nextFileButton.disabled = currentIndex < 0 || currentIndex >= currentFiles.length - 1;
+      previousFileButtonBar.disabled = currentIndex <= 0;
+      nextFileButtonBar.disabled = currentIndex < 0 || currentIndex >= currentFiles.length - 1;
     }
 
     function normalizedBatchLimit() {
@@ -1430,6 +1992,7 @@
     function selectStoredDirectory() {
       dirnameInput.value = storedDirsDropdown.value;
       localStorage.setItem(storageKeys.dirname, dirnameInput.value);
+      updateCurrentPath();
       loadFiles({ autoload: false });
     }
 
@@ -1442,11 +2005,11 @@
       selectedFileName = '';
       localStorage.setItem(storageKeys.dirname, path);
       localStorage.removeItem(storageKeys.file);
+      updateCurrentPath();
       loadFiles({ autoload: false });
     }
 
-    function browseDirectories() {
-      discardQueuedLoadIntents();
+    function openBrowseRoots() {
       fileStatus.innerText = 'Opening directory browser...';
       fetch('/browse_roots', {
         method: 'GET',
@@ -1470,6 +2033,7 @@
         currentFiles = [];
         selectedFileName = '';
         dirnameInput.value = '';
+        updateCurrentPath();
         renderBrowserTable(currentDirectories, currentFiles);
         updateBatchButton();
         fileStatus.innerText = roots.length ? 'Choose a media root' : 'No media roots available';
@@ -1477,6 +2041,52 @@
       .catch(error => {
         console.error('Error opening directory browser:', error);
         fileStatus.innerText = error.error || 'Directory browser error';
+      });
+    }
+
+    function browseDirectories() {
+      discardQueuedLoadIntents();
+      const startDir = (
+        dirnameInput.value.trim()
+        || currentDirectory
+        || localStorage.getItem(storageKeys.dirname)
+        || ''
+      ).trim();
+      if (!startDir) {
+        openBrowseRoots();
+        return;
+      }
+      fileStatus.innerText = 'Opening directory browser...';
+      fetch('/list_files', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store'
+        },
+        body: JSON.stringify({ dirname: startDir, matchstring: '', structured: true })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        dirnameInput.value = data.current_dir || startDir;
+        localStorage.setItem(storageKeys.dirname, dirnameInput.value);
+        updateCurrentPath();
+        currentDirectory = data.current_dir || startDir;
+        parentDirectory = data.parent_dir || '';
+        currentDirectories = data.directories || [];
+        currentFiles = data.files || [];
+        sortBrowserEntries();
+        selectedFileName = '';
+        fileStatus.innerText = `${currentDirectories.length} dirs, ${currentFiles.length} files`;
+        renderBrowserTable(currentDirectories, currentFiles);
+        updateBatchButton();
+      })
+      .catch(() => {
+        openBrowseRoots();
       });
     }
 
@@ -1521,6 +2131,7 @@
         currentFiles = data.files || [];
         sortBrowserEntries();
         dirnameInput.value = currentDirectory;
+        updateCurrentPath();
         fileStatus.innerText = `${currentDirectories.length} dirs, ${currentFiles.length} files`;
         selectPreferredFile(preferredFile);
         renderBrowserTable(currentDirectories, currentFiles);
@@ -2324,13 +2935,68 @@
     const pollingLeadSeconds = positionSyncIntervalMs / 2000;
     let estimatedRoundTripSeconds = 0;
 
+    function isNarrowViewport() {
+      return window.matchMedia('(max-width: 640px)').matches;
+    }
+
+    function splitGridLine(line) {
+      // The server renders each grid field as a fixed-width (7 char) cell;
+      // only the active beat uses a bracketed, variable-width cell. Split a
+      // row into two halves only when the boundary falls on a field edge so
+      // a chord label is never cut; otherwise leave the line unchanged.
+      if (!line) return [line];
+      const open = line.indexOf('[');
+      const close = open >= 0 ? line.indexOf(']', open + 1) : -1;
+      let splitIndex = -1;
+      if (open >= 0 && close >= 0) {
+        const prefixLen = open;
+        const suffixLen = line.length - close - 1;
+        if (prefixLen % 7 === 0 && suffixLen % 7 === 0) {
+          const prefixFields = prefixLen / 7;
+          const suffixFields = suffixLen / 7;
+          const totalFields = prefixFields + 1 + suffixFields;
+          if (totalFields % 2 === 0) {
+            const half = totalFields / 2;
+            if (half <= prefixFields) {
+              splitIndex = half * 7;
+            } else if (half === prefixFields + 1) {
+              splitIndex = close + 1;
+            } else {
+              splitIndex = close + 1 + (half - prefixFields - 1) * 7;
+            }
+          }
+        }
+      } else if (line.length % 14 === 0) {
+        splitIndex = line.length / 2;
+      }
+      if (splitIndex > 0 && splitIndex < line.length) {
+        return [line.slice(0, splitIndex), line.slice(splitIndex)];
+      }
+      return [line];
+    }
+
+    function reflowGridForMobile(text) {
+      const lines = text.split('\n');
+      if (lines.length < 2) {
+        return text;
+      }
+      const output = [lines[0]];
+      for (const line of lines.slice(1)) {
+        output.push(...splitGridLine(line));
+      }
+      return output.join('\n');
+    }
+
     function renderCallbackData(dataDict) {
       const data = dataDict["callback_output"] || [];
       const bpm = dataDict["bpm"];
       bpmStatus.innerText = bpm ? `BPM: ${bpm}` : 'BPM: --';
       const fullOutput = data.join('\n');
-      if (callbackOutput.innerText !== fullOutput) {
-        callbackOutput.innerText = fullOutput;
+      const displayOutput = isNarrowViewport()
+        ? reflowGridForMobile(fullOutput)
+        : fullOutput;
+      if (callbackOutput.innerText !== displayOutput) {
+        callbackOutput.innerText = displayOutput;
         callbackContainer.scrollTop = 0;
       }
       if (editMode && dataDict.edit_grid) {
@@ -2404,10 +3070,12 @@
         exitEditMode();
         syncPlaybackPosition(true);
         updateEditControls();
+        updatePlayPauseButton();
       });
       player.addEventListener('pause', () => {
         syncPlaybackPosition(true);
         updateEditControls();
+        updatePlayPauseButton();
       });
     });
 
@@ -2665,10 +3333,22 @@
       setInterval(refreshAnalysisQueueStatus, 2000);
 
       dirnameInput.value = savedDirname;
+      updateCurrentPath();
+      updatePlayPauseButton();
       document.getElementById('matchstring').value = savedFilter;
       document.getElementById('matchstring').addEventListener('keydown', event => {
         if (event.key === 'Enter') {
           loadFiles({ autoload: false });
+        }
+      });
+
+      playPauseButton.addEventListener('click', togglePlayPause);
+      mobileMenuButton.addEventListener('click', () => toggleMobileMenu());
+      mobileMenuClose.addEventListener('click', () => toggleMobileMenu(false));
+      filesToggle.addEventListener('click', () => toggleFilesPanel());
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          toggleMobileMenu(false);
         }
       });
 
