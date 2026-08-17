@@ -147,6 +147,18 @@ part of the portable bundle.
 Responsive layouts for desktop, tablet and smartphone are included. Mobile
 support is functional but still undergoing broader real-device testing.
 
+To use ChordFlask from a phone or tablet on the same trusted LAN, start
+ChordFlask on the host with an allowed media root and a LAN listener:
+
+```bash
+CHORDIFIER_MEDIA_ROOTS=/home/user/Music \
+    chordflask --listen 0.0.0.0 --port 5000
+```
+
+Then open `http://<host-ip>:5000` on the other device. ChordFlask has no
+authentication or TLS, so LAN access should only be enabled on a trusted
+network. See [Security](#security) for the media-root restrictions.
+
 Generated JSON, MusicXML, MIDI, and cached audio are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
 permission for the media directory. Existing media files are not modified.
