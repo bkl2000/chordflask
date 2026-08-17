@@ -224,6 +224,18 @@ def test_runtime_resolves_installed_wrapper():
     assert ".venvs/chordflask-btc" in str(wrapper_path())
 
 
+def test_predict_raw_uses_only_verified_default_checkpoint():
+    raw = (REPO_ROOT / "chordflask_btc" / "model" / "predict_raw.py").read_text(
+        encoding="utf-8"
+    )
+
+    # No unverified --model override may bypass the SHA-256 provenance check.
+    assert "add_argument(\"--model\"" not in raw
+    assert "args.model" not in raw
+    assert "DEFAULT_CHECKPOINT" in raw
+    assert "weights_only=False" in raw
+
+
 def test_btc_track_id_uses_shared_schema():
     import chordflask_base
 

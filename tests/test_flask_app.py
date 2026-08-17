@@ -1801,3 +1801,33 @@ def test_mobile_control_bar_stays_in_normal_flow_with_video_space():
     # The video keeps a guaranteed visible height on mobile.
     assert "height: clamp(120px, 34vw, 200px)" in mobile_block
     assert "min-height: 120px" in mobile_block
+
+
+def test_mobile_drawer_closes_on_media_file_selection():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    marker = "loadSelectedFile({ autoplay: true, analysisWaitReason: 'manual' });"
+    assert marker in body
+    after = body[body.index(marker):]
+    # A manual file selection closes the Files/Browse drawer on mobile;
+    # directory navigation keeps it open (openDirectory does not close it).
+    assert "toggleMobileMenu(false)" in after[:120]
+    assert "function openDirectory" in body
+
+
+def test_transpose_control_has_single_plus_minus_pair():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Exactly one minus and one plus transpose button, with a single value.
+    assert body.count('onclick="stepSemitones(-1)"') == 1
+    assert body.count('onclick="stepSemitones(1)"') == 1
+    assert body.count('id="semitones"') == 1
+    # The native number-input spinner is hidden so no duplicate +/- appears.
+    assert "#semitones::-webkit-outer-spin-button" in body
+    assert "#semitones::-webkit-inner-spin-button" in body
+    assert "-moz-appearance: textfield" in body
+    assert "appearance: textfield" in body

@@ -282,6 +282,24 @@ def test_public_ci_installs_vamp_plugins_outside_repository():
     assert "VAMP_PATH: ${{ runner.temp }}/vamp" in workflow
 
 
+def test_ci_core_check_runs_independently_of_vamp_download():
+    workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text()
+
+    core_section = workflow[workflow.index("  core:"):workflow.index("  vamp:")]
+    vamp_section = workflow[workflow.index("  vamp:"):]
+
+    # Core runs the ordinary project check without any external plugin download.
+    assert "make check" in core_section
+    assert "install_vamp.sh" not in core_section
+    assert "CHORDIFIER_REQUIRE_VAMP" not in core_section
+
+    # The separate Vamp job still installs plugins and runs the plugin
+    # integration tests with failures visible.
+    assert "install_vamp.sh" in vamp_section
+    assert 'CHORDIFIER_REQUIRE_VAMP: "1"' in vamp_section
+    assert "pytest tests/test_vamp_integration.py" in vamp_section
+
+
 def test_launchers_delegate_worker_ownership_to_chordflask():
     source_launcher = (REPO_ROOT / "scripts/chordflask.sh").read_text()
     standalone_builder = (REPO_ROOT / "flask/build_standalone.sh").read_text()

@@ -10,7 +10,10 @@ Contract:
 
 The checkpoint is loaded with ``torch.load(..., weights_only=False)`` only after
 ``setup-btc`` has verified its SHA-256; the model/checkpoint key sets are checked
-explicitly before a strict ``load_state_dict``.
+explicitly before a strict ``load_state_dict``. The wrapper always uses the
+verified default checkpoint (``btc_model_large_voca.pt``); there is no
+unverified ``--model`` override, so an arbitrary pickle-based checkpoint cannot
+bypass the provenance/hash guarantee.
 """
 
 from __future__ import annotations
@@ -111,7 +114,6 @@ def indices_to_events(predictions: list[int]) -> list[dict]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="BTC chord inference -> JSON on stdout")
     parser.add_argument("audio_file", help="Audio file (WAV/MP3/MP4/WebM)")
-    parser.add_argument("--model", default=None, help="Checkpoint path (default: large vocabulary)")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     args = parser.parse_args(argv)
 
@@ -120,7 +122,7 @@ def main(argv=None) -> int:
         print(f"ERROR: audio file not found: {audio_path}", file=sys.stderr)
         return 2
 
-    checkpoint = Path(args.model) if args.model else DEFAULT_CHECKPOINT
+    checkpoint = DEFAULT_CHECKPOINT
     if not checkpoint.is_file():
         print(f"ERROR: model not found: {checkpoint}", file=sys.stderr)
         return 2

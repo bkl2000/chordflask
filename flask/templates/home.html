@@ -927,6 +927,17 @@
       font-size: 12px;
     }
 
+    #semitones::-webkit-outer-spin-button,
+    #semitones::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    #semitones {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+
     .chord-actions {
       display: flex;
       align-items: center;
@@ -2263,6 +2274,7 @@
           selectedFileName = file.name;
           renderBrowserTable(currentDirectories, currentFiles);
           loadSelectedFile({ autoplay: true, analysisWaitReason: 'manual' });
+          toggleMobileMenu(false);
         });
 
         const nameCell = document.createElement('td');

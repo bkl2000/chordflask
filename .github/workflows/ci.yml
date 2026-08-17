@@ -14,7 +14,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg \
+            pkg-config \
+            vamp-plugin-sdk \
+            python3-venv \
+            python3-dev \
+            build-essential \
+            libasound2-dev \
+            libcairo2-dev
+
+      - name: Set up Python
+        run: |
+          python3 -m venv ~/.venvs/chordflask
+          ~/.venvs/chordflask/bin/python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install dependencies
+        run: |
+          CHORDFLASK_VENV=~/.venvs/chordflask bash scripts/setup_venv.sh --dev
+
+      - name: Check
+        run: |
+          CHORDFLASK_VENV=~/.venvs/chordflask make check
+
+  vamp:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -48,10 +81,11 @@ jobs:
           CHORDFLASK_VENV=~/.venvs/chordflask \
             bash flask/install_vamp.sh --dest "${RUNNER_TEMP}/vamp"
 
-      - name: Check
+      - name: Vamp integration
         env:
           CHORDIFIER_REQUIRE_VAMP: "1"
           CHORDIFIER_TEST_VAMP_PATH: ${{ runner.temp }}/vamp
           VAMP_PATH: ${{ runner.temp }}/vamp
         run: |
-          CHORDFLASK_VENV=~/.venvs/chordflask make check
+          CHORDFLASK_VENV=~/.venvs/chordflask \
+            ~/.venvs/chordflask/bin/python -m pytest tests/test_vamp_integration.py

@@ -116,9 +116,35 @@ def _resolve_media_files(target: Path) -> list[Path] | None:
     return None
 
 
+def _chordino_status(media: Path) -> str:
+    """Classify one media file for the Chordino analyzer.
+
+    A valid analysis JSON is not enough to call Chordino "current": in the
+    Schema-v3 multi-analyzer model, a file may carry only a BTC track. Chordino
+    is current only when both the built-in Chordino chord track and the QM
+    rhythm track are present.
+    """
+    from chordflask_base import (
+        DEFAULT_CHORD_TRACK,
+        DEFAULT_RHYTHM_TRACK,
+        ChordTrackRepository,
+        analysis_json_path,
+    )
+
+    json_path = analysis_json_path(media)
+    if not json_path.exists():
+        return "missing"
+    try:
+        repository = ChordTrackRepository().load(json_path)
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+        return "invalid"
+    has_chordino = DEFAULT_CHORD_TRACK in repository.available_chord_track_ids
+    has_rhythm = DEFAULT_RHYTHM_TRACK in repository.available_rhythm_track_ids
+    return "current" if (has_chordino and has_rhythm) else "todo"
+
+
 def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
     from analysis_worker import AnalysisWorker
-    from chordflask_base import analysis_json_path
 
     media_files = _resolve_media_files(target)
     if media_files is None:
@@ -129,17 +155,17 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
     total = len(media_files)
     for index, media in enumerate(media_files, 1):
         print(f"[{index}/{total}] {media.name}")
-        valid = AnalysisWorker._json_is_valid(analysis_json_path(media))
+        status = _chordino_status(media)
         if dry_run:
-            if valid and replace:
-                label = "REANALYZE"
-            elif valid:
-                label = "CURRENT"
+            if status == "current":
+                label = "REANALYZE" if replace else "CURRENT"
+            elif status == "invalid":
+                label = "INVALID"
             else:
                 label = "TODO"
             print(f"       {label}")
             continue
-        if valid and not replace:
+        if status == "current" and not replace:
             print("       SKIP: analysis already exists")
             counts["skipped"] += 1
             continue
@@ -148,7 +174,7 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
 
             worker = AnalysisWorker(analyzer_cls=ChordAnalyzer)
         try:
-            worker._analyze(media, force=replace and valid)
+            worker._analyze(media, force=status in ("current", "todo"))
         except Exception as exc:
             print(f"       ERROR: {exc}", file=sys.stderr)
             counts["failed"] += 1

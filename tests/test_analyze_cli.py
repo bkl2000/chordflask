@@ -1,5 +1,6 @@
 """Tests for the public ``chordflask-analyze`` CLI dispatcher."""
 
+import json
 import os
 import stat
 import subprocess
@@ -20,14 +21,9 @@ class FakeAnalysisWorker:
     """Records analyze calls without running any real analysis."""
 
     analyzed = []
-    valid = True
 
     def __init__(self, analyzer_cls=None):
         self.analyzer_cls = analyzer_cls
-
-    @classmethod
-    def _json_is_valid(cls, json_path):
-        return cls.valid
 
     def _analyze(self, media, force=False):
         type(self).analyzed.append((str(media), force))
@@ -36,7 +32,6 @@ class FakeAnalysisWorker:
 @pytest.fixture(autouse=True)
 def reset_fake_worker():
     FakeAnalysisWorker.analyzed = []
-    FakeAnalysisWorker.valid = True
     yield
 
 
@@ -44,6 +39,48 @@ def _patch_worker(monkeypatch):
     monkeypatch.setattr("analysis_worker.AnalysisWorker", FakeAnalysisWorker)
     monkeypatch.setattr(
         "chordflask_base.analysis_json_path", lambda media: media.parent / ".chordflask" / "x.json"
+    )
+
+
+_CHORD = [{"timestamp": 0.0, "chord": "C"}]
+_RHYTHM = {"bpm": 120.0, "meter_signature": 4, "beat_times": [0.0], "beat_numbers": [1]}
+
+
+def _analysis_path(media):
+    return media.parent / ".chordflask" / "x.json"
+
+
+def _write_analysis(media, *, chord_tracks=None, rhythm_tracks=None, invalid=False):
+    path = _analysis_path(media)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if invalid:
+        path.write_text("{ this is not valid json")
+        return
+    data = {
+        "schema_version": 3,
+        "chord_tracks": chord_tracks or {},
+        "rhythm_tracks": rhythm_tracks or {},
+    }
+    path.write_text(json.dumps(data))
+
+
+def _btc_only(media):
+    _write_analysis(media, chord_tracks={"btc": {"chords": _CHORD}})
+
+
+def _chordino_qm(media):
+    _write_analysis(
+        media,
+        chord_tracks={"chordino": {"chords": _CHORD}},
+        rhythm_tracks={"qm_barbeattracker": _RHYTHM},
+    )
+
+
+def _chordino_qm_btc(media):
+    _write_analysis(
+        media,
+        chord_tracks={"chordino": {"chords": _CHORD}, "btc": {"chords": _CHORD}},
+        rhythm_tracks={"qm_barbeattracker": _RHYTHM},
     )
 
 
@@ -182,9 +219,8 @@ def test_btc_hidden_when_backend_not_executable(monkeypatch, tmp_path):
 
 def test_chordino_file_analyzes_via_worker(monkeypatch, capsys, tmp_path):
     _patch_worker(monkeypatch)
-    FakeAnalysisWorker.valid = False  # no analysis yet
     media = tmp_path / "song.mp4"
-    media.write_bytes(b"x")
+    media.write_bytes(b"x")  # no analysis yet
 
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main([str(media)])
@@ -194,11 +230,11 @@ def test_chordino_file_analyzes_via_worker(monkeypatch, capsys, tmp_path):
     assert "OK" in capsys.readouterr().out
 
 
-def test_chordino_replace_with_existing_analysis_forces_reanalysis(monkeypatch, capsys, tmp_path):
+def test_chordino_replace_with_existing_chordino_forces_reanalysis(monkeypatch, capsys, tmp_path):
     _patch_worker(monkeypatch)
-    FakeAnalysisWorker.valid = True
     media = tmp_path / "song.mp4"
     media.write_bytes(b"x")
+    _chordino_qm(media)
 
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main(["--replace", str(media)])
@@ -209,7 +245,6 @@ def test_chordino_replace_with_existing_analysis_forces_reanalysis(monkeypatch, 
 
 def test_chordino_replace_without_analysis_is_first_run(monkeypatch, capsys, tmp_path):
     _patch_worker(monkeypatch)
-    FakeAnalysisWorker.valid = False  # no analysis yet
     media = tmp_path / "song.mp4"
     media.write_bytes(b"x")
 
@@ -221,11 +256,11 @@ def test_chordino_replace_without_analysis_is_first_run(monkeypatch, capsys, tmp
     assert "OK" in capsys.readouterr().out
 
 
-def test_chordino_skips_existing_analysis(monkeypatch, capsys, tmp_path):
+def test_chordino_skips_existing_chordino(monkeypatch, capsys, tmp_path):
     _patch_worker(monkeypatch)
-    FakeAnalysisWorker.valid = True
     media = tmp_path / "song.mp4"
     media.write_bytes(b"x")
+    _chordino_qm(media)
 
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main([str(media)])
@@ -237,7 +272,6 @@ def test_chordino_skips_existing_analysis(monkeypatch, capsys, tmp_path):
 
 def test_chordino_directory_dispatches(monkeypatch, capsys, tmp_path):
     _patch_worker(monkeypatch)
-    FakeAnalysisWorker.valid = False
     (tmp_path / "a.mp4").write_bytes(b"a")
     (tmp_path / "b.mp3").write_bytes(b"b")
 
@@ -256,14 +290,13 @@ def test_chordino_dry_run_classifies_without_side_effects(monkeypatch, capsys, t
     media = tmp_path / "song.mp4"
     media.write_bytes(b"x")
 
-    FakeAnalysisWorker.valid = False
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main(["--dry-run", str(media)])
     assert exc.value.code == 0
     assert "TODO" in capsys.readouterr().out
     assert FakeAnalysisWorker.analyzed == []
 
-    FakeAnalysisWorker.valid = True
+    _chordino_qm(media)
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main(["--dry-run", str(media)])
     assert exc.value.code == 0
@@ -275,6 +308,86 @@ def test_chordino_dry_run_classifies_without_side_effects(monkeypatch, capsys, t
     assert exc.value.code == 0
     assert "REANALYZE" in capsys.readouterr().out
     assert FakeAnalysisWorker.analyzed == []
+
+
+def test_chordino_btc_only_dry_run_reports_todo(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+    _btc_only(media)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--dry-run", str(media)])
+
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "TODO" in out
+    assert "CURRENT" not in out
+    assert FakeAnalysisWorker.analyzed == []
+
+
+def test_chordino_btc_only_runs_chordino_instead_of_skipping(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+    _btc_only(media)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(media)])
+
+    assert exc.value.code == 0
+    assert FakeAnalysisWorker.analyzed == [(str(media), True)]
+    assert "OK" in capsys.readouterr().out
+
+
+def test_chordino_chordino_qm_skips_as_current(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+    _chordino_qm(media)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(media)])
+
+    assert exc.value.code == 0
+    assert FakeAnalysisWorker.analyzed == []
+    assert "SKIP: analysis already exists" in capsys.readouterr().out
+
+
+def test_chordino_replace_preserves_foreign_tracks(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+    _chordino_qm_btc(media)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--replace", str(media)])
+
+    assert exc.value.code == 0
+    # --replace routes through the reanalysis path (force=True), which merges
+    # and preserves unrelated tracks such as BTC via __preserve_user_data.
+    assert FakeAnalysisWorker.analyzed == [(str(media), True)]
+
+
+def test_chordino_invalid_analysis_is_distinct_and_safe(monkeypatch, capsys, tmp_path):
+    _patch_worker(monkeypatch)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+    _write_analysis(media, invalid=True)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--dry-run", str(media)])
+
+    assert exc.value.code == 0
+    assert "INVALID" in capsys.readouterr().out
+    assert FakeAnalysisWorker.analyzed == []
+
+    # A normal run reanalyzes from scratch (force=False); the worker preserves
+    # the corrupt file and performs safe recovery.
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(media)])
+    assert exc.value.code == 0
+    assert FakeAnalysisWorker.analyzed == [(str(media), False)]
 
 
 def test_chordino_invalid_target_exits_two(monkeypatch, capsys, tmp_path):
