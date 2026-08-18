@@ -1,11 +1,11 @@
 """Portability contract for the user-facing helper scripts.
 
-``scripts/chordflask-analyze``, ``scripts/chordflask-demucs``,
-``scripts/chordflask-export``, and ``scripts/chordflask-maintain`` must work
-when copied or symlinked to an arbitrary location and invoked from any current
-working directory. They resolve the repository root through the
-``${VENV_DIR}/.chordflask-root`` marker written by setup, never through their
-own filesystem location.
+``scripts/chordflask``, ``scripts/chordflask-analyze``,
+``scripts/chordflask-demucs``, ``scripts/chordflask-export``, and
+``scripts/chordflask-maintain`` must work when copied or symlinked to an
+arbitrary location and invoked from any current working directory. They resolve
+the repository root through the ``${VENV_DIR}/.chordflask-root`` marker written
+by setup, never through their own filesystem location.
 """
 
 import os
@@ -21,6 +21,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 HELPERS = {
+    "chordflask": "ChordFlask chord analyzer web app",
     "chordflask-analyze": "chordflask-analyze",
     "chordflask-export": "chordflask-export",
     "chordflask-maintain": "chordflask-maintain",

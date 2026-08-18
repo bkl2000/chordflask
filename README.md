@@ -79,7 +79,8 @@ corrected beat by beat.
 
 ### Command-line tools
 
-ChordFlask provides a player and a small set of command-line tools:
+ChordFlask provides a player and a small set of command-line tools.
+Chordino is the built-in, default analyzer.
 
 | Command | Purpose |
 | --- | --- |
@@ -89,14 +90,27 @@ ChordFlask provides a player and a small set of command-line tools:
 | `chordflask-export` | Export analysis data |
 | `chordflask-maintain` | Inspect/clean generated data |
 
-The standalone `chordflask` binary is the player/frontend. The four helper
-scripts — `chordflask-analyze`, `chordflask-demucs`, `chordflask-export`, and
-`chordflask-maintain` — may be copied or symlinked to `~/bin`. Once `~/bin` is
-on your `PATH` they run from any working directory and locate the configured
-ChordFlask virtual environment themselves, so activating the venv is not
-normally required.
+`chordflask` is the interactive player (web frontend + analysis worker). Copy
+the commands you need into `~/bin` and make sure `~/bin` is on your `PATH`:
 
-In a source checkout, use the corresponding scripts under `scripts/`:
+**Source / virtualenv**
+
+```bash
+make all
+cp scripts/chordflask scripts/chordflask-{analyze,demucs,export,maintain} ~/bin/
+```
+
+**Standalone**
+
+```bash
+cp <standalone-dir>/chordflask ~/bin/
+```
+
+Either way, start the player from any directory with `chordflask`. The source
+launchers locate the configured ChordFlask virtual environment themselves, so
+activating the venv is not normally required.
+
+In a source checkout the same commands are also available under `scripts/`:
 
 ```bash
 # Start the player / web app

@@ -275,6 +275,7 @@ def test_make_all_runs_fix_permissions_before_setup_before_check():
 
 def test_permission_contract_matches_repair_targets():
     executable_targets = (
+        "scripts/chordflask",
         "scripts/chordflask.sh",
         "scripts/chordflask-analyze",
         "scripts/chordflask-export",
