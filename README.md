@@ -1,9 +1,10 @@
 # ChordFlask
 
-ChordFlask analyzes the chords and beats in MP3, MP4, and WebM files and shows
-them in sync while you play the song in the browser. The displayed chords can
-be transposed, corrected, compared, and exported as Markdown or PDF. Everything
-runs locally; media and analysis data are never uploaded.
+ChordFlask is a local-first automatic chord recognition tool. It analyzes the
+chords and beats in MP3, MP4, and WebM files and shows them in sync while you
+play the song in the browser. The displayed chords can be transposed,
+corrected, compared, and exported as Markdown or PDF. Everything runs locally;
+media and analysis data are never uploaded.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+ (CPython 3.12). Native Windows is not supported; Windows users can run
@@ -78,9 +79,24 @@ corrected beat by beat.
 
 ### Command-line tools
 
-The commands below cover the main workflows. Chordino is the built-in, default
-analyzer. The scripts are run from the repository root (they are not installed
-on your `PATH`).
+ChordFlask provides a player and a small set of command-line tools:
+
+| Command | Purpose |
+| --- | --- |
+| `chordflask` | Interactive player |
+| `chordflask-analyze` | Generate chord/beat analysis |
+| `chordflask-demucs` | Generate optional stems |
+| `chordflask-export` | Export analysis data |
+| `chordflask-maintain` | Inspect/clean generated data |
+
+The standalone `chordflask` binary is the player/frontend. The four helper
+scripts — `chordflask-analyze`, `chordflask-demucs`, `chordflask-export`, and
+`chordflask-maintain` — may be copied or symlinked to `~/bin`. Once `~/bin` is
+on your `PATH` they run from any working directory and locate the configured
+ChordFlask virtual environment themselves, so activating the venv is not
+normally required.
+
+In a source checkout, use the corresponding scripts under `scripts/`:
 
 ```bash
 # Start the player / web app
