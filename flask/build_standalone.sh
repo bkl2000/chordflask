@@ -59,6 +59,7 @@ pyinstaller \
     --copy-metadata=moviepy \
     --additional-hooks-dir=pyinstaller_hooks \
     --exclude-module=imageio_ffmpeg.binaries \
+    --exclude-module=chordflask_demucs \
     --exclude-module=chordleadsheet_batch \
     --add-data "templates:templates" \
     --add-data "assets:assets" \

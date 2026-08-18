@@ -51,7 +51,9 @@ videos/**/*.xml
 videos/**/*.mid
 videos/**/*.song
 videos/**/*.wav
+videos/**/*.flac
 videos/*.mp3
+videos/*.flac
 videos/*.mp4
 videos/*.webm
 videos/**/*.mp4
@@ -85,3 +87,7 @@ flask/vamp_plugins/**/*.tar.bz2
 !vendor/vamp/linux-x86_64/*.so
 !vendor/vamp/linux-x86_64/*.cat
 !vendor/vamp/linux-x86_64/*.n3
+
+# Personal/reference artifacts that stay local and are never published.
+demucs_audio/
+session.json

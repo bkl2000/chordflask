@@ -63,12 +63,15 @@ def test_default_make_target_only_shows_documented_commands():
         "check",
         "run",
         "worker",
+        "demucs",
         "standalone",
         "standalone-run",
         "plugins",
         "status",
         "clean",
         "clean-report",
+        "setup-demucs",
+        "demucs-check",
     )
     for target in known:
         assert f"make {target}" in output
@@ -84,6 +87,22 @@ def test_public_makefile_has_btc_runtime_targets():
     # The public BTC package is linted/compiled like the other top-level packages.
     assert "chordflask_btc" in text
     assert "EXTRA_HELP_ARGS" in text
+
+
+def test_public_makefile_has_optional_demucs_targets():
+    text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "make setup-demucs" in text
+    assert "make demucs-check" in text
+    assert "scripts/setup-demucs.sh" in text
+    assert "scripts/demucs-check.sh" in text
+    assert "chordflask-demucs" in text
+
+
+def test_demucs_is_not_a_normal_runtime_dependency():
+    for path in REPO_ROOT.glob("requirements*.txt"):
+        assert "demucs" not in path.read_text(encoding="utf-8").lower()
+    builder = (REPO_ROOT / "flask/build_standalone.sh").read_text(encoding="utf-8")
+    assert "--exclude-module=chordflask_demucs" in builder
 
 
 def test_make_setup_is_full_setup():
@@ -264,6 +283,9 @@ def test_permission_contract_matches_repair_targets():
         "scripts/run_tests.sh",
         "scripts/setup_venv.sh",
         "scripts/metric_chords_diff.py",
+        "scripts/chordflask-demucs",
+        "scripts/setup-demucs.sh",
+        "scripts/demucs-check.sh",
         "flask/build_standalone.sh",
     )
     for rel in executable_targets:

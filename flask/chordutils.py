@@ -537,7 +537,8 @@ def _format_grid_chord(chord, active=False, width=7):
 
 
 def render_chord_output(style, beat_time, chords=None, all_chords=None, active_index=0,
-                        repeat_mode="chords", beats_per_row=8, rows=8, active_row_start=None):
+                        repeat_mode="chords", beats_per_row=8, rows=8,
+                        active_row_start=None, rows_before_active=1):
     if style == "grid":
         return render_chord_grid(
             beat_time,
@@ -545,6 +546,7 @@ def render_chord_output(style, beat_time, chords=None, all_chords=None, active_i
             active_index,
             beats_per_row=beats_per_row,
             rows=rows,
+            rows_before_active=rows_before_active,
             repeat_mode=repeat_mode,
             active_row_start=active_row_start,
         )
@@ -559,6 +561,7 @@ def render_chord_grid(
     highlight_style="bracket",
     repeat_mode="chords",
     active_row_start=None,
+    rows_before_active=1,
 ):
     """
     Render a multiline grid of chords, preserving one chord per beat,
@@ -578,21 +581,18 @@ def render_chord_grid(
     total_chords = beats_per_row * rows
     if active_row_start is None:
         active_row_start = active_index - (active_index % beats_per_row)
-    start_index = active_row_start - beats_per_row
-    end_index = start_index + total_chords
-
-    display_chords = [
-        all_chords[idx] if 0 <= idx < len(all_chords) else (0, '')
-        for idx in range(start_index, end_index)
-    ]
+    start_index = max(
+        0,
+        active_row_start - max(rows_before_active, 0) * beats_per_row,
+    )
+    end_index = min(len(all_chords), start_index + total_chords)
 
     output_lines = []
-    for row in range(rows):
+    for row_start in range(start_index, end_index, beats_per_row):
         line = []
         for col in range(beats_per_row):
-            idx = row * beats_per_row + col
-            abs_idx = start_index + idx
-            _, chord = display_chords[idx]
+            abs_idx = row_start + col
+            chord = all_chords[abs_idx][1] if abs_idx < end_index else ""
             if repeat_mode == "changes" and chord and col != 0:
                 previous_index = abs_idx - 1
                 previous_chord = (

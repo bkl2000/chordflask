@@ -254,6 +254,12 @@ class AnalysisWorker:
             rhythm = current_track.rhythm_track_data(track_id)
             replacement_track.set_rhythm_track(track_id, **rhythm)
 
+        for track_id in current_track.available_audio_track_ids:
+            replacement_track.set_audio_track(
+                track_id,
+                current_track.audio_track_data(track_id),
+            )
+
         replacement_track.transpose(current_track.transpose_semitones)
         replacement_track.set_prefer_flats(current_track.prefer_flats)
         replacement_track.user_data = current_track.user_data

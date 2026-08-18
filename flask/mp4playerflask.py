@@ -11,9 +11,11 @@ import chordutils
 from chordflask_base import (
     DEFAULT_CHORD_TRACK,
     DEFAULT_RHYTHM_TRACK,
+    DEMUCS_STEM_NAMES,
     MADMOM_TRACK_ID,
     USER_EDITED_TRACK_ID,
 )
+from playbackview import GRID_MODES
 
 _BUILTIN_TRACK_NAMES = {
     DEFAULT_CHORD_TRACK: "Chordino",
@@ -27,17 +29,26 @@ _EDITED_SOURCE_RHYTHM = DEFAULT_RHYTHM_TRACK
 _EDIT_GRID_ROWS = 16
 _EDIT_GRID_MEASURES_PER_ROW = 2
 
+# Consumer-side identifier for the grouped Demucs stem set. It intentionally
+# matches the producer's AUDIO_SET_ID ("demucs:htdemucs") but is defined here
+# instead of importing the optional producer package, which stays out of the
+# player runtime.
+STEMS_AUDIO_SET_ID = "demucs:htdemucs"
+
 
 class MP4PlayerFlask:
     def __init__(self, file_repr, semitones=0, max_lines=30, sync_chords=True,
                  position_callback=None, use_unicode=False, display_chord_offset=0.0,
-                 metric_chords=False):
+                 metric_chords=False, grid_mode="compact"):
         self.file_repr = file_repr
         self.semitones = semitones
         self.max_lines = max_lines
         self.sync_chords = sync_chords
         self.display_chord_offset = display_chord_offset
         self.__metric_chords = metric_chords
+        if grid_mode not in GRID_MODES:
+            raise ValueError(f"grid_mode must be one of: {', '.join(sorted(GRID_MODES))}")
+        self.grid_mode = grid_mode
 
         self.chord_data = ChordData(use_unicode=use_unicode)
         self.song_data = None
@@ -53,10 +64,15 @@ class MP4PlayerFlask:
         self.position_callback = position_callback or self._default_callback
 
     def __build_playback_view(self):
+        repeat_mode = getattr(self.playback_view, "repeat_mode", "changes") if hasattr(
+            self, "playback_view"
+        ) else "changes"
         self.playback_view = PlaybackView(
             self.chord_data,
             display_chord_offset=self.display_chord_offset,
+            repeat_mode=repeat_mode,
             metric_chords=self.__metric_chords,
+            grid_mode=self.grid_mode,
         )
 
     def analysis_track_state(self):
@@ -152,6 +168,34 @@ class MP4PlayerFlask:
         return {
             "chord": state["available_chord_tracks"],
             "rhythm": state["available_rhythm_tracks"],
+        }
+
+    def audio_stems_state(self):
+        """Return the complete Demucs stem set, or None when unavailable.
+
+        Only a complete grouped set with all four expected FLAC stems is
+        reported. The player consumes the generic ChordData audio-track
+        contract and never imports the optional producer package.
+        """
+        cd = self.chord_data
+        if not cd.has_audio_track(STEMS_AUDIO_SET_ID):
+            return None
+        try:
+            set_data = cd.audio_track_data(STEMS_AUDIO_SET_ID)
+        except (KeyError, ValueError):
+            return None
+        tracks = set_data.get("tracks")
+        if not isinstance(tracks, dict):
+            return None
+        stems = []
+        for stem_name in DEMUCS_STEM_NAMES:
+            stem = tracks.get(stem_name)
+            if not isinstance(stem, dict) or stem.get("format") != "flac":
+                return None
+            stems.append(stem_name)
+        return {
+            "set_id": STEMS_AUDIO_SET_ID,
+            "stems": stems,
         }
 
     # ── chord editing ─────────────────────────────────────────────────
@@ -399,7 +443,16 @@ class MP4PlayerFlask:
         self.callback_output.append(output)
         self.last_index = rendered["index"]
 
-    def update_position(self, position):
+    def update_position(self, position, grid_mode=None):
+        if grid_mode is not None:
+            if grid_mode not in GRID_MODES:
+                raise ValueError(
+                    f"grid_mode must be one of: {', '.join(sorted(GRID_MODES))}"
+                )
+            if grid_mode != self.grid_mode:
+                self.grid_mode = grid_mode
+                self.__build_playback_view()
+                self.reset_render_cache()
         self.position_callback(position)
 
     def get_callback_output(self):

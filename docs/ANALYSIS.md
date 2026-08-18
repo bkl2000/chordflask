@@ -56,6 +56,38 @@ replaces Chordino. Without the runtime, `--analyzer btc` is not offered.
 Chordino and BTC are both stored in the analysis file and can be switched in
 the browser with the chord-track selector.
 
+### Optional Demucs stems
+
+Demucs is a separate optional batch path, not a chord analyzer and not part of
+the normal worker workflow:
+
+```bash
+make setup-demucs
+make demucs-check
+scripts/chordflask-demucs --dry-run /music/videos
+scripts/chordflask-demucs /music/videos
+```
+
+The command runs the fixed `htdemucs` model serially and stores `bass`,
+`drums`, `other`, and `vocals` as one atomic
+`audio_tracks["demucs:htdemucs"]` set. `CURRENT` requires all four FLAC files,
+their hashes and audio metadata, the current source hash, and the current
+pipeline metadata. `TODO` is processed normally; `STALE` is left unchanged
+unless `--replace` is used; malformed JSON is never overwritten.
+
+The source is first decoded to a canonical 44.1 kHz stereo reference. Stem
+sample counts are checked against it and small bounded tail differences are
+recorded if normalized. FFprobe's original container audio-stream start time,
+PTS, time base, and container start time are retained in set metadata when
+available. They are informational only: no playback offset or video correction
+is applied, and the stems are aligned to the decoded canonical source audio.
+
+In the player, a song with a complete set shows a **STEMS** control. The four
+stems play as slave audio sources following the original media master
+timeline; per-stem mute and a single shared volume slider are provided. See
+[docs/DEMUCS.md](DEMUCS.md) for the full workflow and the
+`chordflask-maintain stems` maintenance commands.
+
 ## Batch queue
 
 **Queue next** adds up to N new analyses from the current visible file list.
@@ -84,7 +116,8 @@ scanned recursively.
 ## Stored analysis
 
 Each media directory receives a `.chordflask` subdirectory containing generated
-JSON, MusicXML, MIDI, and intermediate audio. ChordFlask does not alter the
+JSON, MusicXML, MIDI, intermediate audio, and optional Demucs FLAC generations.
+ChordFlask does not alter the
 source media file.
 
 The queue, worker lock, and logs live in `~/.chordflask` in your home
@@ -124,7 +157,8 @@ are replaced atomically, and valid JSON is published last as the completion
 marker. A process interruption can therefore delay a job but cannot make a
 partial analysis appear complete.
 
-Schema v3 stores independent named analysis tracks:
+Schema v3 stores independent named analysis tracks and optional grouped audio
+track sets:
 
 - Chord tracks contain timestamped chord labels. Built-in analysis produces a
   `chordino` track.
@@ -135,6 +169,10 @@ Schema v3 stores independent named analysis tracks:
 - Beat-to-chord alignment is derived from the selected chord/rhythm combination
   and is not persisted.
 - Track selectors appear when multiple choices are available.
+- Optional Demucs output is one `demucs:htdemucs` audio set containing all four
+  aligned FLAC stems (`bass`, `drums`, `other`, `vocals`). The player exposes a
+  **STEMS** control for any song with a complete set; the four stems play as
+  slave audio following the original media master timeline.
 
 The default chord analysis uses the Vamp Chordino plugin. An older,
 experimental `madmom` analyzer path exists in the internal analyzer modules,

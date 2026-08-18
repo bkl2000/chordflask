@@ -6,9 +6,15 @@ from chordutils import render_chord_output
 from metric_chords import filter_metric_chords, format_classification_diagnostic
 
 
+_GRID_SETTINGS = {
+    "compact": (13, 2),
+    "desktop": (21, 2),
+}
+GRID_MODES = frozenset(_GRID_SETTINGS)
+
+
 class PlaybackView:
     __GRID_MEASURES_PER_ROW = 2
-    __GRID_ROWS = 16
 
     def __init__(
         self,
@@ -17,12 +23,14 @@ class PlaybackView:
         use_beat_sync=True,
         repeat_mode="changes",
         metric_chords=False,
+        grid_mode="compact",
     ):
         self.chord_data = chord_data
         self.display_chord_offset = display_chord_offset
         self.use_beat_sync = use_beat_sync
         self.repeat_mode = repeat_mode
         self.__metric_chords = metric_chords
+        self.grid_mode = self.__validate_grid_mode(grid_mode)
         self.__suppressed_beats = set()
 
         if self.__metric_chords:
@@ -58,6 +66,12 @@ class PlaybackView:
                 result[i] = (result[i][0], result[i - 1][1])
         return result
 
+    @staticmethod
+    def __validate_grid_mode(grid_mode):
+        if grid_mode not in GRID_MODES:
+            raise ValueError(f"grid_mode must be one of: {', '.join(sorted(GRID_MODES))}")
+        return grid_mode
+
     def full_beat_view(self):
         """Return one displayed chord per beat after the metric filter."""
         beat_chords = self.chord_data.get_chords_per_beat()
@@ -84,6 +98,7 @@ class PlaybackView:
             logging.info(f"PlaybackView current index too big: {current_index}")
             return None
 
+        grid_rows, rows_before_active = _GRID_SETTINGS[self.grid_mode]
         beat_time = self.chord_data.beat_times[current_index]
         chords = full_chords[current_index:current_index + 4]
         output = render_chord_output(
@@ -96,7 +111,8 @@ class PlaybackView:
                 (self.chord_data.meter_signature or 4)
                 * self.__GRID_MEASURES_PER_ROW
             ),
-            rows=self.__GRID_ROWS,
+            rows=grid_rows,
+            rows_before_active=rows_before_active,
             active_row_start=self.chord_data.get_grid_row_start(current_index),
             repeat_mode=self.repeat_mode
         )

@@ -27,6 +27,50 @@ def _write_track(path, chord, *, transpose=0, prefer_flats=True, user_data=None)
     return track
 
 
+def _audio_track_set(provider, model, seed):
+    return {
+        "provider": provider,
+        "model": model,
+        "tracks": {
+            stem: {
+                "path": f".chordflask/stems/{model}/song/generation-{seed}/{stem}.flac",
+                "format": "flac",
+                "sample_rate": 44100,
+                "channels": 2,
+                "sample_count": 44100,
+                "duration": 1.0,
+                "size": 100 + index,
+                "sha256": f"{seed}{index + 1:063x}",
+            }
+            for index, stem in enumerate(("bass", "drums", "other", "vocals"))
+        },
+        "metadata": {
+            "source": {
+                "sha256": f"{seed}a" * 32,
+                "size": 1000 + seed,
+                "sample_rate": 44100,
+                "channels": 2,
+                "sample_count": 44100,
+                "duration": 1.0,
+            },
+            "sync": {
+                "reference": "canonical_extracted_audio",
+                "start_sample": 0,
+                "source_sample_count": 44100,
+                "stem_sample_count": 44100,
+                "max_tail_delta_samples": 2205,
+                "tail_adjustment_samples": {
+                    "bass": 0,
+                    "drums": 0,
+                    "other": 0,
+                    "vocals": 0,
+                },
+            },
+            "source_timeline": {"available": False},
+        },
+    }
+
+
 def test_worker_preserves_corrupt_existing_analysis_before_reanalysis(tmp_path):
     media, queue, analysis_dir = _setup_job(tmp_path)
     json_path = analysis_dir / "song.json"
@@ -214,6 +258,10 @@ def test_worker_preserves_foreign_tracks_during_reanalysis(tmp_path):
     current.transpose(-2)
     current.set_prefer_flats(False)
     current.user_data = {"note": "keep"}
+    demucs_set = _audio_track_set("demucs", "htdemucs", 1)
+    current.set_audio_track("demucs:htdemucs", demucs_set)
+    reference_set = _audio_track_set("reference", "manual", 2)
+    current.set_audio_track("custom:ref", reference_set)
     current.save_to_file(json_path)
 
     class ReplacementAnalyzer:
@@ -242,6 +290,9 @@ def test_worker_preserves_foreign_tracks_during_reanalysis(tmp_path):
     assert merged.transpose_semitones == -2
     assert merged.prefer_flats is False
     assert merged.user_data == {"note": "keep"}
+    assert merged.available_audio_track_ids == ["custom:ref", "demucs:htdemucs"]
+    assert merged.audio_track_data("demucs:htdemucs") == demucs_set
+    assert merged.audio_track_data("custom:ref") == reference_set
 
 
 def test_failed_forced_reanalysis_keeps_old_json_and_cleans_temporary_files(tmp_path):

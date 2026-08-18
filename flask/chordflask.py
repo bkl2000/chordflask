@@ -32,7 +32,10 @@ from filerepr import FileRepr  # Import FileRepr class for file path management
 from ffmpeg_runtime import require_system_ffmpeg
 from media_library import preferred_media_files
 
-from mp4playerflask import MP4PlayerFlask  # Import the MP4PlayerFlask class
+from mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4PlayerFlask class
+from playbackview import GRID_MODES
+
+from chordflask_base import DEMUCS_STEM_NAMES
 
 
 def _load_version():
@@ -123,6 +126,7 @@ class FlaskMP4App:
         self.file_repr = None
         self.player = None
         self.old_current_position = 0
+        self.old_grid_mode = "compact"
         self.current_position = 0
         self.total_duration = 600  # Example: 600 seconds (10 minutes)
         self.max_lines = 23  # Limit to the last 23 lines of callback output
@@ -361,6 +365,7 @@ class FlaskMP4App:
         self.app.add_url_rule('/load_file', 'load_file', self.load_file, methods=['POST'])
         self.app.add_url_rule('/reanalyze', 'reanalyze', self.reanalyze, methods=['POST'])
         self.app.add_url_rule('/video', 'serve_video', self.serve_video)
+        self.app.add_url_rule('/stem/<stem_name>', 'serve_stem', self.serve_stem)
         self.app.add_url_rule('/get_callback_output', 'get_callback_output', self.get_callback_output, methods=['GET'])
         self.app.add_url_rule('/set_position', 'set_position', self.set_position, methods=['POST'])
         self.app.add_url_rule('/update_semitones', 'update_semitones', self.update_semitones, methods=['POST'])
@@ -636,6 +641,10 @@ class FlaskMP4App:
         ):
             self.player.select_analysis_tracks(chord_track_id="user_edited")
 
+        # The next position request must apply the current viewport mode to the
+        # newly created player, even when the media starts at the old position.
+        self.old_current_position = None
+        self.old_grid_mode = None
         state = self.player.analysis_track_state()
 
         return jsonify({
@@ -645,6 +654,7 @@ class FlaskMP4App:
             'json_file': self.file_repr.get("json") if self.file_repr.get("json") else None,
             'analysis_valid': analysis_valid,
             'title': f"ChordFlask - {filename}",
+            'stems': self.player.audio_stems_state(),
             **state,
         })
 
@@ -888,6 +898,46 @@ class FlaskMP4App:
             logging.error("Media file not found")
             return "Media file not found.", 404
 
+    def serve_stem(self, stem_name):
+        """Serve one FLAC stem of the currently loaded song's grouped set.
+
+        Only stems referenced by the loaded, validated audio-track set are
+        served. No arbitrary filesystem path is accepted: the stem name must be
+        one of the four expected names and the resolved path must stay inside
+        the media's ``.chordflask`` storage boundary (no traversal, no symlink
+        escape).
+        """
+        if self.file_repr is None or self.player is None:
+            return "Stem not available.", 404
+        if stem_name not in DEMUCS_STEM_NAMES:
+            return "Unknown stem.", 404
+        if not self.player.audio_stems_state():
+            return "Stems are not available for the current song.", 404
+        try:
+            set_data = self.player.chord_data.audio_track_data(STEMS_AUDIO_SET_ID)
+            stem = set_data["tracks"][stem_name]
+        except (KeyError, ValueError):
+            return "Stem not available.", 404
+
+        media_path = Path(self.file_repr.get())
+        storage_root = (media_path.parent / ANALYSIS_DIR_NAME).resolve()
+        try:
+            candidate = media_path.parent / Path(stem["path"])
+            if candidate.is_symlink():
+                return "Stem not available.", 404
+            resolved = candidate.resolve()
+        except (OSError, RuntimeError):
+            return "Stem not available.", 404
+        if not resolved.is_relative_to(storage_root):
+            return "Stem not available.", 404
+        if not resolved.is_file():
+            return "Stem not available.", 404
+
+        response = make_response(send_file(resolved, mimetype="audio/flac"))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+
     def get_callback_output(self):
         """
         Return the last lines of callback output from the MP4PlayerFlask instance.
@@ -912,20 +962,32 @@ class FlaskMP4App:
         include_edit_grid = data.get('include_edit_grid', False)
         if not isinstance(include_edit_grid, bool):
             return jsonify(error="include_edit_grid must be a boolean"), 400
+        grid_mode = data.get("grid_mode", "compact")
+        if not isinstance(grid_mode, str) or grid_mode not in GRID_MODES:
+            return jsonify(
+                error=f"grid_mode must be one of: {', '.join(sorted(GRID_MODES))}"
+            ), 400
         self.current_position = position
 
         # Avoid unnecessary updates if position hasn't changed
-        if self.old_current_position == self.current_position:
+        if (
+            self.old_current_position == self.current_position
+            and self.old_grid_mode == grid_mode
+        ):
             payload = self.player.get_callback_output() if self.player else {
                 "callback_output": [], "bpm": 100
             }
             payload["success"] = True
         else:
             self.old_current_position = self.current_position
+            self.old_grid_mode = grid_mode
             #logging.info(f"Setting video position to: {self.current_position} seconds")
 
             if self.player:
-                self.player.update_position(self.current_position)
+                self.player.update_position(
+                    self.current_position,
+                    grid_mode=grid_mode,
+                )
                 payload = self.player.get_callback_output()
                 payload["success"] = True
             else:

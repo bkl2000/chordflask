@@ -16,9 +16,11 @@ scripts/chordflask-maintain <subcommand> ...
 | Command | Effect |
 | --- | --- |
 | `storage report` | **read-only** — prints a report, deletes nothing |
+| `stems report` | **read-only** — reports Demucs stem storage, deletes nothing |
 | `validate` | **read-only** — checks JSON, changes nothing |
 | `doctor` | **read-only** — checks the installation, changes nothing |
 | `storage cleanup` | **modifies files** — deletes only explicitly requested leftovers |
+| `stems cleanup` | **modifies files** — deletes only unreferenced stem generations |
 | `migrate-schema` | **modifies files** — rewrites analysis JSON to schema v3 |
 
 ## Storage report
@@ -51,6 +53,33 @@ least one category flag is required:
   `--older-than-days N` (a positive number, required with this flag).
 
 Valid analysis JSON, source media, and user-edited data are never deleted.
+
+## Stems report
+
+```bash
+scripts/chordflask-maintain stems report /path/to/music
+```
+
+Reports, for the directory's optional Demucs stem storage, which media have a
+complete or incomplete `demucs:htdemucs` set, any missing referenced FLAC
+files, unreferenced ("orphan") generation directories, and the total and
+orphan disk usage. It is read-only and never follows symlinks.
+
+## Stems cleanup
+
+```bash
+scripts/chordflask-maintain stems cleanup /path/to/music --orphans
+scripts/chordflask-maintain stems cleanup /path/to/music --orphans --dry-run
+```
+
+Deletes only unreferenced generation directories under
+`.chordflask/stems/demucs/htdemucs/`. It never deletes a generation referenced
+by a valid analysis JSON, never touches chord/rhythm/user data, and never
+deletes anything outside the stem storage directory. Cleanup refuses (deleting
+nothing) when an analysis worker or a Demucs process is active, or when any
+actual analysis JSON is unreadable/invalid, because orphan status cannot then
+be proven safely. Non-analysis JSON files (for example `*.training.json`) do
+not block cleanup. `--dry-run` shows what would be removed without deleting.
 
 ## Migrate schema
 

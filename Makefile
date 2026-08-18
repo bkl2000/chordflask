@@ -14,6 +14,7 @@ VENV_PYTHON := $(VENV_DIR)/bin/python
 PYTHON_BIN ?=
 TEST_ARGS ?=
 ANALYZE_ARGS ?=
+DEMUCS_ARGS ?=
 EXPORT_ARGS ?=
 MAINTAIN_ARGS ?=
 EXTRA_TEST_DIRS ?=
@@ -24,7 +25,8 @@ EXTRA_PYTHONPATH ?=
 
 .PHONY: help all install setup setup-runtime setup-dev setup-recreate \
 	fix-permissions test check lint run worker standalone standalone-run \
-	plugins analyze export maintain setup-btc btc-check status clean clean-report
+	plugins analyze demucs export maintain setup-btc btc-check setup-demucs \
+	demucs-check status clean clean-report
 
 help:
 	@printf '%s\n' \
@@ -43,10 +45,13 @@ help:
 		'  make run                 Start the worker and web app' \
 		'  make worker              Start only the analysis worker' \
 		'  make analyze             Analyze media (chordflask-analyze)' \
+		'  make demucs              Create Demucs FLAC stem sets (optional runtime)' \
 		'  make export              Export leadsheets (chordflask-export)' \
 		'  make maintain            Maintain data/installation (chordflask-maintain)' \
 		'  make setup-btc           Set up the optional BTC analyzer runtime [installs]' \
 		'  make btc-check           Diagnose the optional BTC analyzer runtime' \
+		'  make setup-demucs        Set up the optional Demucs runtime [installs]' \
+		'  make demucs-check        Diagnose the optional Demucs runtime' \
 		'  make standalone          Check, build, and package the standalone release [long]' \
 		'  make standalone-run      Start an already-built standalone release' \
 		'  make plugins             Install Vamp plugins into the user plugin directory [network]' \
@@ -59,6 +64,7 @@ help:
 		'  VENV_DIR=/path           Virtual environment (default: ~/.venvs/chordflask)' \
 		'  PYTHON_BIN=python3.12     Interpreter used to create a virtual environment' \
 		'  TEST_ARGS="-q -k name"    Additional pytest arguments' \
+		'  DEMUCS_ARGS="--dry-run videos"  Arguments for make demucs' \
 		'  CHORDIFIER_PORT=5050      Port used by make run' \
 		'' \
 		'Examples:' \
@@ -96,13 +102,13 @@ test:
 check: test lint
 	@"$(VENV_PYTHON)" -m compileall -q "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" \
 		"$(ROOT_DIR)/tests" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" $(EXTRA_SRC_DIRS)
+		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" $(EXTRA_SRC_DIRS)
 	@git -C "$(ROOT_DIR)" diff --check
 
 lint:
 	@"$(VENV_PYTHON)" -m ruff check "$(ROOT_DIR)/flask" "$(ROOT_DIR)/tests" \
 		"$(ROOT_DIR)/scripts" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
+		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
 
 run:
 	@cd "$(ROOT_DIR)" && PYTHON_BIN="$(VENV_PYTHON)" bash scripts/chordflask.sh
@@ -112,6 +118,9 @@ worker:
 
 analyze:
 	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask-analyze" $(ANALYZE_ARGS)
+
+demucs:
+	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask-demucs" $(DEMUCS_ARGS)
 
 export:
 	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask-export" $(EXPORT_ARGS)
@@ -124,6 +133,12 @@ setup-btc:
 
 btc-check:
 	@bash "$(ROOT_DIR)/scripts/btc-check.sh"
+
+setup-demucs:
+	@bash "$(ROOT_DIR)/scripts/setup-demucs.sh"
+
+demucs-check:
+	@bash "$(ROOT_DIR)/scripts/demucs-check.sh"
 
 standalone: check
 	@PATH="$(VENV_DIR)/bin:$$PATH" bash "$(ROOT_DIR)/flask/build_standalone.sh"
@@ -155,11 +170,11 @@ clean:
 		"$(ROOT_DIR)/.coverage"
 	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
 		"$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" \
+		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
 		-type d -name __pycache__ -prune -exec rm -rf {} +
 	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
 		"$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" \
+		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
 		-type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
 clean-report:

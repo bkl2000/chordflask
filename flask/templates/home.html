@@ -945,6 +945,147 @@
       min-width: 0;
     }
 
+    #stemsButton {
+      width: auto;
+      min-width: 22px;
+      height: 20px;
+      padding: 0 6px;
+      border-color: #69727d;
+      background: transparent;
+      color: var(--chord-muted);
+      font-size: 12px;
+      line-height: 18px;
+      text-transform: none;
+    }
+
+    #stemsButton:hover:not(:disabled) {
+      border-color: #9eabb8;
+      background: #313944;
+      color: #fff;
+    }
+
+    #stemsButton.stem-on {
+      background: #1b7a43;
+      border-color: #1b7a43;
+      color: #fff;
+    }
+
+    .stem-toggles {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 4px 12px;
+      border-top: 1px solid #2a3038;
+      text-transform: none;
+    }
+
+    .stem-toggles[hidden] {
+      display: none;
+    }
+
+    .stem-label {
+      color: var(--chord-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .stem-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      height: 20px;
+      padding: 0 2px 0 6px;
+      border: 1px solid #69727d;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--chord-muted);
+      font-size: 12px;
+      line-height: 18px;
+      text-transform: none;
+    }
+
+    .stem-chip .stem-toggle,
+    .stem-chip .stem-level {
+      height: 18px;
+      padding: 0 4px;
+      border: none;
+      border-radius: 3px;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      line-height: 18px;
+      cursor: pointer;
+      text-transform: none;
+    }
+
+    .stem-chip .stem-level {
+      min-width: 24px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stem-chip-sep {
+      color: var(--chord-muted);
+      opacity: 0.55;
+    }
+
+    .stem-chip:hover {
+      border-color: #9eabb8;
+      background: #313944;
+      color: #fff;
+    }
+
+    .stem-chip.stem-on {
+      background: #1b7a43;
+      border-color: #1b7a43;
+      color: #fff;
+    }
+
+    .stem-chip.stem-off {
+      opacity: 0.45;
+      background: #1c2128;
+      border-color: #3a434e;
+      color: var(--chord-muted);
+    }
+
+    .stem-chip.stem-selected {
+      border-color: #7fc4ff;
+      box-shadow: 0 0 0 1px #7fc4ff;
+    }
+
+    .stem-mixer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 0;
+      text-transform: none;
+    }
+
+    .stem-mixer[hidden] {
+      display: none;
+    }
+
+    .stem-mixer-label {
+      color: var(--chord-muted);
+      font-size: 12px;
+      min-width: 28px;
+    }
+
+    .stem-mixer-value {
+      color: #d7e0ea;
+      font-size: 12px;
+      min-width: 34px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #stemMixerSlider {
+      width: 120px;
+      height: 20px;
+      margin: 0;
+      accent-color: #1b7a43;
+    }
+
     .playback-controls {
       display: flex;
       align-items: center;
@@ -1404,7 +1545,47 @@
               <span id="queueStatus"></span>
               <button id="reanalyzeButton" type="button" title="Chordino/QM reanalysis of current file"
                       aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
+              <button id="stemsButton" type="button" title="Toggle Demucs stem playback"
+                      aria-label="Toggle stem playback" aria-pressed="false" hidden
+                      onclick="toggleStems()">STEMS</button>
             </span>
+          </div>
+          <div class="stem-toggles" id="stemTogglesRow" hidden>
+            <span class="stem-label">Stems</span>
+            <span class="stem-chip stem-on" id="stemVocalsChip">
+              <button id="stemVocalsButton" class="stem-toggle" type="button"
+                      onclick="toggleStem('vocals')" aria-pressed="true" aria-label="Vocals">Voc</button>
+              <span class="stem-chip-sep">|</span>
+              <button id="stemVocalsLevel" class="stem-level" type="button"
+                      onclick="openStemMixer('vocals')" aria-label="Vocals volume">100</button>
+            </span>
+            <span class="stem-chip stem-on" id="stemDrumsChip">
+              <button id="stemDrumsButton" class="stem-toggle" type="button"
+                      onclick="toggleStem('drums')" aria-pressed="true" aria-label="Drums">Drm</button>
+              <span class="stem-chip-sep">|</span>
+              <button id="stemDrumsLevel" class="stem-level" type="button"
+                      onclick="openStemMixer('drums')" aria-label="Drums volume">100</button>
+            </span>
+            <span class="stem-chip stem-on" id="stemBassChip">
+              <button id="stemBassButton" class="stem-toggle" type="button"
+                      onclick="toggleStem('bass')" aria-pressed="true" aria-label="Bass">Bass</button>
+              <span class="stem-chip-sep">|</span>
+              <button id="stemBassLevel" class="stem-level" type="button"
+                      onclick="openStemMixer('bass')" aria-label="Bass volume">100</button>
+            </span>
+            <span class="stem-chip stem-on" id="stemOtherChip">
+              <button id="stemOtherButton" class="stem-toggle" type="button"
+                      onclick="toggleStem('other')" aria-pressed="true" aria-label="Other">Oth</button>
+              <span class="stem-chip-sep">|</span>
+              <button id="stemOtherLevel" class="stem-level" type="button"
+                      onclick="openStemMixer('other')" aria-label="Other volume">100</button>
+            </span>
+            <div class="stem-mixer" id="stemMixer" hidden>
+              <span class="stem-mixer-label" id="stemMixerLabel">Voc</span>
+              <span class="stem-mixer-value" id="stemMixerValue">100%</span>
+              <input type="range" id="stemMixerSlider" min="0" max="100" step="5" value="100"
+                     oninput="onStemMixerInput()" aria-label="Stem volume" />
+            </div>
           </div>
         </div>
         <div id="callbackContainer">
@@ -1559,6 +1740,12 @@
     let currentPath = document.getElementById('currentPath');
     let filesToggle = document.getElementById('filesToggle');
     let songBar = document.querySelector('.song-bar');
+    let stemsButton = document.getElementById('stemsButton');
+    let stemTogglesRow = document.getElementById('stemTogglesRow');
+    let stemMixer = document.getElementById('stemMixer');
+    let stemMixerLabel = document.getElementById('stemMixerLabel');
+    let stemMixerValue = document.getElementById('stemMixerValue');
+    let stemMixerSlider = document.getElementById('stemMixerSlider');
 
     let isRepeating = false;
     let isContinuing = false;
@@ -1618,6 +1805,24 @@
     let reanalysisQueuedPath = null;
     let saveRequestInFlight = false;
     let trackRequestInFlight = false;
+
+    const STEM_NAMES = ['vocals', 'drums', 'bass', 'other'];
+    const STEM_LABELS = {
+      vocals: { short: 'Voc', label: 'Vocals' },
+      drums: { short: 'Drm', label: 'Drums' },
+      bass: { short: 'Bass', label: 'Bass' },
+      other: { short: 'Oth', label: 'Other' },
+    };
+    const STEM_DRIFT_THRESHOLD = 0.10;
+    const STEM_DRIFT_INTERVAL_MS = 500;
+    let stemsAvailable = false;
+    let stemsActive = false;
+    let stemStates = { vocals: true, drums: true, bass: true, other: true };
+    let stemVolumes = { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 };
+    let stemPlayers = {};
+    let stemWasMasterMuted = false;
+    let stemsActivationToken = 0;
+    let stemMixerStem = null;
 
     function updateCurrentPath() {
       const value = (dirnameInput.value || '').trim();
@@ -2336,6 +2541,7 @@
     }
 
     function selectMediaPlayer(mediaKind, filename) {
+      resetStemsForSongChange();
       const nextPlayer = mediaKind === 'audio' ? audioPlayer : videoPlayer;
       if (video !== nextPlayer) {
         video.pause();
@@ -2351,6 +2557,247 @@
       videoPlayer.hidden = audioOnly;
       audioPlayerPanel.hidden = !audioOnly;
       audioFileName.innerText = audioOnly ? filename : '';
+    }
+
+    function stemChip(name) {
+      return document.getElementById(
+        'stem' + name.charAt(0).toUpperCase() + name.slice(1) + 'Button'
+      );
+    }
+
+    function stemChipEl(name) {
+      return document.getElementById(
+        'stem' + name.charAt(0).toUpperCase() + name.slice(1) + 'Chip'
+      );
+    }
+
+    function stemLevelEl(name) {
+      return document.getElementById(
+        'stem' + name.charAt(0).toUpperCase() + name.slice(1) + 'Level'
+      );
+    }
+
+    function stemPercent(name) {
+      return Math.round((stemVolumes[name] || 0) * 100);
+    }
+
+    function updateStemsUI() {
+      stemsButton.hidden = !stemsAvailable;
+      stemsButton.classList.toggle('stem-on', stemsActive);
+      stemsButton.setAttribute('aria-pressed', String(stemsActive));
+      stemTogglesRow.hidden = !stemsActive;
+      for (const name of STEM_NAMES) {
+        const chip = stemChipEl(name);
+        const toggle = stemChip(name);
+        const level = stemLevelEl(name);
+        chip.classList.toggle('stem-on', stemStates[name]);
+        chip.classList.toggle('stem-off', !stemStates[name]);
+        chip.classList.toggle('stem-selected', stemMixerStem === name);
+        toggle.setAttribute('aria-pressed', String(stemStates[name]));
+        toggle.textContent = STEM_LABELS[name].short;
+        level.textContent = String(stemPercent(name));
+      }
+      updateStemMixer();
+    }
+
+    function updateStemMixer() {
+      if (!stemMixerStem) {
+        stemMixer.hidden = true;
+        return;
+      }
+      const name = stemMixerStem;
+      stemMixer.hidden = false;
+      stemMixerLabel.textContent = STEM_LABELS[name].short;
+      stemMixerValue.textContent = stemPercent(name) + '%';
+      stemMixerSlider.value = String(stemPercent(name));
+    }
+
+    function openStemMixer(name) {
+      if (!Object.prototype.hasOwnProperty.call(stemVolumes, name)) return;
+      stemMixerStem = name;
+      updateStemsUI();
+    }
+
+    function onStemMixerInput() {
+      if (!stemMixerStem) return;
+      const percent = Number(stemMixerSlider.value);
+      const level = Math.min(1, Math.max(0, percent / 100));
+      stemVolumes[stemMixerStem] = level;
+      const el = stemPlayers[stemMixerStem];
+      if (el) el.volume = level;
+      updateStemsUI();
+    }
+
+    function closeStemMixer() {
+      stemMixerStem = null;
+      updateStemsUI();
+    }
+
+    function resetStemVolumes() {
+      for (const name of STEM_NAMES) {
+        stemVolumes[name] = 1.0;
+      }
+    }
+
+    function clearStemPlayers() {
+      for (const name of STEM_NAMES) {
+        const el = stemPlayers[name];
+        if (!el) continue;
+        el.onerror = null;
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+        el.remove();
+      }
+      stemPlayers = {};
+    }
+
+    function teardownStems() {
+      const wasActive = stemsActive;
+      stemsActive = false;
+      stemsActivationToken += 1;
+      stemMixerStem = null;
+      clearStemPlayers();
+      if (wasActive) {
+        video.muted = stemWasMasterMuted;
+      }
+    }
+
+    function resetStemsForSongChange() {
+      teardownStems();
+      resetStemVolumes();
+      stemsAvailable = false;
+      updateStemsUI();
+    }
+
+    function updateStemsAvailability(payload) {
+      teardownStems();
+      stemsAvailable = Boolean(
+        payload && Array.isArray(payload.stems) && payload.stems.length === STEM_NAMES.length
+      );
+      updateStemsUI();
+    }
+
+    function stemCanPlay(el) {
+      return new Promise(resolve => {
+        if (el.readyState >= 2) {
+          resolve();
+          return;
+        }
+        let settled = false;
+        const finish = () => {
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        };
+        el.addEventListener('canplay', finish, { once: true });
+        el.addEventListener('error', finish, { once: true });
+        setTimeout(finish, 3000);
+      });
+    }
+
+    async function activateStems() {
+      if (stemsActive || !stemsAvailable) return;
+      const token = stemsActivationToken + 1;
+      stemsActivationToken = token;
+      const master = video;
+      if (isNaN(master.currentTime)) return;
+      stemWasMasterMuted = master.muted;
+      const shouldPlay = !master.paused && !master.ended;
+      const target = master.currentTime;
+
+      for (const name of STEM_NAMES) {
+        const el = document.createElement('audio');
+        el.preload = 'auto';
+        el.muted = !stemStates[name];
+        el.volume = stemVolumes[name];
+        el.onerror = stemLoadFailure;
+        el.src = '/stem/' + name + '?' + new Date().getTime();
+        stemPlayers[name] = el;
+        document.body.appendChild(el);
+      }
+
+      await Promise.all(STEM_NAMES.map(name => stemCanPlay(stemPlayers[name])));
+      if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
+
+      for (const name of STEM_NAMES) {
+        stemPlayers[name].currentTime = target;
+      }
+      master.muted = true;
+      stemsActive = true;
+      updateStemsUI();
+      if (shouldPlay) {
+        for (const name of STEM_NAMES) {
+          stemPlayers[name].play().catch(() => stemLoadFailure());
+        }
+      }
+    }
+
+    function stemLoadFailure() {
+      const hadStems = stemsActive || Object.keys(stemPlayers).length > 0;
+      teardownStems();
+      updateStemsUI();
+      if (hadStems) {
+        fileStatus.innerText = 'Stem playback unavailable';
+      }
+    }
+
+    function toggleStems() {
+      if (stemsActive) {
+        teardownStems();
+        updateStemsUI();
+      } else {
+        activateStems();
+      }
+    }
+
+    function toggleStem(name) {
+      if (!Object.prototype.hasOwnProperty.call(stemStates, name)) return;
+      stemStates[name] = !stemStates[name];
+      const el = stemPlayers[name];
+      if (el) el.muted = !stemStates[name];
+      updateStemsUI();
+    }
+
+    function stemMasterChanged() {
+      if (!stemsActive) return;
+      const master = video;
+      const shouldPlay = !master.paused && !master.ended;
+      for (const name of STEM_NAMES) {
+        const el = stemPlayers[name];
+        if (!el) continue;
+        if (shouldPlay) {
+          if (el.paused) el.play().catch(() => {});
+        } else if (!el.paused) {
+          el.pause();
+        }
+      }
+    }
+
+    function stemMasterSeeked() {
+      if (!stemsActive) return;
+      const master = video;
+      if (isNaN(master.currentTime)) return;
+      const target = master.currentTime;
+      for (const name of STEM_NAMES) {
+        const el = stemPlayers[name];
+        if (el) el.currentTime = target;
+      }
+    }
+
+    function stemDriftCheck() {
+      if (!stemsActive) return;
+      const master = video;
+      if (master.paused || isNaN(master.currentTime)) return;
+      const target = master.currentTime;
+      for (const name of STEM_NAMES) {
+        const el = stemPlayers[name];
+        if (!el) continue;
+        if (Math.abs(el.currentTime - target) > STEM_DRIFT_THRESHOLD) {
+          el.currentTime = target;
+        }
+      }
     }
 
     function processNextLoadIntent() {
@@ -2434,6 +2881,7 @@
           : filename;
         updateReanalyzeButton();
         updateTrackSelectors(data);
+        updateStemsAvailability(data.stems);
         if (autoplay) {
           video.play().catch(error => {
             console.error('Autoplay failed:', error);
@@ -2588,6 +3036,7 @@
         loadedAnalysisValid = data.analysis_valid === true;
         semitonesInput.value = 0;
         updateTrackSelectors(data);
+        updateStemsAvailability(data.stems);
         updateReanalyzeButton();
         syncPlaybackPosition(true);
       })
@@ -2951,6 +3400,10 @@
       return window.matchMedia('(max-width: 640px)').matches;
     }
 
+    function isDesktopChordGrid() {
+      return window.matchMedia('(min-width: 1024px) and (min-height: 650px)').matches;
+    }
+
     function splitGridLine(line) {
       // The server renders each grid field as a fixed-width (7 char) cell;
       // only the active beat uses a bracketed, variable-width cell. Split a
@@ -3049,7 +3502,11 @@
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store'
         },
-        body: JSON.stringify({ position: position, include_edit_grid: editMode })
+        body: JSON.stringify({
+          position: position,
+          include_edit_grid: editMode,
+          grid_mode: isDesktopChordGrid() ? 'desktop' : 'compact'
+        })
       })
       .then(response => response.json())
       .then(data => {
@@ -3089,6 +3546,25 @@
         updateEditControls();
         updatePlayPauseButton();
       });
+    });
+
+    [videoPlayer, audioPlayer].forEach(player => {
+      player.addEventListener('play', stemMasterChanged);
+      player.addEventListener('pause', stemMasterChanged);
+      player.addEventListener('seeked', stemMasterSeeked);
+    });
+    setInterval(stemDriftCheck, STEM_DRIFT_INTERVAL_MS);
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && stemMixerStem) {
+        closeStemMixer();
+      }
+    });
+    document.addEventListener('click', event => {
+      if (!stemMixerStem) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target && (target.closest('.stem-mixer') || target.closest('.stem-level'))) return;
+      closeStemMixer();
     });
 
     function updateSemitones() {

@@ -111,3 +111,16 @@ audio-processing dependencies include:
 
 ChordFlask is an independent project and is not affiliated with or endorsed by
 the Pallets project.
+
+## Optional Demucs Runtime
+
+The optional `chordflask-demucs` command does not bundle Demucs, Torch,
+torchaudio, or model weights. `make setup-demucs` installs the pinned runtime
+in a separate user virtual environment, and the model cache remains outside
+the repository. These components retain the licenses and notices supplied by
+their upstream projects; users should review the applicable Demucs model and
+weight terms before using or redistributing generated material.
+
+- **Demucs:** https://github.com/facebookresearch/demucs
+- **PyTorch:** https://github.com/pytorch/pytorch
+- **torchaudio:** https://github.com/pytorch/audio

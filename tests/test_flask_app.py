@@ -324,6 +324,35 @@ def test_repeated_position_returns_complete_player_payload():
     }
 
 
+def test_set_position_switches_grid_mode_at_same_position():
+    app_wrapper, client = make_client()
+    calls = []
+
+    class FakePlayer:
+        def update_position(self, position, grid_mode=None):
+            calls.append((position, grid_mode))
+
+        def get_callback_output(self):
+            return {"callback_output": ["grid"], "bpm": 120, "position": 0.5}
+
+    app_wrapper.player = FakePlayer()
+
+    desktop = client.post(
+        "/set_position", json={"position": 0.5, "grid_mode": "desktop"}
+    )
+    compact = client.post(
+        "/set_position", json={"position": 0.5, "grid_mode": "compact"}
+    )
+    repeated = client.post(
+        "/set_position", json={"position": 0.5, "grid_mode": "compact"}
+    )
+
+    assert desktop.status_code == 200
+    assert compact.status_code == 200
+    assert repeated.status_code == 200
+    assert calls == [(0.5, "desktop"), (0.5, "compact")]
+
+
 def test_analysis_queue_status_reports_stopped_and_running_worker(tmp_path):
     app_wrapper, client = make_client()
     app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
@@ -421,6 +450,77 @@ def test_index_contains_audio_player_and_web_directory_browser():
     assert "function queueNextBatch()" in body
     assert "filenames: currentFiles.map(file => file.name)" in body
     assert "chordflask.batchLimit" in body
+
+
+def test_index_hides_stem_controls_by_default():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'id="stemsButton"' in body
+    assert 'id="stemTogglesRow" hidden' in body
+    assert 'onclick="toggleStems()"' in body
+
+
+def test_index_contains_four_stem_toggles_initialized_on():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    short_labels = {"vocals": "Voc", "drums": "Drm", "bass": "Bass", "other": "Oth"}
+    for stem in ("vocals", "drums", "bass", "other"):
+        name = stem.capitalize()
+        assert f'class="stem-chip stem-on" id="stem{name}Chip"' in body
+        assert f'id="stem{name}Button"' in body
+        assert f'onclick="toggleStem(\'{stem}\')"' in body
+        assert f'aria-label="{name}"' in body
+        assert f'>{short_labels[stem]}</button>' in body
+        assert f'id="stem{name}Level"' in body
+        assert f'onclick="openStemMixer(\'{stem}\')"' in body
+        assert f'aria-label="{name} volume"' in body
+
+
+def test_index_contains_single_shared_stem_mixer():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert body.count('id="stemMixerSlider"') == 1
+    assert 'id="stemMixer" hidden' in body
+    assert 'oninput="onStemMixerInput()"' in body
+    assert 'step="5"' in body
+    assert 'id="stemMixerLabel"' in body
+    assert 'id="stemMixerValue"' in body
+
+
+def test_index_stem_mixer_js_contract():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert "stemVolumes = { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 }" in body
+    assert "function openStemMixer(name)" in body
+    assert "function onStemMixerInput()" in body
+    assert "function closeStemMixer()" in body
+    assert "function resetStemVolumes()" in body
+    assert "el.volume = stemVolumes[name];" in body
+    assert "if (el) el.volume = level;" in body
+    assert "el.muted = !stemStates[name];" in body
+    # Mute must not reset the stored volume; reset happens only on song change.
+    assert "resetStemVolumes();" in body
+    assert "function resetStemsForSongChange()" in body
+
+
+def test_index_uses_active_player_as_stem_master():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert "const STEM_DRIFT_THRESHOLD = 0.10" in body
+    assert "function stemDriftCheck()" in body
+    assert "function resetStemsForSongChange()" in body
+    # Synchronization must follow the active master element, not a fixed player.
+    assert "const master = video;" in body
 
 
 def test_list_files_returns_mp3_mp4_and_webm_entries(tmp_path):
@@ -735,6 +835,9 @@ def test_routes_reject_malformed_payloads():
         "/update_display_options",
         json={"prefer_flats": "yes", "repeat_mode": "changes"},
     ).status_code == 400
+    assert client.post(
+        "/set_position", json={"position": 0.0, "grid_mode": "wide"}
+    ).status_code == 400
 
 
 def test_reanalyze_requires_active_file_and_valid_payload(tmp_path):
@@ -869,6 +972,9 @@ def test_load_file_uses_existing_json_without_starting_analysis(tmp_path, monkey
             return {"active_chord_track_id": None, "active_rhythm_track_id": None,
                     "available_chord_tracks": [], "available_rhythm_tracks": []}
 
+        def audio_stems_state(self):
+            return None
+
         def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
                                    soft_fallback=False):
             pass
@@ -910,6 +1016,9 @@ def test_load_file_reads_legacy_analysis_directory(tmp_path, monkeypatch):
             return {"active_chord_track_id": None, "active_rhythm_track_id": None,
                     "available_chord_tracks": [], "available_rhythm_tracks": []}
 
+        def audio_stems_state(self):
+            return None
+
         def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
                                    soft_fallback=False):
             pass
@@ -949,6 +1058,9 @@ def test_load_file_marks_invalid_existing_analysis_for_hidden_reanalyze(
         def analysis_track_state(self):
             return {"active_chord_track_id": None, "active_rhythm_track_id": None,
                     "available_chord_tracks": [], "available_rhythm_tracks": []}
+
+        def audio_stems_state(self):
+            return None
 
         def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
                                    soft_fallback=False):
@@ -1665,6 +1777,18 @@ def test_chord_grid_stays_plain_text_with_one_container_reference():
         if "callbackContainer" in line and "getElementById" in line
     ]
     assert len(declarations) == 1
+
+
+def test_chord_grid_mode_is_viewport_selected_without_changing_mobile_reflow():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert "function isDesktopChordGrid()" in body
+    assert "min-width: 1024px) and (min-height: 650px)" in body
+    assert "grid_mode: isDesktopChordGrid() ? 'desktop' : 'compact'" in body
+    assert "function reflowGridForMobile" in body
+    assert "window.matchMedia('(max-width: 640px)')" in body
 
 
 def test_index_declares_mobile_viewport():

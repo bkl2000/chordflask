@@ -1,0 +1,4 @@
+# Optional runtime only. Never install this file into the normal ChordFlask venv.
+demucs==4.0.1
+torch==2.6.0
+torchaudio==2.6.0

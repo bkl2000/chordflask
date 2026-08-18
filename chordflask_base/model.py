@@ -86,6 +86,11 @@ class ChordTrackRepository:
                 "metadata": copy.deepcopy(entry.get("metadata", {})),
             })
 
+        for set_id, entry in data.get(schema.AUDIO_TRACKS_KEY, {}).items():
+            if not isinstance(set_id, str) or not set_id.strip():
+                raise ValueError("audio_tracks key must be a non-empty string")
+            track._add_raw_audio_track(set_id, copy.deepcopy(entry))
+
     @staticmethod
     def __load_legacy(track, data):
         chords = data.get("base_chords", [])
@@ -154,6 +159,10 @@ class ChordTrackRepository:
                 "beat_numbers": list(entry.get("beat_numbers", [])),
                 "metadata": copy.deepcopy(entry.get("metadata", {})),
             }
+        data[schema.AUDIO_TRACKS_KEY] = {
+            set_id: chord_data.audio_track_data(set_id)
+            for set_id in chord_data.available_audio_track_ids
+        }
 
         self._validate(data, file_path)
 
@@ -271,6 +280,21 @@ class ChordTrackRepository:
                 entry, file_path, f"rhythm_tracks[\"{tid}\"]"
             )
 
+        audio_tracks = data.get(schema.AUDIO_TRACKS_KEY, {})
+        if not isinstance(audio_tracks, dict):
+            raise ValueError(
+                f"Invalid chord data in {file_path}: audio_tracks must be an object"
+            )
+        for set_id, entry in audio_tracks.items():
+            if not isinstance(set_id, str) or not set_id.strip():
+                raise ValueError(
+                    f"Invalid chord data in {file_path}: "
+                    "audio_tracks key must be a non-empty string"
+                )
+            schema.validate_audio_track_set(
+                entry, file_path, f'audio_tracks["{set_id}"]'
+            )
+
     @staticmethod
     def __validate_legacy(data, file_path):
         chords = data.get("base_chords", [])
@@ -384,6 +408,7 @@ class ChordData:
 
         self.__chord_tracks = {}
         self.__rhythm_tracks = {}
+        self.__audio_tracks = {}
         self.__active_chord_track_id = None
         self.__active_rhythm_track_id = None
         self.__chord_selection_explicit = False
@@ -591,6 +616,31 @@ class ChordData:
             "metadata": copy.deepcopy(entry["metadata"]),
         }
 
+    @property
+    def available_audio_track_ids(self):
+        return sorted(self.__audio_tracks)
+
+    def has_audio_track(self, set_id):
+        return set_id in self.__audio_tracks
+
+    def audio_track_data(self, set_id):
+        """Return an isolated copy of one complete audio-track set."""
+        if set_id not in self.__audio_tracks:
+            raise ValueError(f"audio track set \"{set_id}\" not available")
+        return copy.deepcopy(self.__audio_tracks[set_id])
+
+    def set_audio_track(self, set_id, data):
+        """Replace one complete audio-track set after validating it."""
+        self.__validate_track_id(set_id)
+        schema.validate_audio_track_set(data, "<memory>", f'audio_tracks["{set_id}"]')
+        self.__audio_tracks[set_id] = copy.deepcopy(data)
+
+    def remove_audio_track(self, set_id):
+        self.__validate_track_id(set_id)
+        if set_id not in self.__audio_tracks:
+            raise ValueError(f"audio track set \"{set_id}\" not available")
+        del self.__audio_tracks[set_id]
+
     def has_chord_track(self, track_id):
         return track_id in self.__chord_tracks
 
@@ -731,6 +781,7 @@ class ChordData:
     def _clear_tracks(self):
         self.__chord_tracks.clear()
         self.__rhythm_tracks.clear()
+        self.__audio_tracks.clear()
         self.__active_chord_track_id = None
         self.__active_rhythm_track_id = None
         self.__chord_selection_explicit = False
@@ -748,6 +799,9 @@ class ChordData:
 
     def _add_raw_rhythm_track(self, track_id, entry):
         self.__rhythm_tracks[track_id] = entry
+
+    def _add_raw_audio_track(self, set_id, entry):
+        self.__audio_tracks[set_id] = entry
 
     # ── I/O ────────────────────────────────────────────────────────────
 

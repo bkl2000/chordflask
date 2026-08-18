@@ -49,6 +49,7 @@ def test_public_documentation_links_resolve():
         "docs/VAMP.md",
         "docs/STANDALONE.md",
         "docs/COMPATIBILITY.md",
+        "docs/DEMUCS.md",
         "CONTRIBUTING.md",
         "LICENSE",
         "THIRD_PARTY_NOTICES.md",
@@ -180,10 +181,39 @@ def test_public_docs_describe_btc_as_optional():
     assert "chordflask-analyze-btc" not in analysis
 
 
+def test_public_docs_describe_demucs_as_optional_grouped_stems():
+    readme = (REPO_ROOT / "README.md").read_text()
+    analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
+    demucs = (REPO_ROOT / "docs" / "DEMUCS.md").read_text()
+
+    for text in (readme, analysis, demucs):
+        assert "htdemucs" in text
+        assert "bass" in text and "drums" in text and "other" in text and "vocals" in text
+        assert "audio_tracks[\"demucs:htdemucs\"]" in text
+        assert "--replace" in text
+    assert "make setup-demucs" in readme
+    assert "make demucs-check" in analysis
+    assert "source_timeline" in demucs
+    # The player-side STEMS control and per-stem volume are documented.
+    assert "[STEMS]" in readme
+    assert "STEMS" in demucs
+    assert "volume" in demucs
+    assert "Voc" in readme
+    assert "chordflask-maintain stems report" in demucs
+
+
 def test_maintenance_doc_documents_real_subcommands():
     maintenance = (REPO_ROOT / "docs" / "MAINTENANCE.md").read_text()
 
-    for sub in ("storage report", "storage cleanup", "migrate-schema", "validate", "doctor"):
+    for sub in (
+        "storage report",
+        "storage cleanup",
+        "stems report",
+        "stems cleanup",
+        "migrate-schema",
+        "validate",
+        "doctor",
+    ):
         assert sub in maintenance
     assert "read-only" in maintenance
     assert "modifies files" in maintenance.lower()

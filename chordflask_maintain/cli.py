@@ -141,6 +141,35 @@ def _cmd_doctor(args) -> int:
     return doctor_exit_code(report)
 
 
+def _cmd_stems_report(args) -> int:
+    from chordflask_maintain.stems import format_stems_report, inspect_stems
+
+    try:
+        report = inspect_stems(args.directory)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+    print(format_stems_report(report))
+    return 0
+
+
+def _cmd_stems_cleanup(args) -> int:
+    from chordflask_maintain.stems import cleanup_orphan_stems, format_stems_cleanup
+
+    if not args.orphans:
+        print("ERROR: specify --orphans to delete unreferenced stem generations", file=sys.stderr)
+        return 2
+    try:
+        result = cleanup_orphan_stems(args.directory, dry_run=args.dry_run)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+    print(format_stems_cleanup(result, dry_run=args.dry_run))
+    if result.refused or result.failures:
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chordflask-maintain",
@@ -151,6 +180,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  chordflask-maintain validate /music/videos\n"
             "  chordflask-maintain migrate-schema /music/videos\n"
             "  chordflask-maintain storage report /music/videos\n"
+            "  chordflask-maintain stems report /music/videos\n"
             "\n"
             'Run "chordflask-maintain COMMAND --help" for command-specific options.'
         ),
@@ -188,6 +218,25 @@ def build_parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate", help="Validate analysis JSON files")
     validate.add_argument("target", metavar="FILE_OR_DIRECTORY", help="Analysis JSON file or media directory to validate")
     validate.set_defaults(func=_cmd_validate)
+
+    stems = subparsers.add_parser(
+        "stems", help="Inspect or clean Demucs stem storage in one media directory"
+    )
+    stems_sub = stems.add_subparsers(dest="stems_command", required=True, metavar="SUBCOMMAND")
+
+    stems_report = stems_sub.add_parser(
+        "report", help="Report Demucs stem storage (read-only)"
+    )
+    stems_report.add_argument("directory", metavar="DIR", help="Media directory to report")
+    stems_report.set_defaults(func=_cmd_stems_report)
+
+    stems_cleanup = stems_sub.add_parser(
+        "cleanup", help="Delete unreferenced Demucs stem generations"
+    )
+    stems_cleanup.add_argument("directory", metavar="DIR", help="Media directory to clean")
+    stems_cleanup.add_argument("--orphans", action="store_true", help="Delete unreferenced stem generations")
+    stems_cleanup.add_argument("--dry-run", action="store_true", help="Show what would be removed without deleting")
+    stems_cleanup.set_defaults(func=_cmd_stems_cleanup)
 
     subparsers.add_parser("doctor", help="Check the ChordFlask installation state").set_defaults(func=_cmd_doctor)
 

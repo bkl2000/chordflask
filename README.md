@@ -78,7 +78,7 @@ corrected beat by beat.
 
 ### Command-line tools
 
-Four commands cover the main workflows. Chordino is the built-in, default
+The commands below cover the main workflows. Chordino is the built-in, default
 analyzer. The scripts are run from the repository root (they are not installed
 on your `PATH`).
 
@@ -128,6 +128,57 @@ Chordino and BTC are stored as separate tracks; switch between them with the
 track selector next to the chord grid. BTC never replaces Chordino and is not
 part of the portable bundle.
 
+### Optional Demucs stems / karaoke & practice
+
+Demucs is an optional, separate runtime that splits a song into four parts —
+**Vocals**, **Drums**, **Bass**, and **Other**. ChordFlask works normally
+without it, and the normal app and portable bundle stay Demucs/Torch-free.
+
+**Quick start**
+
+```bash
+# one-time optional environment setup
+make setup-demucs
+make demucs-check
+
+# prepare every supported song in one directory (run once)
+scripts/chordflask-demucs ~/Music
+```
+
+Then start ChordFlask normally and load one of the processed songs. ChordFlask
+finds the generated stem data automatically and shows a small **STEMS**
+control:
+
+```text
+[STEMS]  [Voc | 100] [Drm | 100] [Bass | 100] [Oth | 100]
+```
+
+- **STEMS** switches the player to separated audio. The original audio (and
+  video) stays the master timeline; the four FLAC stems follow it.
+- Click a stem name (**Voc** / **Drm** / **Bass** / **Oth**) to mute or unmute
+  it. For example, muting **Voc** leaves a karaoke backing track; muting
+  **Bass** is useful for bass practice.
+- Click a percentage to open the single shared volume slider for that stem.
+- Mixer state is kept while STEMS is switched OFF and ON again for the same
+  song; loading a different song resets all four to 100%.
+
+Demucs preparation is **not** run automatically by the player — you normally
+run the preparation command once for a music directory. The generated FLAC
+stems stay beside that collection under `.chordflask/` and are registered as
+one `audio_tracks["demucs:htdemucs"]` (`htdemucs`) set with the four stems
+`bass`, `drums`, `other`, and `vocals`; the player just finds and uses them.
+Re-running the command reports `CURRENT` for songs that are already prepared
+instead of separating them again.
+
+```bash
+scripts/chordflask-demucs --dry-run ~/Music   # preview without processing
+scripts/chordflask-demucs --replace song.mp3  # regenerate one stale set
+```
+
+See [docs/DEMUCS.md](docs/DEMUCS.md) for the complete workflow, storage
+layout, and limitations.
+
+
 ### First use
 
 1. Select **Browse** and navigate to a directory containing MP3, MP4, or WebM
@@ -159,7 +210,7 @@ Then open `http://<host-ip>:5000` on the other device. ChordFlask has no
 authentication or TLS, so LAN access should only be enabled on a trusted
 network. See [Security](#security) for the media-root restrictions.
 
-Generated JSON, MusicXML, MIDI, and cached audio are stored in a
+Generated JSON, MusicXML, MIDI, cached audio, and optional Demucs FLAC stems are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
 permission for the media directory. Existing media files are not modified.
 
@@ -294,6 +345,7 @@ the whole filesystem is not automatically exposed.
 - [Vamp plugin installation and verification](docs/VAMP.md)
 - [Portable bundle guide](docs/STANDALONE.md)
 - [Platform and Python compatibility](docs/COMPATIBILITY.md)
+- [Optional Demucs stems and playback](docs/DEMUCS.md)
 - [Development and tests](CONTRIBUTING.md)
 
 ## Development transparency
