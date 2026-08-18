@@ -90,8 +90,7 @@ Chordino is the built-in, default analyzer.
 | `chordflask-export` | Export analysis data |
 | `chordflask-maintain` | Inspect/clean generated data |
 
-`chordflask` is the interactive player (web frontend + analysis worker). Copy
-the commands you need into `~/bin` and make sure `~/bin` is on your `PATH`:
+The two supported setups are intentionally different:
 
 **Source / virtualenv**
 
@@ -100,15 +99,23 @@ make all
 cp scripts/chordflask scripts/chordflask-{analyze,demucs,export,maintain} ~/bin/
 ```
 
-**Standalone**
+Then run `chordflask` from any directory (once `~/bin` is on your `PATH`). The
+source launchers locate the configured ChordFlask virtual environment
+themselves, so activating the venv is not normally required.
+
+**Standalone bundle**
+
+Unpack the release archive and run the launcher that ships beside the binary:
 
 ```bash
-cp <standalone-dir>/chordflask ~/bin/
+tar -xzf <release-archive>
+cd <standalone-dir>
+./install_vamp.sh
+./chordflask.sh
 ```
 
-Either way, start the player from any directory with `chordflask`. The source
-launchers locate the configured ChordFlask virtual environment themselves, so
-activating the venv is not normally required.
+`./chordflask.sh` launches the sibling `./chordflask` binary. See
+[docs/STANDALONE.md](docs/STANDALONE.md) for the complete workflow.
 
 In a source checkout the same commands are also available under `scripts/`:
 
@@ -339,8 +346,9 @@ guide is included as `README.md` inside the archive.
 - **Inspect analysis storage:** run
   `scripts/chordflask-maintain storage report /path/to/music` (read-only) to
   see how much space one directory's local `.chordflask` uses.
-- **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 scripts/chordflask` and open
-  <http://localhost:5050>.
+- **Port 5000 is busy:** start on another port — source:
+  `CHORDIFIER_PORT=5050 scripts/chordflask`; standalone:
+  `CHORDIFIER_PORT=5050 ./chordflask.sh` — and open <http://localhost:5050>.
 
 ## Security
 
