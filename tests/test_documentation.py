@@ -13,7 +13,7 @@ def test_readme_has_one_copyable_beginner_path():
         "git clone https://github.com/bkl2000/chordflask.git",
         "make setup-runtime",
         "make plugins",
-        "make run",
+        "scripts/chordflask",
     )
     positions = [readme.index(command) for command in commands]
     assert positions == sorted(positions)
@@ -132,7 +132,7 @@ def test_readme_documents_command_line_tools_block():
     readme = (REPO_ROOT / "README.md").read_text()
 
     assert "### Command-line tools" in readme
-    assert "scripts/chordflask.sh" in readme
+    assert "scripts/chordflask" in readme
     assert "scripts/chordflask-analyze song.mp4" in readme
     assert "scripts/chordflask-analyze /music/videos" in readme
     assert "scripts/chordflask-export" in readme

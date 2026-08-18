@@ -45,7 +45,7 @@ git clone https://github.com/bkl2000/chordflask.git
 cd chordflask
 make setup-runtime
 make plugins
-make run
+scripts/chordflask
 ```
 
 Open <http://localhost:5000> and use **Browse** to select a directory with
@@ -114,7 +114,7 @@ In a source checkout the same commands are also available under `scripts/`:
 
 ```bash
 # Start the player / web app
-scripts/chordflask.sh
+scripts/chordflask
 
 # Analyze with the built-in Chordino analyzer
 scripts/chordflask-analyze song.mp4
@@ -339,7 +339,7 @@ guide is included as `README.md` inside the archive.
 - **Inspect analysis storage:** run
   `scripts/chordflask-maintain storage report /path/to/music` (read-only) to
   see how much space one directory's local `.chordflask` uses.
-- **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 make run` and open
+- **Port 5000 is busy:** start with `CHORDIFIER_PORT=5050 scripts/chordflask` and open
   <http://localhost:5050>.
 
 ## Security
