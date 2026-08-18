@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # Run the chordflask-export CLI from the project virtual environment.
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+#
+# This script may be copied or symlinked to an arbitrary location; the
+# repository root is read from the venv marker file, never inferred from
+# this script's own location.
 
 DEFAULT_VENV_DIR="${HOME}/.venvs/chordflask"
 LEGACY_VENV_DIR="${HOME}/.venvs/chordifier"
@@ -17,11 +18,23 @@ PYTHON_BIN="${CHORDFLASK_PYTHON:-${VENV_DIR}/bin/python}"
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
     echo "Project virtual environment not found: ${VENV_DIR}" >&2
-    echo "Create it with:" >&2
-    echo "  scripts/setup_venv.sh --dev" >&2
+    echo "Create it with 'make setup' in the ChordFlask repository." >&2
     exit 1
 fi
 
-cd "${ROOT_DIR}"
+ROOT_FILE="${VENV_DIR}/.chordflask-root"
+if [[ ! -f "${ROOT_FILE}" ]]; then
+    echo "ChordFlask repository root marker not found: ${ROOT_FILE}" >&2
+    echo "Create it with 'make setup' in the ChordFlask repository." >&2
+    exit 1
+fi
+
+ROOT_DIR="$(cat "${ROOT_FILE}")"
+if [[ ! -f "${ROOT_DIR}/flask/helpers/export_cli.py" ]]; then
+    echo "ChordFlask repository root not found or invalid: ${ROOT_DIR}" >&2
+    echo "The checkout may have moved; rerun 'make setup'." >&2
+    exit 1
+fi
+
 export PYTHONPATH="${ROOT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-exec "${PYTHON_BIN}" flask/helpers/export_cli.py "$@"
+exec "${PYTHON_BIN}" "${ROOT_DIR}/flask/helpers/export_cli.py" "$@"

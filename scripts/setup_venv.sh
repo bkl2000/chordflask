@@ -432,6 +432,11 @@ fi
 
 verify_installation
 
+# Record the absolute checkout root so the user-facing helper scripts can be
+# copied or symlinked to an arbitrary location and still find the project.
+ROOT_FILE="${VENV_DIR}/.chordflask-root"
+printf '%s\n' "${ROOT_DIR}" > "${ROOT_FILE}"
+
 cat <<DONE
 
 Virtual environment is ready:

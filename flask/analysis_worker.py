@@ -90,7 +90,7 @@ class AnalysisWorker:
             return False
 
     def _analyze(self, media_path, force=False, discard_edits=False):
-        media = Path(media_path)
+        media = Path(media_path).resolve()
         if not media.exists():
             raise FileNotFoundError(media_path)
 

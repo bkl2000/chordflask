@@ -105,19 +105,93 @@ def test_audio_stems_state_none_without_set():
     assert MP4PlayerFlask.audio_stems_state(player) is None
 
 
-def test_audio_stems_state_reports_complete_set():
-    from mp4playerflask import MP4PlayerFlask
+def _player_stub(media):
+    from filerepr import FileRepr
 
     class _Stub:
         pass
 
     player = _Stub()
+    player.file_repr = FileRepr(str(media))
     player.chord_data = ChordData()
+    return player
+
+
+def test_audio_stems_state_reports_complete_set(tmp_path):
+    from mp4playerflask import MP4PlayerFlask
+
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    for stem in DEMUCS_STEM_NAMES:
+        _write_flac(tmp_path, stem)
+    player = _player_stub(media)
     player.chord_data.set_audio_track(STEMS_AUDIO_SET_ID, _audio_set(_stems_rel_dir()))
     assert MP4PlayerFlask.audio_stems_state(player) == {
         "set_id": STEMS_AUDIO_SET_ID,
         "stems": list(DEMUCS_STEM_NAMES),
     }
+
+
+def test_audio_stems_state_none_when_one_flac_deleted(tmp_path):
+    from mp4playerflask import MP4PlayerFlask
+
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    for stem in DEMUCS_STEM_NAMES:
+        _write_flac(tmp_path, stem)
+    (tmp_path / _stems_rel_dir() / "vocals.flac").unlink()
+    player = _player_stub(media)
+    player.chord_data.set_audio_track(STEMS_AUDIO_SET_ID, _audio_set(_stems_rel_dir()))
+    assert MP4PlayerFlask.audio_stems_state(player) is None
+
+
+def test_audio_stems_state_none_when_multiple_flacs_missing(tmp_path):
+    from mp4playerflask import MP4PlayerFlask
+
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    _write_flac(tmp_path, "bass")
+    player = _player_stub(media)
+    player.chord_data.set_audio_track(STEMS_AUDIO_SET_ID, _audio_set(_stems_rel_dir()))
+    assert MP4PlayerFlask.audio_stems_state(player) is None
+
+
+def test_audio_stems_state_none_for_symlink_or_outside_path(tmp_path):
+    from mp4playerflask import MP4PlayerFlask
+
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    for stem in DEMUCS_STEM_NAMES:
+        _write_flac(tmp_path, stem)
+    outside = tmp_path / "outside.flac"
+    outside.write_bytes(b"escaped")
+    vocals = tmp_path / _stems_rel_dir() / "vocals.flac"
+    vocals.unlink()
+    vocals.symlink_to(outside)
+    assert MP4PlayerFlask.audio_stems_state(_player_stub(media)) is None
+
+    drums = tmp_path / _stems_rel_dir() / "drums.flac"
+    drums.unlink()
+    outside_set = _audio_set(_stems_rel_dir())
+    outside_set["tracks"]["drums"]["path"] = "../../outside.flac"
+    player = _player_stub(media)
+    player.chord_data._add_raw_audio_track(STEMS_AUDIO_SET_ID, outside_set)
+    assert MP4PlayerFlask.audio_stems_state(player) is None
+
+
+def test_audio_stems_state_none_for_malformed_stem_path(tmp_path):
+    from mp4playerflask import MP4PlayerFlask
+
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    for stem in DEMUCS_STEM_NAMES:
+        _write_flac(tmp_path, stem)
+    for bad_path in (None, 42, ""):
+        set_data = _audio_set(_stems_rel_dir())
+        set_data["tracks"]["vocals"]["path"] = bad_path
+        player = _player_stub(media)
+        player.chord_data._add_raw_audio_track(STEMS_AUDIO_SET_ID, set_data)
+        assert MP4PlayerFlask.audio_stems_state(player) is None
 
 
 def test_audio_stems_state_none_for_missing_tracks_dict():
@@ -200,6 +274,34 @@ def test_load_file_incomplete_set_is_unavailable(tmp_path):
 
     assert response.status_code == 200
     assert response.get_json()["stems"] is None
+
+
+def test_load_file_reports_no_stems_when_flac_deleted(tmp_path):
+    _write_analyzed_song(tmp_path)
+    for stem in DEMUCS_STEM_NAMES:
+        _write_flac(tmp_path, stem)
+    (tmp_path / _stems_rel_dir() / "vocals.flac").unlink()
+    client = FlaskMP4App().app.test_client()
+
+    response = _load_song(client, tmp_path)
+
+    assert response.status_code == 200
+    assert response.get_json()["stems"] is None
+
+
+def test_stem_availability_checks_leave_json_unchanged(tmp_path):
+    _write_analyzed_song(tmp_path)
+    for stem in DEMUCS_STEM_NAMES:
+        _write_flac(tmp_path, stem)
+    json_file = tmp_path / ".chordflask" / "song.json"
+    before = json_file.read_bytes()
+    client = FlaskMP4App().app.test_client()
+    _load_song(client, tmp_path)
+    client.get("/stem/vocals")
+    (tmp_path / _stems_rel_dir() / "drums.flac").unlink()
+    _load_song(client, tmp_path)
+    client.get("/stem/drums")
+    assert json_file.read_bytes() == before
 
 
 # ── secure FLAC serving ──────────────────────────────────────────────

@@ -173,6 +173,28 @@ def test_worker_cleans_interrupted_work_and_publishes_json_last(tmp_path):
     assert queue.status() == {"pending": [], "failed": []}
 
 
+def test_relative_media_path_writes_to_caller_cwd_analysis_dir(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "misc").mkdir()
+    media = tmp_path / "misc" / "song.mp4"
+    media.write_bytes(b"fake media")
+    queue = AnalysisQueue(tmp_path / "queue")
+
+    class RelativeMediaAnalyzer:
+        def __init__(self, media_path, data_dir):
+            self.data_dir = Path(data_dir)
+
+        def process(self):
+            _write_track(self.data_dir / "song.json", "C")
+
+    worker = AnalysisWorker(queue=queue, analyzer_cls=RelativeMediaAnalyzer)
+    worker._analyze("misc/song.mp4")
+
+    expected = tmp_path / "misc" / ".chordflask" / "song.json"
+    assert expected.exists()
+    assert not (tmp_path / "misc" / "misc").exists()
+
+
 def test_worker_failure_leaves_no_published_partial_artifacts(tmp_path):
     media, queue, analysis_dir = _setup_job(tmp_path)
 

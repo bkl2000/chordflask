@@ -6,6 +6,8 @@ from playbackview import PlaybackView
 from collections import deque
 import logging
 
+from pathlib import Path
+
 import chordutils
 
 from chordflask_base import (
@@ -173,10 +175,15 @@ class MP4PlayerFlask:
     def audio_stems_state(self):
         """Return the complete Demucs stem set, or None when unavailable.
 
-        Only a complete grouped set with all four expected FLAC stems is
-        reported. The player consumes the generic ChordData audio-track
-        contract and never imports the optional producer package.
+        Only a complete grouped set with all four expected FLAC stems that
+        actually exist as regular files inside the media's analysis storage
+        boundary is reported. Malformed metadata, incomplete sets, and missing
+        or unsafe files all yield None. The player consumes the generic
+        ChordData audio-track contract and never imports the optional producer
+        package.
         """
+        if getattr(self, "file_repr", None) is None:
+            return None
         cd = self.chord_data
         if not cd.has_audio_track(STEMS_AUDIO_SET_ID):
             return None
@@ -187,10 +194,24 @@ class MP4PlayerFlask:
         tracks = set_data.get("tracks")
         if not isinstance(tracks, dict):
             return None
+        media_path = Path(self.file_repr.get())
+        storage_root = Path(self.file_repr.get("json")).resolve().parent
         stems = []
         for stem_name in DEMUCS_STEM_NAMES:
             stem = tracks.get(stem_name)
             if not isinstance(stem, dict) or stem.get("format") != "flac":
+                return None
+            raw_path = stem.get("path")
+            if not isinstance(raw_path, str) or not raw_path.strip():
+                return None
+            try:
+                candidate = media_path.parent.joinpath(raw_path)
+                if candidate.is_symlink():
+                    return None
+                resolved = candidate.resolve()
+            except (OSError, RuntimeError, KeyError, TypeError, ValueError):
+                return None
+            if not resolved.is_relative_to(storage_root) or not resolved.is_file():
                 return None
             stems.append(stem_name)
         return {
