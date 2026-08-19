@@ -1,7 +1,7 @@
 from chordflask_demucs import cli
 from chordflask_demucs.audio import AudioFacts
 from chordflask_demucs.discovery import DiscoveryError
-from chordflask_demucs.runtime import RuntimeInfo
+from chordflask_demucs.runtime import DemucsRuntimeError, RuntimeInfo
 from chordflask_demucs.storage import DemucsStatus
 
 
@@ -9,18 +9,21 @@ def _runtime(tmp_path):
     return RuntimeInfo(tmp_path / "venv", tmp_path / "venv/bin/python", "4.0.1", "2.6.0")
 
 
-def test_dry_run_reports_statuses_without_runtime_or_writes(monkeypatch, tmp_path, capsys):
+def test_dry_run_reports_statuses_and_probes_runtime_for_current(monkeypatch, tmp_path, capsys):
     files = [tmp_path / "todo.mp3", tmp_path / "current.mp3", tmp_path / "stale.mp3"]
-    statuses = iter(
-        [
-            DemucsStatus("TODO", "missing"),
-            DemucsStatus("CURRENT", "complete"),
-            DemucsStatus("STALE", "changed"),
-        ]
-    )
+    runtime = _runtime(tmp_path)
     monkeypatch.setattr(cli, "discover_target", lambda target: files)
-    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: next(statuses))
-    monkeypatch.setattr(cli, "require_runtime", lambda: (_ for _ in ()).throw(AssertionError()))
+    monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda d, r: "cpu")
+
+    def fake_classify(path, runtime=None, device="auto"):
+        if path.name == "todo.mp3":
+            return DemucsStatus("TODO", "missing")
+        if path.name == "current.mp3":
+            return DemucsStatus("CURRENT", "provisional" if runtime is None else "complete")
+        return DemucsStatus("STALE", "changed")
+
+    monkeypatch.setattr(cli, "classify", fake_classify)
 
     code = cli.run(tmp_path, replace=False, dry_run=True, device="auto")
 
@@ -61,12 +64,18 @@ def test_batch_processes_todo_continues_and_reports_stale(monkeypatch, tmp_path,
 
 def test_replace_processes_current_and_stale(monkeypatch, tmp_path):
     files = [tmp_path / "current.mp3", tmp_path / "stale.mp3"]
-    statuses = iter([DemucsStatus("CURRENT"), DemucsStatus("STALE")])
     processed = []
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(cli, "discover_target", lambda target: files)
-    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: next(statuses))
     monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda d, r: "cpu")
+
+    def fake_classify(path, runtime=None, device="auto"):
+        if path.name == "current.mp3":
+            return DemucsStatus("CURRENT", "provisional" if runtime is None else "complete")
+        return DemucsStatus("STALE", "changed")
+
+    monkeypatch.setattr(cli, "classify", fake_classify)
     monkeypatch.setattr(
         cli,
         "_process_one",
@@ -136,3 +145,105 @@ def test_process_one_validates_and_passes_one_complete_stage_to_publisher(monkey
         "other.flac",
         "vocals.flac",
     }
+
+
+def test_provisional_current_is_reclassified_with_runtime_and_device(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    runtime = _runtime(tmp_path)
+    calls = []
+
+    def fake_classify(path, runtime=None, device="auto"):
+        calls.append((runtime, device))
+        if runtime is None:
+            return DemucsStatus("CURRENT", "provisional")
+        return DemucsStatus("CURRENT", "validated")
+
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", fake_classify)
+    monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda d, r: "cpu")
+
+    code = cli.run(tmp_path, replace=False, dry_run=True, device="auto")
+
+    assert code == 0
+    assert calls == [(None, "auto"), (runtime, "cpu")]
+    assert "CURRENT" in capsys.readouterr().out
+
+
+def test_todo_dry_run_is_lazy(monkeypatch, tmp_path):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: DemucsStatus("TODO"))
+    monkeypatch.setattr(cli, "require_runtime", lambda: (_ for _ in ()).throw(AssertionError("runtime must not load")))
+
+    assert cli.run(tmp_path, replace=False, dry_run=True, device="auto") == 0
+
+
+def test_error_classification_is_lazy(monkeypatch, tmp_path):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: DemucsStatus("ERROR", "bad"))
+    monkeypatch.setattr(cli, "require_runtime", lambda: (_ for _ in ()).throw(AssertionError("runtime must not load")))
+
+    assert cli.run(tmp_path, replace=False, dry_run=True, device="auto") == 0
+
+
+def test_resolved_device_passed_to_process_one(monkeypatch, tmp_path):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    runtime = _runtime(tmp_path)
+    captured = {}
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: DemucsStatus("TODO"))
+    monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda d, r: "cuda")
+
+    def fake_process_one(path, runtime, device, replace):
+        captured["device"] = device
+        return media.parent / "song.json"
+
+    monkeypatch.setattr(cli, "_process_one", fake_process_one)
+
+    assert cli.run(tmp_path, replace=False, dry_run=False, device="auto") == 0
+    assert captured["device"] == "cuda"
+
+
+def test_provisional_current_becomes_stale_with_different_device(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+
+    def fake_classify(path, runtime=None, device="auto"):
+        if runtime is None:
+            return DemucsStatus("CURRENT", "provisional")
+        return DemucsStatus("STALE", "processing device differs")
+
+    monkeypatch.setattr(cli, "classify", fake_classify)
+    monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda d, r: "cpu")
+
+    code = cli.run(tmp_path, replace=False, dry_run=True, device="auto")
+
+    assert code == 0
+    assert "STALE" in capsys.readouterr().out
+
+
+def test_provisional_current_with_broken_runtime_becomes_error(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: DemucsStatus("CURRENT", "provisional"))
+    monkeypatch.setattr(
+        cli,
+        "require_runtime",
+        lambda: (_ for _ in ()).throw(DemucsRuntimeError("Demucs runtime not installed")),
+    )
+
+    code = cli.run(tmp_path, replace=False, dry_run=True, device="auto")
+
+    assert code == 0
+    assert "ERROR" in capsys.readouterr().out

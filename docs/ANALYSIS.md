@@ -194,7 +194,7 @@ unchanged.
 Start with nearest-beat display instead:
 
 ```bash
-scripts/chordflask.sh --no-metric-chords
+scripts/chordflask --no-metric-chords
 ```
 
 A read-only diagnostic reports rhythm classification and displayed beats that

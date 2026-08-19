@@ -13,7 +13,7 @@ if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask_base import ChordData
-from chordflask import FlaskMP4App
+from chordflask import CLIENT_COOKIE, FlaskMP4App
 from chord_markdown import (
     download_track_slug,
     escape_markdown_cell,
@@ -369,9 +369,19 @@ def test_escape_markdown_cell_handles_none_and_backslashes():
 # ── route helpers and behavior ───────────────────────────────────────
 
 
+TEST_CLIENT_ID = "test-client"
+
+
+def _state(app_wrapper):
+    return app_wrapper.clients.get_or_create(TEST_CLIENT_ID)
+
+
 def make_client():
     app_wrapper = FlaskMP4App()
-    return app_wrapper, app_wrapper.app.test_client()
+    client = app_wrapper.app.test_client()
+    app_wrapper.clients.get_or_create(TEST_CLIENT_ID)
+    client.set_cookie(CLIENT_COOKIE, TEST_CLIENT_ID)
+    return app_wrapper, client
 
 
 def _track_data(*, edited=False, empty_beats=False):
@@ -403,12 +413,12 @@ def _activate(app_wrapper, tmp_path, *, name="song.mp4", edited=False, empty_bea
     media.write_bytes(b"media")
     file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
     _track_data(edited=edited, empty_beats=empty_beats).save_to_file(file_repr.get("json"))
-    app_wrapper.file_repr = file_repr
-    app_wrapper.player = MP4PlayerFlask(file_repr)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
+    _state(app_wrapper).file_repr = file_repr
+    _state(app_wrapper).player = MP4PlayerFlask(file_repr)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("changes")
     if edited:
-        app_wrapper.player.set_chord_version("edited")
+        _state(app_wrapper).player.set_chord_version("edited")
     return media
 
 
@@ -458,7 +468,7 @@ def test_download_chords_returns_markdown_and_pdf_zip(tmp_path):
 def test_download_chords_uses_absolute_beat_numbers(tmp_path):
     app_wrapper, client = make_client()
     _activate(app_wrapper, tmp_path)
-    app_wrapper.player.chord_data.set_rhythm_track(
+    _state(app_wrapper).player.chord_data.set_rhythm_track(
         "qm_barbeattracker",
         bpm=120,
         meter_signature=4,
@@ -571,10 +581,10 @@ def test_download_chords_snapshot_uses_metric_filtered_full_beat_view(tmp_path):
     cd.save_to_file(file_repr.get("json"))
 
     app_wrapper, client = make_client()
-    app_wrapper.file_repr = file_repr
-    app_wrapper.player = MP4PlayerFlask(file_repr, metric_chords=True)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
+    _state(app_wrapper).file_repr = file_repr
+    _state(app_wrapper).player = MP4PlayerFlask(file_repr, metric_chords=True)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("changes")
 
     response = client.post("/download_chords", json=_payload(tmp_path))
 
@@ -586,7 +596,7 @@ def test_download_chords_snapshot_uses_metric_filtered_full_beat_view(tmp_path):
 def test_download_chords_uses_chords_repeat_mode(tmp_path):
     app_wrapper, client = make_client()
     _activate(app_wrapper, tmp_path)
-    app_wrapper.player.set_repeat_mode("chords")
+    _state(app_wrapper).player.set_repeat_mode("chords")
 
     response = client.post("/download_chords", json=_payload(tmp_path))
 
@@ -630,11 +640,11 @@ def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path
     cd.save_to_file(file_repr.get("json"))
 
     app_wrapper, client = make_client()
-    app_wrapper.file_repr = file_repr
-    app_wrapper.player = MP4PlayerFlask(file_repr, use_unicode=True)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("chords")
-    app_wrapper.player.select_analysis_tracks(chord_track_id="other", rhythm_track_id="other_rhythm")
+    _state(app_wrapper).file_repr = file_repr
+    _state(app_wrapper).player = MP4PlayerFlask(file_repr, use_unicode=True)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("chords")
+    _state(app_wrapper).player.select_analysis_tracks(chord_track_id="other", rhythm_track_id="other_rhythm")
 
     response = client.post("/download_chords", json=_payload(tmp_path))
 

@@ -15,7 +15,7 @@ import chordutils
 from analysis_queue import AnalysisQueue
 from analysis_worker import AnalysisWorker
 from chordflask_base import ChordData, ChordTrackRepository
-from chordflask import FlaskMP4App
+from chordflask import CLIENT_COOKIE, FlaskMP4App
 from filerepr import FileRepr
 from mp4playerflask import MP4PlayerFlask
 
@@ -557,9 +557,19 @@ def test_enqueue_sets_discard_edits_on_pending_item(tmp_path):
 # ── Flask routes ─────────────────────────────────────────────────────
 
 
+TEST_CLIENT_ID = "test-client"
+
+
+def _state(app_wrapper):
+    return app_wrapper.clients.get_or_create(TEST_CLIENT_ID)
+
+
 def make_client():
     app_wrapper = FlaskMP4App()
-    return app_wrapper, app_wrapper.app.test_client()
+    client = app_wrapper.app.test_client()
+    app_wrapper.clients.get_or_create(TEST_CLIENT_ID)
+    client.set_cookie(CLIENT_COOKIE, TEST_CLIENT_ID)
+    return app_wrapper, client
 
 
 def _activate_editable(app_wrapper, tmp_path, name="song.mp4"):
@@ -567,10 +577,10 @@ def _activate_editable(app_wrapper, tmp_path, name="song.mp4"):
     media.write_bytes(b"media")
     file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
     _editable_data().save_to_file(file_repr.get("json"))
-    app_wrapper.file_repr = file_repr
-    app_wrapper.player = MP4PlayerFlask(file_repr)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
+    _state(app_wrapper).file_repr = file_repr
+    _state(app_wrapper).player = MP4PlayerFlask(file_repr)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("changes")
     return media
 
 
@@ -592,7 +602,7 @@ def test_start_chord_editing_route_success(tmp_path):
     assert payload["has_edited"] is True
     assert payload["active_chord_version"] == "edited"
     assert payload["grid"]["beat_count"] == 8
-    assert ChordData(app_wrapper.file_repr.get("json")).has_chord_track("user_edited")
+    assert ChordData(_state(app_wrapper).file_repr.get("json")).has_chord_track("user_edited")
 
 
 def test_start_chord_editing_requires_active_media(tmp_path):
@@ -624,10 +634,10 @@ def _activate_manual_analysis(app_wrapper, tmp_path, name="song.mp4",
     media.write_bytes(b"media")
     file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
     _write_v3_json(file_repr.get("json"), chord_tracks, rhythm_tracks)
-    app_wrapper.file_repr = file_repr
-    app_wrapper.player = MP4PlayerFlask(file_repr)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
+    _state(app_wrapper).file_repr = file_repr
+    _state(app_wrapper).player = MP4PlayerFlask(file_repr)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("changes")
     return media
 
 
@@ -698,23 +708,23 @@ def test_edit_route_success_updates_and_persists(tmp_path):
 
     assert response.status_code == 200
     assert response.get_json()["success"] is True
-    stored = ChordData(app_wrapper.file_repr.get("json")).chord_track_chords("user_edited")
+    stored = ChordData(_state(app_wrapper).file_repr.get("json")).chord_track_chords("user_edited")
     assert any(entry["chord"] == "F" for entry in stored)
 
 
 def test_start_route_save_failure_restores_player_and_disk(tmp_path, monkeypatch):
     app_wrapper, client = make_client()
     _activate_editable(app_wrapper, tmp_path)
-    app_wrapper.player.chord_data.set_chord_track(
+    _state(app_wrapper).player.chord_data.set_chord_track(
         "pytorch", [{"timestamp": 0.0, "chord": "F"}]
     )
-    app_wrapper.player.chord_data.set_rhythm_track(
+    _state(app_wrapper).player.chord_data.set_rhythm_track(
         "madmom", bpm=110, meter_signature=4,
         beat_times=[0.0, 0.5], beat_numbers=[1, 2],
     )
-    json_path = app_wrapper.file_repr.get("json")
-    app_wrapper.player.chord_data.save_to_file(json_path)
-    app_wrapper.player.select_analysis_tracks(
+    json_path = _state(app_wrapper).file_repr.get("json")
+    _state(app_wrapper).player.chord_data.save_to_file(json_path)
+    _state(app_wrapper).player.select_analysis_tracks(
         chord_track_id="pytorch", rhythm_track_id="madmom"
     )
     original_bytes = Path(json_path).read_bytes()
@@ -722,65 +732,65 @@ def test_start_route_save_failure_restores_player_and_disk(tmp_path, monkeypatch
     def fail_save(file_path):
         raise OSError("simulated save failure")
 
-    monkeypatch.setattr(app_wrapper.player.chord_data, "save_to_file", fail_save)
+    monkeypatch.setattr(_state(app_wrapper).player.chord_data, "save_to_file", fail_save)
 
     response = client.post("/start_chord_editing", json=_payload(tmp_path))
 
     assert response.status_code == 500
     assert "Could not save chord data" in response.get_json()["error"]
     assert Path(json_path).read_bytes() == original_bytes
-    assert app_wrapper.player.chord_data.has_chord_track("user_edited") is False
-    assert app_wrapper.player.active_chord_version() == "original"
-    assert app_wrapper.player.chord_data.active_chord_track_id == "pytorch"
-    assert app_wrapper.player.chord_data.active_rhythm_track_id == "madmom"
-    assert app_wrapper.player.playback_view.repeat_mode == "changes"
+    assert _state(app_wrapper).player.chord_data.has_chord_track("user_edited") is False
+    assert _state(app_wrapper).player.active_chord_version() == "original"
+    assert _state(app_wrapper).player.chord_data.active_chord_track_id == "pytorch"
+    assert _state(app_wrapper).player.chord_data.active_rhythm_track_id == "madmom"
+    assert _state(app_wrapper).player.playback_view.repeat_mode == "changes"
 
 
 def test_edit_route_save_failure_restores_player_and_disk(tmp_path, monkeypatch):
     app_wrapper, client = make_client()
     _activate_editable(app_wrapper, tmp_path)
     client.post("/start_chord_editing", json=_payload(tmp_path))
-    json_path = app_wrapper.file_repr.get("json")
+    json_path = _state(app_wrapper).file_repr.get("json")
     original_bytes = Path(json_path).read_bytes()
-    original_chords = app_wrapper.player.chord_data.chord_track_chords("user_edited")
+    original_chords = _state(app_wrapper).player.chord_data.chord_track_chords("user_edited")
 
     def fail_save(file_path):
         raise OSError("simulated save failure")
 
-    monkeypatch.setattr(app_wrapper.player.chord_data, "save_to_file", fail_save)
+    monkeypatch.setattr(_state(app_wrapper).player.chord_data, "save_to_file", fail_save)
 
     response = client.post("/edit_chord", json=_payload(tmp_path, beat_index=1, chord="F"))
 
     assert response.status_code == 500
     assert "Could not save chord data" in response.get_json()["error"]
     assert Path(json_path).read_bytes() == original_bytes
-    assert app_wrapper.player.chord_data.chord_track_chords("user_edited") == original_chords
-    assert app_wrapper.player.chord_data.active_chord_track_id == "user_edited"
-    assert app_wrapper.player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
-    assert app_wrapper.player.playback_view.repeat_mode == "changes"
+    assert _state(app_wrapper).player.chord_data.chord_track_chords("user_edited") == original_chords
+    assert _state(app_wrapper).player.chord_data.active_chord_track_id == "user_edited"
+    assert _state(app_wrapper).player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
+    assert _state(app_wrapper).player.playback_view.repeat_mode == "changes"
 
 
 def test_reset_route_save_failure_restores_player_and_disk(tmp_path, monkeypatch):
     app_wrapper, client = make_client()
     _activate_editable(app_wrapper, tmp_path)
     client.post("/start_chord_editing", json=_payload(tmp_path))
-    json_path = app_wrapper.file_repr.get("json")
+    json_path = _state(app_wrapper).file_repr.get("json")
     original_bytes = Path(json_path).read_bytes()
 
     def fail_save(file_path):
         raise OSError("simulated save failure")
 
-    monkeypatch.setattr(app_wrapper.player.chord_data, "save_to_file", fail_save)
+    monkeypatch.setattr(_state(app_wrapper).player.chord_data, "save_to_file", fail_save)
 
     response = client.post("/reset_edited_chords", json=_payload(tmp_path))
 
     assert response.status_code == 500
     assert "Could not save chord data" in response.get_json()["error"]
     assert Path(json_path).read_bytes() == original_bytes
-    assert app_wrapper.player.chord_data.has_chord_track("user_edited") is True
-    assert app_wrapper.player.chord_data.active_chord_track_id == "user_edited"
-    assert app_wrapper.player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
-    assert app_wrapper.player.playback_view.repeat_mode == "changes"
+    assert _state(app_wrapper).player.chord_data.has_chord_track("user_edited") is True
+    assert _state(app_wrapper).player.chord_data.active_chord_track_id == "user_edited"
+    assert _state(app_wrapper).player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
+    assert _state(app_wrapper).player.playback_view.repeat_mode == "changes"
 
 
 def test_set_chord_version_route(tmp_path):
@@ -809,7 +819,7 @@ def test_reset_edited_chords_route(tmp_path):
 
     assert response.status_code == 200
     assert response.get_json()["has_edited"] is False
-    assert not ChordData(app_wrapper.file_repr.get("json")).has_chord_track("user_edited")
+    assert not ChordData(_state(app_wrapper).file_repr.get("json")).has_chord_track("user_edited")
 
 
 def test_reanalyze_refuses_edited_without_discard(tmp_path):
@@ -853,7 +863,7 @@ def test_reanalyze_rejects_media_with_pending_work(tmp_path):
     _activate_editable(app_wrapper, tmp_path)
     client.post("/start_chord_editing", json=_payload(tmp_path))
     app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
-    app_wrapper.analysis_queue.enqueue(str(app_wrapper.file_repr.get()))
+    app_wrapper.analysis_queue.enqueue(str(_state(app_wrapper).file_repr.get()))
 
     response = client.post("/reanalyze", json=_payload(tmp_path, discard_edits=True))
 
@@ -866,7 +876,7 @@ def test_reanalyze_rejects_media_with_processing_work(tmp_path):
     _activate_editable(app_wrapper, tmp_path)
     client.post("/start_chord_editing", json=_payload(tmp_path))
     app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
-    app_wrapper.analysis_queue.enqueue(str(app_wrapper.file_repr.get()))
+    app_wrapper.analysis_queue.enqueue(str(_state(app_wrapper).file_repr.get()))
     app_wrapper.analysis_queue.peek()
 
     response = client.post("/reanalyze", json=_payload(tmp_path, discard_edits=True))

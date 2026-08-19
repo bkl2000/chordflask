@@ -1357,6 +1357,19 @@
 
       body.drawer-open .song-bar .file-panel {
         display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .file-browser {
+        flex: 1;
+        min-height: 0;
+      }
+
+      .file-table-wrap {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
       }
 
       .song-bar .directory-tools input,
@@ -1635,7 +1648,7 @@
 
   <section class="song-bar">
     <button id="filesToggle" type="button" class="files-toggle" aria-expanded="false">
-      <span class="files-toggle-label">Files / Browse</span>
+      <span class="files-toggle-label">Files</span>
       <span class="files-toggle-chevron" aria-hidden="true">&#9656;</span>
     </button>
     <div class="file-panel" id="filePanel">
@@ -1645,7 +1658,7 @@
           <select id="storedDirs" onchange="selectStoredDirectory()">
             <option value="">Select a directory</option>
           </select>
-          <button class="browse-button" type="button" onclick="browseDirectories()">Browse</button>
+          <button class="browse-button" type="button" onclick="browseDirectories()">Root</button>
           <button class="load-button" type="button" onclick="loadFiles({ autoload: false })">Load</button>
         </div>
         <button id="mobileMenuClose" type="button" aria-label="Close menu">&#10005;</button>
@@ -1814,13 +1827,18 @@
       bass: { short: 'Bass', label: 'Bass' },
       other: { short: 'Oth', label: 'Other' },
     };
-    const STEM_DRIFT_THRESHOLD = 0.10;
+    const STEM_IGNORE_DRIFT = 0.030;
+    const STEM_SOFT_DRIFT_MAX = 0.120;
+    const STEM_MAX_RATE_DELTA = 0.03;
+    const STEM_RATE_FACTOR = 0.25;
     const STEM_DRIFT_INTERVAL_MS = 500;
     let stemsAvailable = false;
     let stemsActive = false;
     let stemStates = { vocals: true, drums: true, bass: true, other: true };
     let stemVolumes = { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 };
     let stemPlayers = {};
+    let stemStarved = {};
+    let stemVersions = null;
     let stemWasMasterMuted = false;
     let stemsActivationToken = 0;
     let stemMixerStem = null;
@@ -2263,48 +2281,7 @@
 
     function browseDirectories() {
       discardQueuedLoadIntents();
-      const startDir = (
-        dirnameInput.value.trim()
-        || currentDirectory
-        || localStorage.getItem(storageKeys.dirname)
-        || ''
-      ).trim();
-      if (!startDir) {
-        openBrowseRoots();
-        return;
-      }
-      fileStatus.innerText = 'Opening directory browser...';
-      fetch('/list_files', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store'
-        },
-        body: JSON.stringify({ dirname: startDir, matchstring: '', structured: true })
-      })
-      .then(response => {
-        if (!response.ok) {
-          return response.json().then(error => { throw error; });
-        }
-        return response.json();
-      })
-      .then(data => {
-        dirnameInput.value = data.current_dir || startDir;
-        localStorage.setItem(storageKeys.dirname, dirnameInput.value);
-        updateCurrentPath();
-        currentDirectory = data.current_dir || startDir;
-        parentDirectory = data.parent_dir || '';
-        currentDirectories = data.directories || [];
-        currentFiles = data.files || [];
-        sortBrowserEntries();
-        selectedFileName = '';
-        fileStatus.innerText = `${currentDirectories.length} dirs, ${currentFiles.length} files`;
-        renderBrowserTable(currentDirectories, currentFiles);
-        updateBatchButton();
-      })
-      .catch(() => {
-        openBrowseRoots();
-      });
+      openBrowseRoots();
     }
 
     function discardQueuedLoadIntents() {
@@ -2673,6 +2650,7 @@
 
     function updateStemsAvailability(payload) {
       teardownStems();
+      stemVersions = (payload && payload.versions) ? payload.versions : null;
       stemsAvailable = Boolean(
         payload && Array.isArray(payload.stems) && payload.stems.length === STEM_NAMES.length
       );
@@ -2698,6 +2676,37 @@
       });
     }
 
+    function wireStemLifecycle(el, name) {
+      const setStarved = (value) => {
+        stemStarved[name] = value;
+        if (value) el.playbackRate = 1;
+      };
+      el.addEventListener('waiting', () => setStarved(true));
+      el.addEventListener('stalled', () => setStarved(true));
+      el.addEventListener('playing', () => setStarved(false));
+      el.addEventListener('canplay', () => setStarved(false));
+      el.addEventListener('seeked', () => setStarved(false));
+    }
+
+    function stemSeekSettled(el, target) {
+      return new Promise(resolve => {
+        if (el.readyState >= 2 && Math.abs(el.currentTime - target) <= STEM_IGNORE_DRIFT) {
+          resolve();
+          return;
+        }
+        let settled = false;
+        const finish = () => {
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        };
+        el.addEventListener('seeked', finish, { once: true });
+        el.addEventListener('error', finish, { once: true });
+        setTimeout(finish, 1500);
+      });
+    }
+
     async function activateStems() {
       if (stemsActive || !stemsAvailable) return;
       const token = stemsActivationToken + 1;
@@ -2706,15 +2715,17 @@
       if (isNaN(master.currentTime)) return;
       stemWasMasterMuted = master.muted;
       const shouldPlay = !master.paused && !master.ended;
-      const target = master.currentTime;
 
       for (const name of STEM_NAMES) {
         const el = document.createElement('audio');
         el.preload = 'auto';
+        el.preservesPitch = true;
         el.muted = !stemStates[name];
         el.volume = stemVolumes[name];
         el.onerror = stemLoadFailure;
-        el.src = '/stem/' + name + '?' + new Date().getTime();
+        wireStemLifecycle(el, name);
+        const version = stemVersions && stemVersions[name];
+        el.src = '/stem/' + name + (version ? ('?v=' + version) : ('?' + new Date().getTime()));
         stemPlayers[name] = el;
         document.body.appendChild(el);
       }
@@ -2722,9 +2733,17 @@
       await Promise.all(STEM_NAMES.map(name => stemCanPlay(stemPlayers[name])));
       if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
 
+      // Re-read the master position after loading, then seek and settle the
+      // stems there before starting playback.
+      const target = master.currentTime;
       for (const name of STEM_NAMES) {
         stemPlayers[name].currentTime = target;
       }
+      await Promise.all(
+        STEM_NAMES.map(name => stemSeekSettled(stemPlayers[name], target))
+      );
+      if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
+
       master.muted = true;
       stemsActive = true;
       updateStemsUI();
@@ -2783,7 +2802,9 @@
       const target = master.currentTime;
       for (const name of STEM_NAMES) {
         const el = stemPlayers[name];
-        if (el) el.currentTime = target;
+        if (!el) continue;
+        el.playbackRate = 1;
+        el.currentTime = target;
       }
     }
 
@@ -2795,9 +2816,33 @@
       for (const name of STEM_NAMES) {
         const el = stemPlayers[name];
         if (!el) continue;
-        if (Math.abs(el.currentTime - target) > STEM_DRIFT_THRESHOLD) {
-          el.currentTime = target;
+
+        // Let a stem that is seeking or starved for data recover on its own;
+        // do not repeatedly hard-seek it while it is already stalled.
+        if (el.seeking || stemStarved[name] || el.readyState < 2) {
+          if (el.playbackRate !== 1) el.playbackRate = 1;
+          continue;
         }
+
+        const drift = target - el.currentTime;
+        const abs = Math.abs(drift);
+
+        if (abs <= STEM_IGNORE_DRIFT) {
+          if (el.playbackRate !== 1) el.playbackRate = 1;
+          continue;
+        }
+
+        if (abs <= STEM_SOFT_DRIFT_MAX) {
+          const delta = Math.max(
+            -STEM_MAX_RATE_DELTA,
+            Math.min(STEM_MAX_RATE_DELTA, drift * STEM_RATE_FACTOR)
+          );
+          el.playbackRate = 1 + delta;
+          continue;
+        }
+
+        el.playbackRate = 1;
+        el.currentTime = target;
       }
     }
 

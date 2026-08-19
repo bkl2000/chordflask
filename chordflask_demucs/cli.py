@@ -19,7 +19,13 @@ from .audio import (
 from .constants import CURRENT, ERROR, STALE
 from .discovery import DiscoveryError, discover_target
 from .runner import DemucsProcessError, run_demucs
-from .runtime import DemucsRuntimeError, RuntimeInfo, require_runtime, validate_device
+from .runtime import (
+    DemucsRuntimeError,
+    RuntimeInfo,
+    require_runtime,
+    resolve_device,
+    validate_device,
+)
 from .storage import DemucsBusyError, DemucsStatus, classify, media_lock, publish_set
 from .validation import (
     DemucsValidationError,
@@ -105,12 +111,25 @@ def run(target: Path, *, replace: bool, dry_run: bool, device: str) -> int:
         return 2
 
     runtime = None
+    resolved_device = None
     counts = {"current": 0, "todo": 0, "stale": 0, "processed": 0, "failed": 0}
     for index, media_path in enumerate(media_files, 1):
+        effective_device = resolved_device if resolved_device is not None else device
         try:
-            status = classify(media_path, runtime=runtime, device=device)
+            status = classify(media_path, runtime=runtime, device=effective_device)
         except Exception as error:
             status = DemucsStatus(ERROR, str(error))
+
+        if status.label == CURRENT and runtime is None:
+            # A provisional CURRENT only validated source/stem facts; confirm it
+            # against the real runtime and the resolved device before trusting it.
+            try:
+                runtime = require_runtime()
+                resolved_device = resolve_device(device, runtime)
+                status = classify(media_path, runtime=runtime, device=resolved_device)
+            except (DemucsRuntimeError, OSError, ValueError) as error:
+                status = DemucsStatus(ERROR, str(error))
+
         if dry_run:
             if status.label in {CURRENT, STALE} and replace:
                 status = DemucsStatus("REPLACE", status.reason)
@@ -135,7 +154,8 @@ def run(target: Path, *, replace: bool, dry_run: bool, device: str) -> int:
         try:
             if runtime is None:
                 runtime = require_runtime()
-            json_path = _process_one(media_path, runtime, device=device, replace=replace)
+                resolved_device = resolve_device(device, runtime)
+            json_path = _process_one(media_path, runtime, device=resolved_device, replace=replace)
             if json_path is None:
                 counts["current"] += 1
                 _print_status(index, len(media_files), media_path, DemucsStatus(CURRENT, "already current"))

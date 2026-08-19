@@ -18,7 +18,7 @@ import chordflask
 from analysis_queue import AnalysisQueue
 from analysis_worker import AnalysisWorker
 from chordflask_base import ChordData
-from chordflask import FlaskMP4App
+from chordflask import CLIENT_COOKIE, FlaskMP4App
 from filerepr import FileRepr
 from media_library import preferred_media_files
 
@@ -28,9 +28,19 @@ def isolate_default_analysis_queue(monkeypatch, tmp_path):
     monkeypatch.setenv("CHORDFLASK_QUEUE_DIR", str(tmp_path / "default-queue"))
 
 
+TEST_CLIENT_ID = "test-client"
+
+
+def _state(app_wrapper):
+    return app_wrapper.clients.get_or_create(TEST_CLIENT_ID)
+
+
 def make_client():
     app_wrapper = FlaskMP4App()
-    return app_wrapper, app_wrapper.app.test_client()
+    client = app_wrapper.app.test_client()
+    app_wrapper.clients.get_or_create(TEST_CLIENT_ID)
+    client.set_cookie(CLIENT_COOKIE, TEST_CLIENT_ID)
+    return app_wrapper, client
 
 
 def activate_analyzed_media(app_wrapper, tmp_path, name="song.mp4"):
@@ -40,7 +50,7 @@ def activate_analyzed_media(app_wrapper, tmp_path, name="song.mp4"):
     chord_data = ChordData()
     chord_data.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
     chord_data.save_to_file(file_repr.get("json"))
-    app_wrapper.file_repr = file_repr
+    _state(app_wrapper).file_repr = file_repr
     return media
 
 
@@ -311,7 +321,7 @@ def test_repeated_position_returns_complete_player_payload():
         def get_callback_output(self):
             return {"callback_output": ["grid"], "bpm": 120, "position": 0.0}
 
-    app_wrapper.player = FakePlayer()
+    _state(app_wrapper).player = FakePlayer()
 
     response = client.post("/set_position", json={"position": 0.0})
 
@@ -335,7 +345,7 @@ def test_set_position_switches_grid_mode_at_same_position():
         def get_callback_output(self):
             return {"callback_output": ["grid"], "bpm": 120, "position": 0.5}
 
-    app_wrapper.player = FakePlayer()
+    _state(app_wrapper).player = FakePlayer()
 
     desktop = client.post(
         "/set_position", json={"position": 0.5, "grid_mode": "desktop"}
@@ -516,11 +526,31 @@ def test_index_uses_active_player_as_stem_master():
 
     body = client.get("/").get_data(as_text=True)
 
-    assert "const STEM_DRIFT_THRESHOLD = 0.10" in body
+    assert "const STEM_IGNORE_DRIFT = 0.030" in body
+    assert "const STEM_SOFT_DRIFT_MAX = 0.120" in body
     assert "function stemDriftCheck()" in body
     assert "function resetStemsForSongChange()" in body
     # Synchronization must follow the active master element, not a fixed player.
     assert "const master = video;" in body
+
+
+def test_index_stem_drift_correction_is_stall_aware_and_two_level():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Pitch is preserved while rate-correcting.
+    assert "el.preservesPitch = true;" in body
+    # Stall-aware guard: never hard-seek a stem that is seeking or starved.
+    assert "el.seeking || stemStarved[name] || el.readyState < 2" in body
+    # Two-level correction: soft rate adjustment bounded, hard seek only for
+    # clearly large drift.
+    assert "const STEM_MAX_RATE_DELTA = 0.03" in body
+    assert "el.playbackRate = 1 + delta;" in body
+    assert "el.playbackRate = 1;" in body
+    assert "el.currentTime = target;" in body
+    assert "function wireStemLifecycle(el, name)" in body
+    assert "function stemSeekSettled(el, target)" in body
 
 
 def test_list_files_returns_mp3_mp4_and_webm_entries(tmp_path):
@@ -798,7 +828,7 @@ def test_media_route_uses_source_content_type(tmp_path, name, content_type):
     app_wrapper, client = make_client()
     media = tmp_path / name
     media.write_bytes(b"media")
-    app_wrapper.file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"))
+    _state(app_wrapper).file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"))
 
     response = client.get("/video")
 
@@ -972,7 +1002,7 @@ def test_load_file_uses_existing_json_without_starting_analysis(tmp_path, monkey
             return {"active_chord_track_id": None, "active_rhythm_track_id": None,
                     "available_chord_tracks": [], "available_rhythm_tracks": []}
 
-        def audio_stems_state(self):
+        def audio_stems_state(self, include_versions=False):
             return None
 
         def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
@@ -1016,7 +1046,7 @@ def test_load_file_reads_legacy_analysis_directory(tmp_path, monkeypatch):
             return {"active_chord_track_id": None, "active_rhythm_track_id": None,
                     "available_chord_tracks": [], "available_rhythm_tracks": []}
 
-        def audio_stems_state(self):
+        def audio_stems_state(self, include_versions=False):
             return None
 
         def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
@@ -1032,7 +1062,7 @@ def test_load_file_reads_legacy_analysis_directory(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.get_json()["json_file"] == str(legacy_dir / "song.json")
-    assert app_wrapper.file_repr.datapath == str(legacy_dir)
+    assert _state(app_wrapper).file_repr.datapath == str(legacy_dir)
 
 
 def test_load_file_marks_invalid_existing_analysis_for_hidden_reanalyze(
@@ -1059,7 +1089,7 @@ def test_load_file_marks_invalid_existing_analysis_for_hidden_reanalyze(
             return {"active_chord_track_id": None, "active_rhythm_track_id": None,
                     "available_chord_tracks": [], "available_rhythm_tracks": []}
 
-        def audio_stems_state(self):
+        def audio_stems_state(self, include_versions=False):
             return None
 
         def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
@@ -1103,7 +1133,7 @@ def test_load_file_queues_analysis_when_json_is_missing(tmp_path, monkeypatch):
     payload = response.get_json()
     assert payload["status"] == "queued"
     assert payload["json_file"] is None
-    assert app_wrapper.file_repr is None
+    assert _state(app_wrapper).file_repr is None
     assert app_wrapper.analysis_queue.status()["pending"][0]["path"] == str(media)
 
 
@@ -1254,6 +1284,16 @@ def test_run_prints_browser_url_and_ffmpeg_status(monkeypatch, capsys):
     assert "WARNING" not in output
 
 
+def test_stem_cache_startup_message_is_printed_when_enabled(capsys):
+    default_app = FlaskMP4App()
+    default_app.print_startup_message("127.0.0.1", 5057)
+    assert "STEM cache" not in capsys.readouterr().out
+
+    cache_app = FlaskMP4App(stem_cache=True)
+    cache_app.print_startup_message("127.0.0.1", 5057)
+    assert "STEM cache: enabled" in capsys.readouterr().out
+
+
 def test_update_display_options_updates_player_and_rerenders():
     app_wrapper, client = make_client()
     calls = []
@@ -1268,8 +1308,8 @@ def test_update_display_options_updates_player_and_rerenders():
         def update_position(self, position):
             calls.append(("position", position))
 
-    app_wrapper.player = FakePlayer()
-    app_wrapper.current_position = 12.5
+    _state(app_wrapper).player = FakePlayer()
+    _state(app_wrapper).current_position = 12.5
 
     response = client.post(
         "/update_display_options",
@@ -1278,8 +1318,8 @@ def test_update_display_options_updates_player_and_rerenders():
 
     assert response.status_code == 200
     assert response.get_json()["success"] is True
-    assert app_wrapper.prefer_flats is False
-    assert app_wrapper.repeat_mode == "changes"
+    assert _state(app_wrapper).prefer_flats is False
+    assert _state(app_wrapper).repeat_mode == "changes"
     assert calls == [("flats", False), ("repeat", "changes"), ("position", 12.5)]
 
 
@@ -1349,6 +1389,7 @@ def test_run_prints_security_warning_for_lan_bind(monkeypatch, capsys, tmp_path)
 
 
 def test_run_rejects_lan_bind_without_allowed_roots(monkeypatch):
+    monkeypatch.delenv("CHORDFLASK_MEDIA_ROOTS", raising=False)
     monkeypatch.delenv("CHORDIFIER_MEDIA_ROOTS", raising=False)
     app_wrapper, _ = make_client()
     called = False
@@ -1359,7 +1400,7 @@ def test_run_rejects_lan_bind_without_allowed_roots(monkeypatch):
 
     monkeypatch.setattr(app_wrapper.app, "run", fake_run)
 
-    with pytest.raises(ValueError, match="CHORDIFIER_MEDIA_ROOTS"):
+    with pytest.raises(ValueError, match="--roots"):
         app_wrapper.run(listen="0.0.0.0")
 
     assert called is False
@@ -1367,6 +1408,7 @@ def test_run_rejects_lan_bind_without_allowed_roots(monkeypatch):
 
 def test_lan_startup_without_media_roots_prints_clear_error():
     env = dict(os.environ)
+    env.pop("CHORDFLASK_MEDIA_ROOTS", None)
     env.pop("CHORDIFIER_MEDIA_ROOTS", None)
 
     result = subprocess.run(
@@ -1378,6 +1420,8 @@ def test_lan_startup_without_media_roots_prints_clear_error():
     assert result.returncode != 0
     assert "Traceback" not in result.stderr
     assert "ERROR:" in result.stderr
+    assert "chordflask --listen 0.0.0.0 --roots" in result.stderr
+    assert "CHORDFLASK_MEDIA_ROOTS" in result.stderr
     assert "CHORDIFIER_MEDIA_ROOTS" in result.stderr
     assert "allowed media root" in result.stderr
     assert "Multiple directories" in result.stderr
@@ -1389,6 +1433,7 @@ def test_lan_startup_without_media_roots_prints_clear_error():
 
 def test_lan_startup_rejects_invalid_media_root_without_traceback():
     env = dict(os.environ)
+    env.pop("CHORDFLASK_MEDIA_ROOTS", None)
     env["CHORDIFIER_MEDIA_ROOTS"] = "/nonexistent/chordflask-root"
 
     result = subprocess.run(
@@ -1405,6 +1450,7 @@ def test_lan_startup_rejects_invalid_media_root_without_traceback():
 
 def test_lan_startup_rejects_empty_media_root_entry_without_traceback(tmp_path):
     env = dict(os.environ)
+    env.pop("CHORDFLASK_MEDIA_ROOTS", None)
     env["CHORDIFIER_MEDIA_ROOTS"] = f"{tmp_path}{os.pathsep}"
 
     result = subprocess.run(
@@ -1436,6 +1482,7 @@ def test_run_no_security_warning_for_loopback(monkeypatch, capsys):
 
 
 def test_allowed_roots_defaults_to_none(monkeypatch):
+    monkeypatch.delenv("CHORDFLASK_MEDIA_ROOTS", raising=False)
     monkeypatch.delenv("CHORDIFIER_MEDIA_ROOTS", raising=False)
     app_wrapper, _ = make_client()
 
@@ -1443,6 +1490,7 @@ def test_allowed_roots_defaults_to_none(monkeypatch):
 
 
 def test_browse_roots_starts_at_home_without_restrictions(monkeypatch):
+    monkeypatch.delenv("CHORDFLASK_MEDIA_ROOTS", raising=False)
     monkeypatch.delenv("CHORDIFIER_MEDIA_ROOTS", raising=False)
     _, client = make_client()
 
@@ -1488,6 +1536,142 @@ def test_browse_roots_lists_only_configured_roots(monkeypatch, tmp_path):
     roots = client.get("/browse_roots").get_json()["roots"]
 
     assert [root["path"] for root in roots] == [str(root1), str(root2)]
+
+
+def test_roots_cli_parses_single_directory(tmp_path):
+    app_wrapper = FlaskMP4App(roots=str(tmp_path))
+
+    assert app_wrapper.allowed_roots == [tmp_path.resolve()]
+
+
+def test_roots_cli_parses_multiple_directories_in_order(tmp_path):
+    root1 = tmp_path / "music"
+    root2 = tmp_path / "videos"
+    root1.mkdir()
+    root2.mkdir()
+
+    app_wrapper = FlaskMP4App(roots=f"{root1}{os.path.pathsep}{root2}")
+
+    assert app_wrapper.allowed_roots == [root1.resolve(), root2.resolve()]
+
+
+def test_roots_cli_overrides_modern_media_roots_env(monkeypatch, tmp_path):
+    env_root = tmp_path / "env"
+    cli_root = tmp_path / "cli"
+    env_root.mkdir()
+    cli_root.mkdir()
+    monkeypatch.setenv("CHORDFLASK_MEDIA_ROOTS", str(env_root))
+
+    app_wrapper = FlaskMP4App(roots=str(cli_root))
+
+    assert app_wrapper.allowed_roots == [cli_root.resolve()]
+
+
+def test_modern_media_roots_env_overrides_legacy(monkeypatch, tmp_path):
+    modern = tmp_path / "modern"
+    legacy = tmp_path / "legacy"
+    modern.mkdir()
+    legacy.mkdir()
+    monkeypatch.setenv("CHORDFLASK_MEDIA_ROOTS", str(modern))
+    monkeypatch.setenv("CHORDIFIER_MEDIA_ROOTS", str(legacy))
+
+    app_wrapper = FlaskMP4App()
+
+    assert app_wrapper.allowed_roots == [modern.resolve()]
+
+
+def test_legacy_media_roots_env_still_works(monkeypatch, tmp_path):
+    monkeypatch.delenv("CHORDFLASK_MEDIA_ROOTS", raising=False)
+    monkeypatch.setenv("CHORDIFIER_MEDIA_ROOTS", str(tmp_path))
+
+    app_wrapper = FlaskMP4App()
+
+    assert app_wrapper.allowed_roots == [tmp_path.resolve()]
+
+
+def test_roots_cli_rejects_nonexistent_directory(tmp_path):
+    with pytest.raises(ValueError, match="not a directory"):
+        FlaskMP4App(roots=str(tmp_path / "missing"))
+
+
+def test_roots_cli_rejects_empty_entry(tmp_path):
+    with pytest.raises(ValueError, match="empty path entry"):
+        FlaskMP4App(roots=f"{tmp_path}{os.path.pathsep}")
+
+
+def test_run_prints_effective_media_roots(monkeypatch, capsys, tmp_path):
+    root1 = tmp_path / "music"
+    root2 = tmp_path / "videos"
+    root1.mkdir()
+    root2.mkdir()
+    monkeypatch.setenv(
+        "CHORDFLASK_MEDIA_ROOTS",
+        f"{root1}{os.path.pathsep}{root2}",
+    )
+    app_wrapper, _ = make_client()
+    monkeypatch.setattr(app_wrapper.app, "run", lambda **kwargs: None)
+
+    app_wrapper.run(listen="127.0.0.1")
+
+    output = capsys.readouterr().out
+    assert "Media roots:" in output
+    assert str(root1.resolve()) in output
+    assert str(root2.resolve()) in output
+
+
+def test_browse_roots_returns_cli_roots(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHORDFLASK_MEDIA_ROOTS", str(tmp_path / "env"))
+    root1 = tmp_path / "music"
+    root2 = tmp_path / "videos"
+    root1.mkdir()
+    root2.mkdir()
+
+    app_wrapper = FlaskMP4App(roots=f"{root1}{os.path.pathsep}{root2}")
+    client = app_wrapper.app.test_client()
+
+    roots = client.get("/browse_roots").get_json()["roots"]
+
+    assert [root["path"] for root in roots] == [str(root1.resolve()), str(root2.resolve())]
+
+
+def test_run_modern_port_env_overrides_legacy(monkeypatch):
+    app_wrapper, _ = make_client()
+    calls = []
+
+    monkeypatch.setattr(app_wrapper.app, "run", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setenv("CHORDFLASK_PORT", "5057")
+    monkeypatch.setenv("CHORDIFIER_PORT", "5058")
+
+    app_wrapper.run()
+
+    assert calls[0]["port"] == 5057
+
+
+def test_run_modern_listen_env_overrides_legacy(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHORDFLASK_MEDIA_ROOTS", str(tmp_path))
+    app_wrapper, _ = make_client()
+    calls = []
+
+    monkeypatch.setattr(app_wrapper.app, "run", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setenv("CHORDFLASK_LISTEN", "0.0.0.0")
+    monkeypatch.setenv("CHORDIFIER_LISTEN", "192.0.2.9")
+
+    app_wrapper.run()
+
+    assert calls[0]["host"] == "0.0.0.0"
+
+
+def test_run_modern_debug_env_overrides_legacy(monkeypatch):
+    app_wrapper, _ = make_client()
+    calls = []
+
+    monkeypatch.setattr(app_wrapper.app, "run", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setenv("CHORDFLASK_DEBUG", "0")
+    monkeypatch.setenv("CHORDIFIER_DEBUG", "1")
+
+    app_wrapper.run()
+
+    assert calls[0]["debug"] is False
 
 
 def test_list_files_hides_parent_at_allowed_root(monkeypatch, tmp_path):
@@ -1632,12 +1816,12 @@ def test_update_analysis_tracks_rejects_one_valid_one_invalid(tmp_path):
     activate_analyzed_media(app_wrapper, tmp_path)
 
     from mp4playerflask import MP4PlayerFlask
-    track = ChordData(app_wrapper.file_repr.get("json"))
+    track = ChordData(_state(app_wrapper).file_repr.get("json"))
     track.set_chord_track("custom", [{"timestamp": 0.0, "chord": "G"}])
-    track.save_to_file(app_wrapper.file_repr.get("json"))
-    app_wrapper.player = MP4PlayerFlask(app_wrapper.file_repr)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
+    track.save_to_file(_state(app_wrapper).file_repr.get("json"))
+    _state(app_wrapper).player = MP4PlayerFlask(_state(app_wrapper).file_repr)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("changes")
 
     response = client.post(
         "/update_analysis_tracks",
@@ -1645,10 +1829,10 @@ def test_update_analysis_tracks_rejects_one_valid_one_invalid(tmp_path):
     )
     assert response.status_code == 400
     assert "not available" in response.get_json()["error"]
-    assert app_wrapper.player.chord_data.active_chord_track_id == "chordino"
+    assert _state(app_wrapper).player.chord_data.active_chord_track_id == "chordino"
     # The chord-only fixture has no rhythm track (empty rhythm_tracks stays
     # empty), so the rejected update leaves the active rhythm track unset.
-    assert app_wrapper.player.chord_data.active_rhythm_track_id is None
+    assert _state(app_wrapper).player.chord_data.active_rhythm_track_id is None
 
 
 def test_update_analysis_tracks_success_rerenders_position(tmp_path):
@@ -1656,16 +1840,16 @@ def test_update_analysis_tracks_success_rerenders_position(tmp_path):
     activate_analyzed_media(app_wrapper, tmp_path)
 
     from mp4playerflask import MP4PlayerFlask
-    track = ChordData(app_wrapper.file_repr.get("json"))
+    track = ChordData(_state(app_wrapper).file_repr.get("json"))
     track.set_chord_track("custom", [{"timestamp": 0.0, "chord": "G"}])
-    track.save_to_file(app_wrapper.file_repr.get("json"))
-    app_wrapper.player = MP4PlayerFlask(app_wrapper.file_repr)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
-    app_wrapper.current_position = 1.25
-    old_view = app_wrapper.player.playback_view
+    track.save_to_file(_state(app_wrapper).file_repr.get("json"))
+    _state(app_wrapper).player = MP4PlayerFlask(_state(app_wrapper).file_repr)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("changes")
+    _state(app_wrapper).current_position = 1.25
+    old_view = _state(app_wrapper).player.playback_view
     rendered_positions = []
-    app_wrapper.player.update_position = rendered_positions.append
+    _state(app_wrapper).player.update_position = rendered_positions.append
 
     response = client.post(
         "/update_analysis_tracks",
@@ -1675,7 +1859,7 @@ def test_update_analysis_tracks_success_rerenders_position(tmp_path):
     payload = response.get_json()
     assert payload["success"] is True
     assert payload["active_chord_track_id"] == "custom"
-    assert app_wrapper.player.playback_view is not old_view
+    assert _state(app_wrapper).player.playback_view is not old_view
     assert rendered_positions == [1.25]
 
 
@@ -1684,11 +1868,11 @@ def test_add_foreign_track_and_select_via_api(tmp_path):
     activate_analyzed_media(app_wrapper, tmp_path)
 
     from mp4playerflask import MP4PlayerFlask
-    app_wrapper.player = MP4PlayerFlask(app_wrapper.file_repr)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
+    _state(app_wrapper).player = MP4PlayerFlask(_state(app_wrapper).file_repr)
+    _state(app_wrapper).player.set_prefer_flats(True)
+    _state(app_wrapper).player.set_repeat_mode("changes")
 
-    app_wrapper.player.chord_data.set_chord_track(
+    _state(app_wrapper).player.chord_data.set_chord_track(
         "custom", [{"timestamp": 0.0, "chord": "G"}],
         metadata={"display_name": "Custom Source"},
     )
@@ -1831,18 +2015,44 @@ def test_index_contains_mobile_menu_markup_and_rules():
     assert "body.drawer-open .song-bar" in body
 
 
-def test_index_browse_prefers_current_directory_over_home():
+def test_index_browse_starts_from_roots_and_load_jumps_to_typed_path():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
 
+    # Browse always starts from the configured allowed roots (never reloading
+    # the current/typed path), while Load lists the exact typed path.
     assert "function openBrowseRoots" in body
-    # Browse opens the current/known directory first and only falls back to
-    # the allowed roots (or HOME) when no current directory is available or
-    # it is not accessible.
     assert "function browseDirectories" in body
-    assert "localStorage.getItem(storageKeys.dirname)" in body
+    assert 'onclick="browseDirectories()"' in body
+    assert 'onclick="loadFiles({ autoload: false })"' in body
+    # Browse delegates straight to the roots flow and no longer lists the
+    # current directory itself.
     assert "openBrowseRoots();" in body
+    browse_body = body[
+        body.index("function browseDirectories() {"):
+        body.index("function discardQueuedLoadIntents()")
+    ]
+    assert "openBrowseRoots();" in browse_body
+    assert "localStorage.getItem(storageKeys.dirname)" not in browse_body
+    assert "fetch('/list_files'" not in browse_body
+
+
+def test_index_mobile_file_list_fills_drawer_without_22vh_cap():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    mobile_block = body[body.index("@media (max-width: 640px)"):]
+    # The mobile drawer lets the file table consume the available height so a
+    # long directory/file list has one sensible scrolling region instead of a
+    # tiny nested 22vh list.
+    assert "body.drawer-open .song-bar .file-panel" in mobile_block
+    assert "flex: 1" in mobile_block
+    assert "min-height: 0" in mobile_block
+    assert "max-height: none" in mobile_block
+    # The desktop 22vh cap stays intact outside the mobile query.
+    assert "max-height: clamp(152px, 22vh, 260px)" in body
 
 
 def test_index_keeps_track_switching_visible_with_labels():

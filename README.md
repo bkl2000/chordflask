@@ -239,8 +239,7 @@ To use ChordFlask from a phone or tablet on the same trusted LAN, start
 ChordFlask on the host with an allowed media root and a LAN listener:
 
 ```bash
-CHORDIFIER_MEDIA_ROOTS=/home/user/Music \
-    chordflask --listen 0.0.0.0 --port 5000
+chordflask --listen 0.0.0.0 --roots "/home/user/Music"
 ```
 
 Then open `http://<host-ip>:5000` on the other device. ChordFlask has no
@@ -347,8 +346,8 @@ guide is included as `README.md` inside the archive.
   `scripts/chordflask-maintain storage report /path/to/music` (read-only) to
   see how much space one directory's local `.chordflask` uses.
 - **Port 5000 is busy:** start on another port — source:
-  `CHORDIFIER_PORT=5050 scripts/chordflask`; standalone:
-  `CHORDIFIER_PORT=5050 ./chordflask.sh` — and open <http://localhost:5050>.
+  `scripts/chordflask --port 5050`; standalone:
+  `./chordflask.sh --port 5050` — and open <http://localhost:5050>.
 
 ## Security
 
@@ -357,20 +356,24 @@ ChordFlask has no authentication, TLS, or CSRF protection. Keep the default
 [SECURITY.md](SECURITY.md) before enabling LAN access.
 
 A LAN listener requires at least one allowed media root. Use `--listen` to
-select the bind address/interface and `--port` to select the TCP port:
+select the bind address/interface, `--port` to select the TCP port, and
+`--roots` to select the allowed media roots:
 
 ```bash
-CHORDIFIER_MEDIA_ROOTS=/home/user/Music \
-    chordflask --listen 0.0.0.0 --port 5000
+chordflask --listen 0.0.0.0 --roots "/home/user/Music"
 ```
 
 Separate multiple roots with the platform path separator (`:` on
 Linux/macOS, `;` on Windows):
 
 ```bash
-CHORDIFIER_MEDIA_ROOTS="/home/user/Music:/mnt/media/videos" \
-    chordflask --listen 0.0.0.0 --port 5000
+chordflask --listen 0.0.0.0 --roots "/home/user/Music:/mnt/media/videos"
 ```
+
+For scripts and services, set the `CHORDFLASK_MEDIA_ROOTS` environment
+variable instead (the older `CHORDIFIER_MEDIA_ROOTS` spelling is still
+accepted for compatibility). The command-line option takes precedence over
+both.
 
 Only media below these roots is served on the network. The home directory or
 the whole filesystem is not automatically exposed.

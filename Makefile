@@ -65,12 +65,12 @@ help:
 		'  PYTHON_BIN=python3.12     Interpreter used to create a virtual environment' \
 		'  TEST_ARGS="-q -k name"    Additional pytest arguments' \
 		'  DEMUCS_ARGS="--dry-run videos"  Arguments for make demucs' \
-		'  CHORDIFIER_PORT=5050      Port used by make run' \
+		'  --port=5050               Choose the web app port (chordflask --port 5050)' \
 		'' \
 		'Examples:' \
 		'  make all' \
 		'  make test TEST_ARGS="-q"' \
-		'  CHORDIFIER_PORT=5050 make run' \
+		'  chordflask --port 5050' \
 		''
 
 all: fix-permissions setup check

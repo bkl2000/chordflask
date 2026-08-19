@@ -172,7 +172,7 @@ class MP4PlayerFlask:
             "rhythm": state["available_rhythm_tracks"],
         }
 
-    def audio_stems_state(self):
+    def audio_stems_state(self, include_versions=False):
         """Return the complete Demucs stem set, or None when unavailable.
 
         Only a complete grouped set with all four expected FLAC stems that
@@ -181,6 +181,11 @@ class MP4PlayerFlask:
         or unsafe files all yield None. The player consumes the generic
         ChordData audio-track contract and never imports the optional producer
         package.
+
+        When ``include_versions`` is true, a per-stem version token derived
+        from the file's ``st_mtime_ns`` and ``st_size`` is included so the
+        frontend can build stable, cache-friendly URLs that change only when a
+        stem file is regenerated or replaced.
         """
         if getattr(self, "file_repr", None) is None:
             return None
@@ -197,6 +202,7 @@ class MP4PlayerFlask:
         media_path = Path(self.file_repr.get())
         storage_root = Path(self.file_repr.get("json")).resolve().parent
         stems = []
+        versions = {}
         for stem_name in DEMUCS_STEM_NAMES:
             stem = tracks.get(stem_name)
             if not isinstance(stem, dict) or stem.get("format") != "flac":
@@ -213,11 +219,20 @@ class MP4PlayerFlask:
                 return None
             if not resolved.is_relative_to(storage_root) or not resolved.is_file():
                 return None
+            if include_versions:
+                try:
+                    stat = resolved.stat()
+                    versions[stem_name] = f"{stat.st_mtime_ns}-{stat.st_size}"
+                except OSError:
+                    return None
             stems.append(stem_name)
-        return {
+        result = {
             "set_id": STEMS_AUDIO_SET_ID,
             "stems": stems,
         }
+        if include_versions:
+            result["versions"] = versions
+        return result
 
     # ── chord editing ─────────────────────────────────────────────────
 

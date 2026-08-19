@@ -114,12 +114,15 @@ def test_browser_and_batch_exports_are_byte_identical(tmp_path):
 
     file_repr = FileRepr(str(media), create=True)
     app_wrapper = FlaskMP4App()
-    app_wrapper.file_repr = file_repr
-    app_wrapper.player = MP4PlayerFlask(file_repr, metric_chords=True)
-    app_wrapper.player.set_prefer_flats(True)
-    app_wrapper.player.set_repeat_mode("changes")
+    state = app_wrapper.clients.get_or_create("test-client")
+    state.file_repr = file_repr
+    state.player = MP4PlayerFlask(file_repr, metric_chords=True)
+    state.player.set_prefer_flats(True)
+    state.player.set_repeat_mode("changes")
 
-    response = app_wrapper.app.test_client().post(
+    client = app_wrapper.app.test_client()
+    client.set_cookie("chordflask_client", "test-client")
+    response = client.post(
         "/download_chords",
         json={"dirname": str(tmp_path), "filename": media.name},
     )

@@ -149,10 +149,11 @@ def test_readme_documents_responsive_support_and_lan_usage():
         "Mobile support is functional but still undergoing broader real-device "
         "testing." in text
     )
-    assert "CHORDIFIER_MEDIA_ROOTS" in readme
+    assert "CHORDFLASK_MEDIA_ROOTS" in readme
+    assert "--roots" in readme
     assert "--listen" in readme
     assert "--port" in readme
-    assert "--listen 0.0.0.0 --port 5000" in text
+    assert 'chordflask --listen 0.0.0.0 --roots "/home/user/Music"' in text
     assert "platform path separator" in readme
     assert "not automatically exposed" in readme
 
