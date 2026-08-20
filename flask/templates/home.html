@@ -182,6 +182,14 @@
       white-space: nowrap;
     }
 
+      .audio-symbol {
+        font-size: 36px;
+      }
+
+      #audioFileName {
+        display: none;
+      }
+
     #audioPlayer {
       width: min(520px, 90%);
     }
@@ -1395,6 +1403,25 @@
         height: clamp(120px, 34vw, 200px);
         min-height: 120px;
         aspect-ratio: auto;
+      }
+
+      .audio-player-panel {
+        padding: 8px;
+        gap: 8px;
+      }
+
+      .audio-symbol {
+        font-size: 36px;
+      }
+
+      #audioFileName {
+        display: none;
+      }
+
+      #audioPlayer {
+        width: 100%;
+        max-width: 520px;
+        min-width: 0;
       }
 
       #callbackContainer {
