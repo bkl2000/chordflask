@@ -273,26 +273,139 @@ def test_sweep_keeps_currently_resolved_client(monkeypatch):
 # ── 15: same-song editing conflict returns 409 ────────────────────────
 
 
+def _grid_chord(response, beat_index):
+    grid = response.get_json()["edit_grid"]
+    return next(
+        cell["chord"]
+        for row in grid["rows"]
+        for cell in row
+        if cell["beat_index"] == beat_index
+    )
+
+
 def test_concurrent_editing_of_same_song_returns_409(tmp_path):
     app = FlaskMP4App()
     _write_song(tmp_path, "song.mp3")
+    setup = _make_client(app, "setup-client")
+    setup.post("/load_file", json={"dirname": str(tmp_path), "filename": "song.mp3"})
+    payload = {"dirname": str(tmp_path), "filename": "song.mp3"}
+    assert setup.post("/start_chord_editing", json=payload).status_code == 200
+
     a = _make_client(app, "client-a")
     b = _make_client(app, "client-b")
     a.post("/load_file", json={"dirname": str(tmp_path), "filename": "song.mp3"})
     b.post("/load_file", json={"dirname": str(tmp_path), "filename": "song.mp3"})
 
-    payload = {"dirname": str(tmp_path), "filename": "song.mp3"}
-    assert a.post("/start_chord_editing", json=payload).status_code == 200
     assert a.post("/edit_chord", json={**payload, "beat_index": 1, "chord": "F"}).status_code == 200
 
     conflict = b.post("/edit_chord", json={**payload, "beat_index": 2, "chord": "G"})
     assert conflict.status_code == 409
     assert conflict.get_json()["error"] == "Edited chords changed on disk; reload and re-edit."
 
-    stored = ChordData(FileRepr(str(tmp_path / "song.mp3"), datapath=str(tmp_path / ".chordflask")).get("json"))
+    json_path = FileRepr(
+        str(tmp_path / "song.mp3"), datapath=str(tmp_path / ".chordflask")
+    ).get("json")
+    stored = ChordData(json_path)
     chords = stored.chord_track_chords("user_edited")
     assert any(entry["chord"] == "F" for entry in chords)
     assert not any(entry["chord"] == "G" for entry in chords)
+
+    losing_state = app.clients.get("client-b")
+    assert losing_state.player.chord_data.chord_track_chords("user_edited") == chords
+    assert losing_state.player.chord_data.active_chord_track_id == "user_edited"
+    assert losing_state.player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
+    assert losing_state.json_mtime_ns == Path(json_path).stat().st_mtime_ns
+
+    display = b.post(
+        "/set_position",
+        json={"position": 0.5, "include_edit_grid": True},
+    )
+    assert display.status_code == 200
+    assert _grid_chord(display, 1) == "F"
+    assert _grid_chord(display, 2) != "G"
+
+
+def test_stale_start_editing_reloads_disk_and_preserves_existing_selection(tmp_path):
+    app = FlaskMP4App()
+    _write_song(tmp_path, "song.mp3")
+    a = _make_client(app, "client-a")
+    b = _make_client(app, "client-b")
+    payload = {"dirname": str(tmp_path), "filename": "song.mp3"}
+    a.post("/load_file", json=payload)
+    b.post("/load_file", json=payload)
+
+    assert a.post("/start_chord_editing", json=payload).status_code == 200
+    assert a.post(
+        "/edit_chord", json={**payload, "beat_index": 1, "chord": "F"}
+    ).status_code == 200
+
+    conflict = b.post("/start_chord_editing", json=payload)
+
+    assert conflict.status_code == 409
+    losing_state = app.clients.get("client-b")
+    assert losing_state.player.chord_data.active_chord_track_id == "chordino"
+    assert losing_state.player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
+    assert any(
+        entry["chord"] == "F"
+        for entry in losing_state.player.chord_data.chord_track_chords("user_edited")
+    )
+    json_path = losing_state.file_repr.get("json")
+    assert losing_state.json_mtime_ns == Path(json_path).stat().st_mtime_ns
+
+
+def test_stale_reset_reloads_winner_and_preserves_edited_selection(tmp_path):
+    app = FlaskMP4App()
+    _write_song(tmp_path, "song.mp3")
+    setup = _make_client(app, "setup-client")
+    payload = {"dirname": str(tmp_path), "filename": "song.mp3"}
+    setup.post("/load_file", json=payload)
+    assert setup.post("/start_chord_editing", json=payload).status_code == 200
+
+    a = _make_client(app, "client-a")
+    b = _make_client(app, "client-b")
+    a.post("/load_file", json=payload)
+    b.post("/load_file", json=payload)
+    assert a.post(
+        "/edit_chord", json={**payload, "beat_index": 1, "chord": "F"}
+    ).status_code == 200
+
+    conflict = b.post("/reset_edited_chords", json=payload)
+
+    assert conflict.status_code == 409
+    losing_state = app.clients.get("client-b")
+    assert losing_state.player.chord_data.active_chord_track_id == "user_edited"
+    assert losing_state.player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
+    display = b.post(
+        "/set_position",
+        json={"position": 0.5, "include_edit_grid": True},
+    )
+    assert display.status_code == 200
+    assert _grid_chord(display, 1) == "F"
+
+
+def test_stale_edit_falls_back_when_winner_removed_selected_track(tmp_path):
+    app = FlaskMP4App()
+    _write_song(tmp_path, "song.mp3")
+    setup = _make_client(app, "setup-client")
+    payload = {"dirname": str(tmp_path), "filename": "song.mp3"}
+    setup.post("/load_file", json=payload)
+    assert setup.post("/start_chord_editing", json=payload).status_code == 200
+
+    a = _make_client(app, "client-a")
+    b = _make_client(app, "client-b")
+    a.post("/load_file", json=payload)
+    b.post("/load_file", json=payload)
+    assert a.post("/reset_edited_chords", json=payload).status_code == 200
+
+    conflict = b.post(
+        "/edit_chord", json={**payload, "beat_index": 2, "chord": "G"}
+    )
+
+    assert conflict.status_code == 409
+    losing_state = app.clients.get("client-b")
+    assert not losing_state.player.chord_data.has_chord_track("user_edited")
+    assert losing_state.player.chord_data.active_chord_track_id == "chordino"
+    assert losing_state.player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
 
 
 # ── 15c: same-song editing check+save is atomic across clients ───────

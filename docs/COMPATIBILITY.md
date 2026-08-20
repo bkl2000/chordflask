@@ -113,7 +113,7 @@ To evaluate a new distro or Python version without a full VM:
 # Verify capability-based detection with synthetic mocks
 make check
 
-# Real integration tests (requires system ffmpeg and vendored Vamp plugins)
+# Real integration tests (requires system ffmpeg and installed Vamp plugins)
 CHORDIFIER_REQUIRE_VAMP=1 make test TEST_ARGS="tests/test_ffmpeg_integration.py tests/test_vamp_integration.py"
 
 # Standalone build and smoke-test

@@ -312,7 +312,8 @@ class MP4PlayerFlask:
         self.__build_playback_view()
         self.reset_render_cache()
 
-    def reload_chord_data(self, chord_track_id=None, rhythm_track_id=None):
+    def reload_chord_data(self, chord_track_id=None, rhythm_track_id=None,
+                          soft_fallback=False):
         """Restore persisted chord data and the active view after a failed save.
 
         Reloads from the unchanged JSON on disk without altering display
@@ -328,6 +329,7 @@ class MP4PlayerFlask:
         self.select_analysis_tracks(
             chord_track_id=chord_track_id,
             rhythm_track_id=rhythm_track_id,
+            soft_fallback=soft_fallback,
         )
         self.__build_playback_view()
         self.playback_view.repeat_mode = repeat_mode

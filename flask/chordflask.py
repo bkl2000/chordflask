@@ -841,19 +841,33 @@ class FlaskMP4App:
                 and disk_mtime_ns is not None
                 and disk_mtime_ns != state.json_mtime_ns
             ):
+                self._reload_player_chord_data(
+                    state, previous_track_state, soft_fallback=True
+                )
                 return jsonify(
                     error="Edited chords changed on disk; reload and re-edit."
                 ), 409
             try:
                 state.player.chord_data.save_to_file(json_path)
             except (OSError, ValueError) as error:
-                state.player.reload_chord_data(
-                    chord_track_id=previous_track_state["active_chord_track_id"],
-                    rhythm_track_id=previous_track_state["active_rhythm_track_id"],
-                )
+                self._reload_player_chord_data(state, previous_track_state)
                 return jsonify(error=f"Could not save chord data: {error}"), 500
             state.json_mtime_ns = self._json_mtime_ns(json_path)
             return None
+
+    def _reload_player_chord_data(self, state, track_state, *, soft_fallback=False):
+        """Restore one client's player from its authoritative analysis JSON."""
+        json_path = state.file_repr.get("json")
+        state.player.reload_chord_data(
+            chord_track_id=track_state["active_chord_track_id"],
+            rhythm_track_id=track_state["active_rhythm_track_id"],
+            soft_fallback=soft_fallback,
+        )
+        state.json_mtime_ns = self._json_mtime_ns(json_path)
+        # Force the next position request to render the newly loaded data even
+        # when the browser reports the same position and viewport mode.
+        state.old_current_position = None
+        state.old_grid_mode = None
 
     def start_chord_editing(self):
         data, error_response = self._json_body()

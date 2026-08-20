@@ -103,11 +103,11 @@ scanned recursively.
 - **Previous** and **Next** follow the visible, filtered, and sorted file list.
   MP3 and video files share this list. Navigation stops at the first and last
   file rather than wrapping.
-- **Continue** starts the next visible file when the current one ends. If its
+- **Auto** starts the next visible file when the current one ends. If its
   analysis is missing, playback waits and starts after analysis succeeds.
 - **Repeat** repeats the current file.
 - **A** and **B** mark a loop segment, and **⟳** repeats only that segment.
-  Loop, Repeat, and Continue are mutually exclusive.
+  Loop, Repeat, and Auto are mutually exclusive.
 - **Transpose** changes displayed chord names without changing the audio or
   stored analysis.
 - The small **↻** control requests fresh Chordino/QM analysis while playback and

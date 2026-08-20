@@ -62,6 +62,9 @@ The command accepts one file or one non-recursive directory:
 scripts/chordflask-demucs --dry-run /music/videos
 scripts/chordflask-demucs /music/videos
 scripts/chordflask-demucs --replace song.mp4
+scripts/chordflask-demucs --device auto song.mp4
+scripts/chordflask-demucs --device cpu song.mp4
+scripts/chordflask-demucs --device cuda song.mp4
 ```
 
 - `--dry-run` reports `CURRENT`, `TODO`, `STALE`, or `ERROR` without writing
@@ -70,6 +73,12 @@ scripts/chordflask-demucs --replace song.mp4
   `STALE` files unchanged unless `--replace` is supplied.
 - `--replace` regenerates the complete four-stem set, never just one stem.
 - A malformed analysis JSON is protected and must be repaired separately.
+
+`--device auto` selects CUDA when the inspected Torch runtime reports it
+available, otherwise CPU. `--device cpu` and `--device cuda` request those
+devices explicitly. The resolved effective device is stored and participates
+in `CURRENT`/`STALE` classification; moving between CPU and CUDA can therefore
+make an existing set `STALE`.
 
 Directory discovery is direct-only and uses the normal MP4, WebM, MP3
 same-stem priority. Processing is serial to keep resource use predictable.
@@ -89,10 +98,14 @@ Each successful run stores only FLAC stems below the media directory:
 ```
 
 The analysis JSON registers these four files as one
-`audio_tracks["demucs:htdemucs"]` set. The set is current only when all four
-files, hashes, dimensions, source identity, model/runtime metadata, and
-synchronization facts validate together. Chord/rhythm tracks, Edited data,
-user data, and unrelated audio sets are preserved.
+`audio_tracks["demucs:htdemucs"]` set. `CURRENT` means its provider and model,
+source hash and size, and all four FLAC stem files still validate against the
+registered paths, hashes, sizes, and audio facts. The complete runtime check
+also compares the stored processing device and pipeline fingerprint, which
+tracks the `htdemucs` model, Demucs and Torch versions, effective device, and
+the fixed output/synchronization configuration. Otherwise the set is `STALE`.
+Chord/rhythm tracks, Edited data, user data, and unrelated audio sets are
+preserved.
 
 The original container audio-stream start time and timeline fields are stored
 in the `source_timeline` metadata object when FFprobe provides them. They are
@@ -121,6 +134,15 @@ in the chord header. For ordinary songs the control is hidden.
 
 Stem loading failure safely returns to the original audio and restores the
 original master mute state.
+
+## Optional stem caching
+
+By default ChordFlask serves stem audio with `no-store` semantics. Starting the
+web player with `chordflask --stem-cache` enables versioned stem URLs and
+private cache-friendly response headers, so a browser may avoid transferring
+unchanged stems repeatedly. This option is optional and experimental. It is a
+transfer/cache performance option, not a claimed fix for Android or other
+mobile playback interruptions.
 
 ## Known limitations
 

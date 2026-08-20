@@ -1095,29 +1095,6 @@
       flex-wrap: wrap;
     }
 
-    .bar-navigation {
-      display: none;
-      flex: 0 0 auto;
-      gap: 6px;
-    }
-
-    .bar-navigation button {
-      width: 32px;
-      min-width: 32px;
-      height: 28px;
-      padding: 0;
-      font-size: 15px;
-      line-height: 26px;
-    }
-
-    .bar-navigation button:disabled,
-    .bar-navigation button:disabled:hover {
-      cursor: default;
-      border-color: #9ca8b4;
-      background: #b3bdc7;
-      opacity: 0.65;
-    }
-
     #playPauseButton {
       width: 30px;
       height: 30px;
@@ -1450,11 +1427,11 @@
 
       .controls {
         width: 100%;
-        padding: 4px;
+        padding: 2px;
       }
 
       .playback-controls {
-        gap: 6px;
+        gap: 1px;
       }
 
       #playPauseButton {
@@ -1470,10 +1447,25 @@
         height: 38px;
       }
 
+      .control-bar .loop-controls {
+        gap: 1px;
+      }
+
       .control-bar #repeatButton,
       .control-bar #continueButton {
         height: 38px;
-        padding: 0 8px;
+        padding: 0 3px;
+      }
+
+      .control-bar .playback-navigation {
+        gap: 1px;
+      }
+
+      .control-bar .playback-navigation button {
+        width: 38px;
+        min-width: 38px;
+        height: 38px;
+        line-height: 36px;
       }
 
       .status {
@@ -1481,15 +1473,6 @@
       }
     }
 
-    @media (min-width: 1024px) {
-      .bar-navigation {
-        display: flex;
-      }
-
-      .topbar .playback-navigation {
-        display: none;
-      }
-    }
   </style>
 </head>
 <body>
@@ -1544,12 +1527,16 @@
             </span>
             <span class="display-tools">
               <span class="transpose-control">
-                <button type="button" onclick="stepSemitones(-1)" aria-label="Transpose down">-</button>
+                <button type="button" onclick="stepSemitones(-1)" aria-label="Transpose down"
+                        title="Transpose down one semitone">-</button>
                 <input type="number" id="semitones" value="0" oninput="updateSemitones()" />
-                <button type="button" onclick="stepSemitones(1)" aria-label="Transpose up">+</button>
+                <button type="button" onclick="stepSemitones(1)" aria-label="Transpose up"
+                        title="Transpose up one semitone">+</button>
               </span>
-              <button id="repeatDisplayButton" type="button" onclick="toggleRepeatDisplay()">Chords</button>
-              <button id="accidentalButton" type="button" onclick="toggleAccidentals()">Flats ♭</button>
+              <button id="repeatDisplayButton" type="button" onclick="toggleRepeatDisplay()"
+                      title="Show every beat" aria-label="Show every beat" aria-pressed="true">Changes</button>
+              <button id="accidentalButton" type="button" onclick="toggleAccidentals()"
+                      title="Use flat chord names" aria-label="Use flat chord names">Flats ♭</button>
             </span>
             <span class="chord-actions">
               <button id="editButton" type="button" title="Edit chords beat by beat"
@@ -1559,8 +1546,8 @@
               <span id="queueStatus"></span>
               <button id="reanalyzeButton" type="button" title="Chordino/QM reanalysis of current file"
                       aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
-              <button id="stemsButton" type="button" title="Toggle Demucs stem playback"
-                      aria-label="Toggle stem playback" aria-pressed="false" hidden
+              <button id="stemsButton" type="button" title="Toggle separated stem playback"
+                      aria-label="Toggle separated stem playback" aria-pressed="false" hidden
                       onclick="toggleStems()">STEMS</button>
             </span>
           </div>
@@ -1568,31 +1555,39 @@
             <span class="stem-label">Stems</span>
             <span class="stem-chip stem-on" id="stemVocalsChip">
               <button id="stemVocalsButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('vocals')" aria-pressed="true" aria-label="Vocals">Voc</button>
+                      onclick="toggleStem('vocals')" aria-pressed="true" aria-label="Mute/unmute vocals"
+                      title="Mute/unmute vocals">Voc</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemVocalsLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('vocals')" aria-label="Vocals volume">100</button>
+                      onclick="openStemMixer('vocals')" aria-label="Set vocals volume"
+                      title="Set vocals volume">100</button>
             </span>
             <span class="stem-chip stem-on" id="stemDrumsChip">
               <button id="stemDrumsButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('drums')" aria-pressed="true" aria-label="Drums">Drm</button>
+                      onclick="toggleStem('drums')" aria-pressed="true" aria-label="Mute/unmute drums"
+                      title="Mute/unmute drums">Drm</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemDrumsLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('drums')" aria-label="Drums volume">100</button>
+                      onclick="openStemMixer('drums')" aria-label="Set drums volume"
+                      title="Set drums volume">100</button>
             </span>
             <span class="stem-chip stem-on" id="stemBassChip">
               <button id="stemBassButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('bass')" aria-pressed="true" aria-label="Bass">Bass</button>
+                      onclick="toggleStem('bass')" aria-pressed="true" aria-label="Mute/unmute bass"
+                      title="Mute/unmute bass">Bass</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemBassLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('bass')" aria-label="Bass volume">100</button>
+                      onclick="openStemMixer('bass')" aria-label="Set bass volume"
+                      title="Set bass volume">100</button>
             </span>
             <span class="stem-chip stem-on" id="stemOtherChip">
               <button id="stemOtherButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('other')" aria-pressed="true" aria-label="Other">Oth</button>
+                      onclick="toggleStem('other')" aria-pressed="true" aria-label="Mute/unmute other"
+                      title="Mute/unmute other">Oth</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemOtherLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('other')" aria-label="Other volume">100</button>
+                      onclick="openStemMixer('other')" aria-label="Set other volume"
+                      title="Set other volume">100</button>
             </span>
             <div class="stem-mixer" id="stemMixer" hidden>
               <span class="stem-mixer-label" id="stemMixerLabel">Voc</span>
@@ -1621,12 +1616,6 @@
   <div class="control-bar">
     <div class="controls">
       <div class="playback-controls">
-        <nav class="bar-navigation" aria-label="Playlist navigation">
-          <button id="previousFileButtonBar" type="button" onclick="navigateFile(-1)"
-                  title="Previous file" aria-label="Previous file" disabled>&#x23EE;</button>
-          <button id="nextFileButtonBar" type="button" onclick="navigateFile(1)"
-                  title="Next file" aria-label="Next file" disabled>&#x23ED;</button>
-        </nav>
         <button id="playPauseButton" type="button" aria-label="Play" title="Play/Pause">&#9654;</button>
         <nav class="loop-controls" aria-label="A-B loop">
           <button id="loopStartButton" type="button" title="Set loop start (A) at the current position"
@@ -1634,10 +1623,15 @@
           <button id="loopEndButton" type="button" title="Set loop end (B) at the current position"
                   aria-label="Set loop end" onclick="setLoopEnd()">B</button>
           <button id="loopToggleButton" type="button" title="Toggle A-B loop"
-                  aria-label="Toggle A-B loop" onclick="toggleLoop()">⟳</button>
+                  aria-label="Toggle A-B loop" aria-pressed="false" onclick="toggleLoop()">⟳</button>
         </nav>
-        <button id="repeatButton" type="button" onclick="toggleRepeat()">Repeat Off</button>
-        <button id="continueButton" type="button" onclick="toggleContinue()">Continue Off</button>
+        <button id="repeatButton" type="button" onclick="toggleRepeat()"
+                title="Repeat the current file" aria-label="Repeat the current file"
+                aria-pressed="false">Repeat Off</button>
+        <button id="continueButton" type="button" onclick="toggleContinue()"
+                title="Automatically play the next file when this one ends"
+                aria-label="Automatically play the next file"
+                aria-pressed="false">Auto Off</button>
         <div class="status">
           <span id="currentPosition">Position: 0.00s</span>
           <span id="bpmStatus">BPM: --</span>
@@ -1658,8 +1652,10 @@
           <select id="storedDirs" onchange="selectStoredDirectory()">
             <option value="">Select a directory</option>
           </select>
-          <button class="browse-button" type="button" onclick="browseDirectories()">Root</button>
-          <button class="load-button" type="button" onclick="loadFiles({ autoload: false })">Load</button>
+          <button class="browse-button" type="button" onclick="browseDirectories()"
+                  title="Show configured media roots" aria-label="Show configured media roots">Roots</button>
+          <button class="load-button" type="button" onclick="loadFiles({ autoload: false })"
+                  title="Load the directory entered above" aria-label="Load the directory entered above">Load</button>
         </div>
         <button id="mobileMenuClose" type="button" aria-label="Close menu">&#10005;</button>
       </div>
@@ -1737,8 +1733,13 @@
     let rhythmTrackSelect = document.getElementById('rhythmTrackSelect');
     let previousFileButton = document.getElementById('previousFileButton');
     let nextFileButton = document.getElementById('nextFileButton');
-    let previousFileButtonBar = document.getElementById('previousFileButtonBar');
-    let nextFileButtonBar = document.getElementById('nextFileButtonBar');
+    let playbackNavigation = document.querySelector('.playback-navigation');
+    let playbackControls = document.querySelector('.playback-controls');
+    let topbar = document.querySelector('.topbar');
+    let navigationInPlaybackBar = window.matchMedia(
+      '(max-width: 640px), (min-width: 1024px)'
+    );
+    let mobilePlaybackControls = window.matchMedia('(max-width: 640px)');
     let loopStartButton = document.getElementById('loopStartButton');
     let loopEndButton = document.getElementById('loopEndButton');
     let loopToggleButton = document.getElementById('loopToggleButton');
@@ -1995,8 +1996,24 @@
       const currentIndex = currentFiles.findIndex(file => file.name === anchor);
       previousFileButton.disabled = currentIndex <= 0;
       nextFileButton.disabled = currentIndex < 0 || currentIndex >= currentFiles.length - 1;
-      previousFileButtonBar.disabled = currentIndex <= 0;
-      nextFileButtonBar.disabled = currentIndex < 0 || currentIndex >= currentFiles.length - 1;
+    }
+
+    function placePlaybackNavigation() {
+      if (navigationInPlaybackBar.matches) {
+        playbackControls.insertBefore(playbackNavigation, playPauseButton);
+      } else {
+        topbar.insertBefore(playbackNavigation, mobileMenuButton);
+      }
+      updatePlaybackControlLabels();
+    }
+
+    function updatePlaybackControlLabels() {
+      const repeatButton = document.getElementById('repeatButton');
+      const continueButton = document.getElementById('continueButton');
+      repeatButton.textContent = mobilePlaybackControls.matches
+        ? `Rep ${isRepeating ? 'On' : 'Off'}`
+        : `Repeat ${isRepeating ? 'On' : 'Off'}`;
+      continueButton.textContent = `Auto ${isContinuing ? 'On' : 'Off'}`;
     }
 
     function normalizedBatchLimit() {
@@ -3650,7 +3667,10 @@
       repeatMode = mode === 'changes' ? 'changes' : 'chords';
       localStorage.setItem(storageKeys.repeatMode, repeatMode);
       const button = document.getElementById('repeatDisplayButton');
-      button.textContent = repeatMode === 'changes' ? 'Repeats _' : 'Chords';
+      button.textContent = repeatMode === 'changes' ? 'Changes' : 'Beats';
+      button.title = repeatMode === 'changes' ? 'Show every beat' : 'Show only chord changes';
+      button.setAttribute('aria-label', repeatMode === 'changes' ? 'Show every beat' : 'Show only chord changes');
+      button.setAttribute('aria-pressed', repeatMode === 'changes' ? 'true' : 'false');
       button.classList.toggle('display-on', repeatMode === 'changes');
       sendDisplayOptions();
     }
@@ -3664,6 +3684,8 @@
       localStorage.setItem(storageKeys.preferFlats, preferFlats ? '1' : '0');
       const button = document.getElementById('accidentalButton');
       button.textContent = preferFlats ? 'Flats ♭' : 'Sharps #';
+      button.title = preferFlats ? 'Use flat chord names' : 'Use sharp chord names';
+      button.setAttribute('aria-label', preferFlats ? 'Use flat chord names' : 'Use sharp chord names');
       button.classList.toggle('display-on', !preferFlats);
       sendDisplayOptions();
     }
@@ -3696,8 +3718,9 @@
       isRepeating = enabled;
       video.loop = isRepeating;
       const repeatButton = document.getElementById('repeatButton');
-      repeatButton.textContent = isRepeating ? 'Repeat On' : 'Repeat Off';
       repeatButton.classList.toggle('repeat-on', isRepeating);
+      repeatButton.setAttribute('aria-pressed', String(isRepeating));
+      updatePlaybackControlLabels();
     }
 
     function toggleRepeat() {
@@ -3711,6 +3734,7 @@
     function setLoop(enabled) {
       isLooping = enabled;
       loopToggleButton.classList.toggle('loop-on', isLooping);
+      loopToggleButton.setAttribute('aria-pressed', String(isLooping));
     }
 
     function toggleLoop() {
@@ -3752,8 +3776,9 @@
         cancelledPendingLoad = true;
       }
       const continueButton = document.getElementById('continueButton');
-      continueButton.textContent = isContinuing ? 'Continue On' : 'Continue Off';
       continueButton.classList.toggle('continue-on', isContinuing);
+      continueButton.setAttribute('aria-pressed', String(isContinuing));
+      updatePlaybackControlLabels();
       if (cancelledPendingLoad) {
         renderBrowserTable(currentDirectories, currentFiles);
       } else {
@@ -3821,6 +3846,9 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
+      placePlaybackNavigation();
+      navigationInPlaybackBar.addEventListener('change', placePlaybackNavigation);
+      mobilePlaybackControls.addEventListener('change', placePlaybackNavigation);
       const savedDirname = localStorage.getItem(storageKeys.dirname) || '';
       const savedFilter = localStorage.getItem(storageKeys.filter) || '';
       const savedFile = localStorage.getItem(storageKeys.file) || '';

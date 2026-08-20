@@ -17,7 +17,7 @@ Windows browser at localhost.
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.3.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.3/chordflask-mint22-x86_64-py3.12-v0.9.3.tar.gz)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.4.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.4/chordflask-mint22-x86_64-py3.12-v0.9.4.tar.gz)**
 
 Built from the same ChordFlask release source as the public release. FFmpeg and
 Vamp plugin binaries are not bundled; see the portable bundle guide for
@@ -228,7 +228,7 @@ layout, and limitations.
    default) and select **Queue next**. Each click adds that many new,
    unanalysed files from the currently filtered and sorted list; files already
    analysed or queued do not consume the limit.
-5. Use **Previous**, **Next**, **Repeat**, **Continue**, and **Transpose** while
+5. Use **Previous**, **Next**, **Repeat**, **Auto**, and **Transpose** while
    playing the file. Press **A** and **B** to mark a loop segment and **⟳** to
    repeat it.
 
@@ -245,6 +245,14 @@ chordflask --listen 0.0.0.0 --roots "/home/user/Music"
 Then open `http://<host-ip>:5000` on the other device. ChordFlask has no
 authentication or TLS, so LAN access should only be enabled on a trusted
 network. See [Security](#security) for the media-root restrictions.
+
+Different browsers and devices have independent playback and display state;
+tabs in the same browser profile intentionally share one ChordFlask client
+state. This state is held in memory and resets when ChordFlask restarts. Chord
+edits, however, are shared files, so simultaneous edits to one song can give
+one client a conflict; that client receives the current disk state and can
+re-edit. This state separation is not authentication or hardened multi-user
+isolation.
 
 Generated JSON, MusicXML, MIDI, cached audio, and optional Demucs FLAC stems are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write

@@ -170,41 +170,38 @@ def test_index_contains_accessible_previous_and_next_controls():
     body = client.get("/").get_data(as_text=True)
 
     assert 'class="playback-navigation" aria-label="Playlist navigation"' in body
-    assert 'id="previousFileButton"' in body
-    assert 'onclick="navigateFile(-1)"' in body
+    assert body.count('id="previousFileButton"') == 1
+    assert body.count('onclick="navigateFile(-1)"') == 1
     assert 'title="Previous file" aria-label="Previous file" disabled' in body
-    assert 'id="nextFileButton"' in body
-    assert 'onclick="navigateFile(1)"' in body
+    assert body.count('id="nextFileButton"') == 1
+    assert body.count('onclick="navigateFile(1)"') == 1
     assert 'title="Next file" aria-label="Next file" disabled' in body
     assert ".playback-navigation button:disabled" in body
     assert "width: 32px" in body
     assert "height: 28px" in body
 
 
-def test_desktop_moves_navigation_into_playback_bar():
+def test_responsive_layout_repositions_one_navigation_pair():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
 
-    # Desktop keeps the same navigation functions behind distinct IDs.
-    assert 'id="previousFileButtonBar"' in body
-    assert 'id="nextFileButtonBar"' in body
-    assert 'onclick="navigateFile(-1)"' in body
-    assert 'onclick="navigateFile(1)"' in body
-    # The desktop media query hides the header navigation and shows the bar
-    # navigation; mobile/tablet keep the header navigation.
-    assert "@media (min-width: 1024px)" in body
-    desktop_rule = body[body.index("@media (min-width: 1024px)"):]
-    assert ".bar-navigation" in desktop_rule
-    assert ".topbar .playback-navigation" in desktop_rule
-    assert "display: none" in desktop_rule
-    # Both pairs are kept disabled together.
+    assert 'id="previousFileButtonBar"' not in body
+    assert 'id="nextFileButtonBar"' not in body
+    assert ".bar-navigation" not in body
+    assert "'(max-width: 640px), (min-width: 1024px)'" in body
+    placement = body[
+        body.index("function placePlaybackNavigation"):
+        body.index("function updatePlaybackControlLabels")
+    ]
+    assert "playbackControls.insertBefore(playbackNavigation, playPauseButton)" in placement
+    assert "topbar.insertBefore(playbackNavigation, mobileMenuButton)" in placement
     update_function = body[
         body.index("function updateNavigationButtons"):
-        body.index("function normalizedBatchLimit")
+        body.index("function placePlaybackNavigation")
     ]
-    assert "previousFileButtonBar.disabled" in update_function
-    assert "nextFileButtonBar.disabled" in update_function
+    assert update_function.count("previousFileButton.disabled") == 1
+    assert update_function.count("nextFileButton.disabled") == 1
 
 
 def test_manual_navigation_uses_visible_order_and_waits_for_analysis():
@@ -483,11 +480,64 @@ def test_index_contains_four_stem_toggles_initialized_on():
         assert f'class="stem-chip stem-on" id="stem{name}Chip"' in body
         assert f'id="stem{name}Button"' in body
         assert f'onclick="toggleStem(\'{stem}\')"' in body
-        assert f'aria-label="{name}"' in body
+        assert f'aria-label="Mute/unmute {stem}"' in body
+        assert f'title="Mute/unmute {stem}"' in body
         assert f'>{short_labels[stem]}</button>' in body
         assert f'id="stem{name}Level"' in body
         assert f'onclick="openStemMixer(\'{stem}\')"' in body
-        assert f'aria-label="{name} volume"' in body
+        assert f'aria-label="Set {stem} volume"' in body
+        assert f'title="Set {stem} volume"' in body
+
+
+def test_index_contains_first_use_labels_and_tooltips():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # File drawer controls.
+    assert 'title="Show configured media roots"' in body
+    assert '>Roots</button>' in body
+    assert 'title="Load the directory entered above"' in body
+    assert '>Load</button>' in body
+
+    # Playback bar: auto-advance and repeat.
+    assert '>Auto Off</button>' in body
+    assert 'title="Automatically play the next file when this one ends"' in body
+    assert 'aria-label="Automatically play the next file"' in body
+    assert '>Repeat Off</button>' in body
+    assert 'title="Repeat the current file"' in body
+
+    # Chord-header display toggles use short state labels plus tooltips.
+    assert 'id="repeatDisplayButton"' in body
+    assert '>Changes</button>' in body
+    assert 'title="Show every beat"' in body
+    assert 'aria-pressed="true"' in body
+    assert 'title="Use flat chord names"' in body
+    assert '>Flats \u266d</button>' in body
+
+    # Transpose and loop controls carry explanatory titles.
+    assert 'title="Transpose down one semitone"' in body
+    assert 'title="Transpose up one semitone"' in body
+    assert 'aria-label="Toggle A-B loop" aria-pressed="false"' in body
+
+    # STEMS control uses the separated-playback wording.
+    assert 'title="Toggle separated stem playback"' in body
+    assert 'aria-label="Toggle separated stem playback"' in body
+
+
+def test_index_updates_dynamic_state_labels():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Playback and display-mode toggles rewrite their visible labels and expose
+    # pressed state without hiding mobile On/Off text.
+    assert "? `Rep ${isRepeating ? 'On' : 'Off'}`" in body
+    assert "`Auto ${isContinuing ? 'On' : 'Off'}`" in body
+    assert "repeatButton.setAttribute('aria-pressed', String(isRepeating))" in body
+    assert "continueButton.setAttribute('aria-pressed', String(isContinuing))" in body
+    assert "button.textContent = repeatMode === 'changes' ? 'Changes' : 'Beats'" in body
+    assert "button.title = preferFlats ? 'Use flat chord names' : 'Use sharp chord names'" in body
 
 
 def test_index_contains_single_shared_stem_mixer():
@@ -2093,6 +2143,24 @@ def test_index_compact_desktop_controls_do_not_override_mobile():
     assert "@media (max-width: 640px)" in body
     assert "width: 44px" in body
     assert "height: 38px" in body
+
+
+def test_mobile_navigation_matches_loop_control_size():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    mobile_block = body[body.index("@media (max-width: 640px)"):]
+    navigation_rule = mobile_block[
+        mobile_block.index(".control-bar .playback-navigation button"):
+        mobile_block.index(".status {", mobile_block.index(
+            ".control-bar .playback-navigation button"
+        ))
+    ]
+
+    assert "width: 38px" in navigation_rule
+    assert "min-width: 38px" in navigation_rule
+    assert "height: 38px" in navigation_rule
+    assert "line-height: 36px" in navigation_rule
 
 
 def test_mobile_hides_editing_controls():
