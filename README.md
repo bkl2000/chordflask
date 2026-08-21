@@ -205,6 +205,11 @@ control:
 - Mixer state is kept while STEMS is switched OFF and ON again for the same
   song; loading a different song resets all four to 100%.
 
+For STEM playback, Chromium/Chrome is the recommended browser. The current
+multi-stream synchronization behavior is tested primarily with Chromium;
+Firefox may be less reliable, especially when ChordFlask is accessed from
+another device over the LAN.
+
 Demucs preparation is **not** run automatically by the player — you normally
 run the preparation command once for a music directory. The generated FLAC
 stems stay beside that collection under `.chordflask/` and are registered as

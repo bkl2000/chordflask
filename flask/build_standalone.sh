@@ -4,6 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${CHORDFLASK_PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 
+PRINT_RELEASE_NAME=false
+if [[ "${1:-}" == "--print-release-name" && $# -eq 1 ]]; then
+    PRINT_RELEASE_NAME=true
+elif [[ $# -ne 0 ]]; then
+    echo "Usage: $0 [--print-release-name]" >&2
+    exit 2
+fi
+
 # A release artifact must represent one exact committed source revision. Refuse
 # to build when tracked source changes (staged or unstaged) are present, so the
 # embedded build commit can never claim a commit while carrying uncommitted edits.
@@ -39,6 +47,11 @@ semver="$(head -n1 "${PROJECT_ROOT}/VERSION")"
 RELEASE_NAME="chordflask-${distro_token}-${arch_token}-${py_token}-v${semver}"
 RELEASE_DIR="${SCRIPT_DIR}/dist/${RELEASE_NAME}"
 RELEASE_ARCHIVE="${SCRIPT_DIR}/dist/${RELEASE_NAME}.tar.gz"
+
+if [[ "$PRINT_RELEASE_NAME" == true ]]; then
+    printf '%s\n' "$RELEASE_NAME"
+    exit 0
+fi
 
 cd "$SCRIPT_DIR"
 
