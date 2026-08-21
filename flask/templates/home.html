@@ -1860,6 +1860,12 @@
     const STEM_MAX_RATE_DELTA = 0.03;
     const STEM_RATE_FACTOR = 0.25;
     const STEM_DRIFT_INTERVAL_MS = 500;
+    // Chromium timing tests showed fully muted or exact-zero-gain media using
+    // a different clock path: stems stayed playing at readyState 4 but drifted
+    // roughly 50–70 ms after toggles. Number.EPSILON (~-313 dB) is inaudible
+    // while preserving the normal nonzero-gain clock. This is intentional sync
+    // behavior; do not use muted=true or volume=0 without browser timing tests.
+    const STEM_SILENT_VOLUME = Number.EPSILON;
     let stemsAvailable = false;
     let stemsActive = false;
     let stemStates = { vocals: true, drums: true, bass: true, other: true };
@@ -2603,6 +2609,12 @@
       return Math.round((stemVolumes[name] || 0) * 100);
     }
 
+    function stemOutputVolume(name) {
+      return stemStates[name]
+        ? Math.max(stemVolumes[name], STEM_SILENT_VOLUME)
+        : STEM_SILENT_VOLUME;
+    }
+
     function updateStemsUI() {
       stemsButton.hidden = !stemsAvailable;
       stemsButton.classList.toggle('stem-on', stemsActive);
@@ -2646,7 +2658,7 @@
       const level = Math.min(1, Math.max(0, percent / 100));
       stemVolumes[stemMixerStem] = level;
       const el = stemPlayers[stemMixerStem];
-      if (el) el.volume = level;
+      if (el) el.volume = stemOutputVolume(stemMixerStem);
       updateStemsUI();
     }
 
@@ -2672,6 +2684,7 @@
         el.remove();
       }
       stemPlayers = {};
+      stemStarved = {};
     }
 
     function teardownStems() {
@@ -2702,21 +2715,37 @@
     }
 
     function stemCanPlay(el) {
-      return new Promise(resolve => {
+      return new Promise((resolve, reject) => {
         if (el.readyState >= 2) {
           resolve();
           return;
         }
         let settled = false;
-        const finish = () => {
-          if (!settled) {
-            settled = true;
-            resolve();
-          }
+        const cleanup = () => {
+          el.removeEventListener('canplay', ready);
+          el.removeEventListener('error', failed);
+          clearTimeout(timeout);
         };
-        el.addEventListener('canplay', finish, { once: true });
-        el.addEventListener('error', finish, { once: true });
-        setTimeout(finish, 3000);
+        const ready = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve();
+        };
+        const failed = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error('Stem media failed to load'));
+        };
+        el.addEventListener('canplay', ready, { once: true });
+        el.addEventListener('error', failed, { once: true });
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error('Stem media did not become ready'));
+        }, 3000);
       });
     }
 
@@ -2732,22 +2761,68 @@
       el.addEventListener('seeked', () => setStarved(false));
     }
 
-    function stemSeekSettled(el, target) {
-      return new Promise(resolve => {
-        if (el.readyState >= 2 && Math.abs(el.currentTime - target) <= STEM_IGNORE_DRIFT) {
+    function stemSeekSettled(el, target, setCurrentTime = false) {
+      return new Promise((resolve, reject) => {
+        if (
+          !setCurrentTime && el.readyState >= 2
+          && Math.abs(el.currentTime - target) <= STEM_IGNORE_DRIFT
+        ) {
           resolve();
           return;
         }
         let settled = false;
-        const finish = () => {
-          if (!settled) {
-            settled = true;
-            resolve();
-          }
+        const cleanup = () => {
+          el.removeEventListener('seeked', ready);
+          el.removeEventListener('error', failed);
+          clearTimeout(timeout);
         };
-        el.addEventListener('seeked', finish, { once: true });
-        el.addEventListener('error', finish, { once: true });
-        setTimeout(finish, 1500);
+        const ready = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve();
+        };
+        const failed = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error('Stem media seek failed'));
+        };
+        el.addEventListener('seeked', ready, { once: true });
+        el.addEventListener('error', failed, { once: true });
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error('Stem media seek did not settle'));
+        }, 1500);
+        if (setCurrentTime) {
+          try {
+            el.currentTime = target;
+          } catch (error) {
+            settled = true;
+            cleanup();
+            reject(error);
+          }
+        }
+      });
+    }
+
+    function playStemPlayers(token, onlyPaused = false) {
+      const promises = [];
+      for (const name of STEM_NAMES) {
+        const el = stemPlayers[name];
+        if (!el || (onlyPaused && !el.paused)) continue;
+        try {
+          promises.push(Promise.resolve(el.play()));
+        } catch (error) {
+          promises.push(Promise.reject(error));
+        }
+      }
+      return Promise.all(promises).then(() => {
+        if (token !== stemsActivationToken) {
+          throw new Error('Stem activation was superseded');
+        }
       });
     }
 
@@ -2764,9 +2839,10 @@
         const el = document.createElement('audio');
         el.preload = 'auto';
         el.preservesPitch = true;
-        el.muted = !stemStates[name];
-        el.volume = stemVolumes[name];
-        el.onerror = stemLoadFailure;
+        // Keep loading stems silent until every clock is ready and aligned.
+        // Starting them now preserves the STEMS click's playback permission.
+        el.muted = true;
+        el.volume = stemOutputVolume(name);
         wireStemLifecycle(el, name);
         const version = stemVersions && stemVersions[name];
         el.src = '/stem/' + name + (version ? ('?v=' + version) : ('?' + new Date().getTime()));
@@ -2774,31 +2850,49 @@
         document.body.appendChild(el);
       }
 
-      await Promise.all(STEM_NAMES.map(name => stemCanPlay(stemPlayers[name])));
-      if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
+      try {
+        const startPromise = shouldPlay ? playStemPlayers(token) : Promise.resolve();
+        await Promise.all([
+          Promise.all(STEM_NAMES.map(name => stemCanPlay(stemPlayers[name]))),
+          startPromise,
+        ]);
+        if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
 
-      // Re-read the master position after loading, then seek and settle the
-      // stems there before starting playback.
-      const target = master.currentTime;
-      for (const name of STEM_NAMES) {
-        stemPlayers[name].currentTime = target;
-      }
-      await Promise.all(
-        STEM_NAMES.map(name => stemSeekSettled(stemPlayers[name], target))
-      );
-      if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
-
-      master.muted = true;
-      stemsActive = true;
-      updateStemsUI();
-      if (shouldPlay) {
+        // Re-read the advancing master after loading. Stems that were already
+        // started are silent, so seeking them cannot expose stale audio.
+        const target = master.currentTime;
         for (const name of STEM_NAMES) {
-          stemPlayers[name].play().catch(() => stemLoadFailure());
+          stemPlayers[name].playbackRate = 1;
         }
+        await Promise.all(
+          STEM_NAMES.map(name => stemSeekSettled(stemPlayers[name], target, true))
+        );
+        if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
+
+        const shouldStillPlay = !master.paused && !master.ended;
+        if (shouldStillPlay) {
+          await playStemPlayers(token, true);
+        } else {
+          for (const name of STEM_NAMES) stemPlayers[name].pause();
+        }
+        if (token !== stemsActivationToken || !stemPlayers[STEM_NAMES[0]]) return;
+
+        for (const name of STEM_NAMES) {
+          const el = stemPlayers[name];
+          el.volume = stemOutputVolume(name);
+          el.muted = false;
+          el.onerror = () => stemLoadFailure(token);
+        }
+        master.muted = true;
+        stemsActive = true;
+        updateStemsUI();
+      } catch (error) {
+        if (token === stemsActivationToken) stemLoadFailure(token);
       }
     }
 
-    function stemLoadFailure() {
+    function stemLoadFailure(token = stemsActivationToken) {
+      if (token !== stemsActivationToken) return;
       const hadStems = stemsActive || Object.keys(stemPlayers).length > 0;
       teardownStems();
       updateStemsUI();
@@ -2820,7 +2914,12 @@
       if (!Object.prototype.hasOwnProperty.call(stemStates, name)) return;
       stemStates[name] = !stemStates[name];
       const el = stemPlayers[name];
-      if (el) el.muted = !stemStates[name];
+      if (el) {
+        // This is deliberately synchronous: rapid toggles cannot leave a
+        // stale play/seek continuation that overrides the newest state.
+        el.muted = false;
+        el.volume = stemOutputVolume(name);
+      }
       updateStemsUI();
     }
 
@@ -2828,13 +2927,15 @@
       if (!stemsActive) return;
       const master = video;
       const shouldPlay = !master.paused && !master.ended;
-      for (const name of STEM_NAMES) {
-        const el = stemPlayers[name];
-        if (!el) continue;
-        if (shouldPlay) {
-          if (el.paused) el.play().catch(() => {});
-        } else if (!el.paused) {
-          el.pause();
+      if (shouldPlay) {
+        const token = stemsActivationToken;
+        playStemPlayers(token, true).catch(() => stemLoadFailure(token));
+      } else {
+        for (const name of STEM_NAMES) {
+          const el = stemPlayers[name];
+          if (el && !el.paused) {
+            el.pause();
+          }
         }
       }
     }
@@ -2863,7 +2964,7 @@
 
         // Let a stem that is seeking or starved for data recover on its own;
         // do not repeatedly hard-seek it while it is already stalled.
-        if (el.seeking || stemStarved[name] || el.readyState < 2) {
+        if (el.paused || el.seeking || stemStarved[name] || el.readyState < 2) {
           if (el.playbackRate !== 1) el.playbackRate = 1;
           continue;
         }

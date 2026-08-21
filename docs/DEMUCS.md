@@ -132,6 +132,13 @@ in the chord header. For ordinary songs the control is hidden.
   song resets all four to 100%. Levels are session state only — nothing is
   persisted.
 
+Individual stem OFF intentionally uses an effectively silent nonzero gain
+instead of browser mute or exact-zero volume. Real Chromium playback timing
+tests found that fully silent media elements could remain playing and ready
+while their clocks diverged from the other stems. This is deliberate
+synchronization behavior, not an audio-level workaround; browser timing must be
+re-tested before changing it.
+
 Stem loading failure safely returns to the original audio and restores the
 original master mute state.
 
@@ -145,6 +152,18 @@ transfer/cache performance option, not a claimed fix for Android or other
 mobile playback interruptions.
 
 ## Known limitations
+
+Verified 2026-08-20: STEM playback works on localhost with Firefox and works
+very well over a remote LAN with desktop Chromium. Repeated individual stem
+OFF/ON toggles no longer accumulate drift in the tested local and desktop
+Chromium cases. Remote-LAN Firefox remains unreliable and may leave **Stem
+playback unavailable** visible; treat this as a Firefox/remote-origin media
+playback compatibility issue rather than changing synchronization logic.
+
+Remote-LAN Android Chromium still exhibits the earlier timeout/dropout
+behavior, including with `--stem-cache`. Current evidence points to a separate
+mobile browser media-pipeline, buffering, or scheduling limitation; the stem
+mute/synchronization fix does not address it.
 
 - Browser playback uses bounded synchronization, not sample-accurate DAW
   playback. Audible sync should be checked on real devices.

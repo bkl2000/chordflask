@@ -43,6 +43,18 @@ def make_client():
     return app_wrapper, client
 
 
+def javascript_function(body, name):
+    signatures = (f"    function {name}(", f"    async function {name}(")
+    starts = [body.find(signature) for signature in signatures]
+    start = min(index for index in starts if index >= 0)
+    ends = [
+        body.find(signature, start + 1)
+        for signature in ("\n    function ", "\n    async function ")
+    ]
+    end = min(index for index in ends if index >= 0)
+    return body[start:end if end >= 0 else len(body)]
+
+
 def activate_analyzed_media(app_wrapper, tmp_path, name="song.mp4"):
     media = tmp_path / name
     media.write_bytes(b"not used")
@@ -563,9 +575,8 @@ def test_index_stem_mixer_js_contract():
     assert "function onStemMixerInput()" in body
     assert "function closeStemMixer()" in body
     assert "function resetStemVolumes()" in body
-    assert "el.volume = stemVolumes[name];" in body
-    assert "if (el) el.volume = level;" in body
-    assert "el.muted = !stemStates[name];" in body
+    assert "function stemOutputVolume(name)" in body
+    assert "if (el) el.volume = stemOutputVolume(stemMixerStem);" in body
     # Mute must not reset the stored volume; reset happens only on song change.
     assert "resetStemVolumes();" in body
     assert "function resetStemsForSongChange()" in body
@@ -600,7 +611,99 @@ def test_index_stem_drift_correction_is_stall_aware_and_two_level():
     assert "el.playbackRate = 1;" in body
     assert "el.currentTime = target;" in body
     assert "function wireStemLifecycle(el, name)" in body
-    assert "function stemSeekSettled(el, target)" in body
+    assert "function stemSeekSettled(el, target, setCurrentTime = false)" in body
+
+
+def test_index_stem_mute_keeps_the_existing_media_clock():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    toggle = javascript_function(body, "toggleStem")
+
+    assert "el.muted = false;" in toggle
+    assert "el.muted = true;" not in toggle
+    assert "el.volume = stemOutputVolume(name);" in toggle
+    assert "el.volume = 0;" not in toggle
+    assert "el.pause()" not in toggle
+    assert "removeAttribute('src')" not in toggle
+    assert ".load()" not in toggle
+    assert ".src =" not in toggle
+    assert "createElement" not in toggle
+    assert "currentTime" not in toggle
+    assert "playbackRate" not in toggle
+
+
+def test_index_logically_muted_stems_remain_in_sync_bookkeeping():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    drift_check = javascript_function(body, "stemDriftCheck")
+
+    output_volume = javascript_function(body, "stemOutputVolume")
+
+    # Every player is visited regardless of logical mute state. A sub-audible
+    # nonzero gain avoids the browser's separate muted/zero-volume clock path.
+    assert "for (const name of STEM_NAMES)" in drift_check
+    assert "el.paused || el.seeking || stemStarved[name]" in drift_check
+    assert "stemStates[name]" not in drift_check
+    assert "const STEM_SILENT_VOLUME = Number.EPSILON;" in body
+    assert "Math.max(stemVolumes[name], STEM_SILENT_VOLUME)" in output_volume
+    assert ": STEM_SILENT_VOLUME;" in output_volume
+    assert ": 0;" not in output_volume
+
+
+def test_index_rapid_stem_toggles_have_no_stale_async_completion():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    toggle = javascript_function(body, "toggleStem")
+
+    # OFF/ON/OFF/ON is a sequence of synchronous assignments. There is no
+    # continuation from an earlier request that can overwrite the final one.
+    state_change = "stemStates[name] = !stemStates[name];"
+    volume_change = "el.volume = stemOutputVolume(name);"
+    assert toggle.index(state_change) < toggle.index(volume_change)
+    assert "async" not in toggle
+    assert "await" not in toggle
+    assert "Promise" not in toggle
+    assert "play()" not in toggle
+    assert "rejoinStem" not in toggle
+
+
+def test_index_stem_activation_preserves_play_intent_across_source_readiness():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    activation = javascript_function(body, "activateStems")
+
+    assert "const version = stemVersions && stemVersions[name];" in activation
+    assert "el.volume = stemOutputVolume(name);" in activation
+    assert "el.muted = true;" in activation
+    assert "const startPromise = shouldPlay ? playStemPlayers(token)" in activation
+    assert activation.index("const startPromise") < activation.index("await Promise.all([")
+    assert "const shouldStillPlay = !master.paused && !master.ended;" in activation
+    assert "await playStemPlayers(token, true);" in activation
+    assert activation.index("await playStemPlayers(token, true);") < activation.index(
+        "stemsActive = true;"
+    )
+    assert "el.muted = false;" in activation
+    assert "stemSeekSettled(stemPlayers[name], target, true)" in activation
+
+
+def test_index_stem_play_rejection_cannot_leave_active_ui_with_paused_stems():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    activation = javascript_function(body, "activateStems")
+    master_changed = javascript_function(body, "stemMasterChanged")
+    failure = javascript_function(body, "stemLoadFailure")
+
+    assert "catch (error)" in activation
+    assert "stemLoadFailure(token);" in activation
+    assert ".catch(() => stemLoadFailure(token))" in master_changed
+    assert ".catch(() => {})" not in master_changed
+    assert "teardownStems();" in failure
+    assert "fileStatus.innerText = 'Stem playback unavailable';" in failure
 
 
 def test_list_files_returns_mp3_mp4_and_webm_entries(tmp_path):
