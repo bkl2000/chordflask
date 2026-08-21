@@ -74,8 +74,8 @@ This local, on-demand workflow is the main reason ChordFlask exists:
 - keep each completed analysis beside the media for later sessions; and
 - continue browsing and playing while other files are analyzed.
 
-Automatic chord transcription is approximate, especially with dense mixes or
-unusual harmony. The current Chordino-based result is intended as a useful
+**Automatic chord transcription is approximate, especially with dense mixes or
+unusual harmony.** The current Chordino-based result is intended as a useful
 starting point for orientation and practice, not as an authoritative score.
 When the result is close enough, this workflow can avoid repeated manual setup.
 When it is not, the original remains intact while an Edited version can be
