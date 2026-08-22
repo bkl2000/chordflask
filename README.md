@@ -13,7 +13,7 @@ corrected, compared, and exported as Markdown or PDF. Everything runs locally;
 media and analysis data are never uploaded.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
-13+ (CPython 3.12). Native Windows is not supported; Windows users can run
+13+ (CPython 3.12 and 3.13). Native Windows is not supported; Windows users can run
 ChordFlask under WSL2 (tested) and open the local web interface from the
 Windows browser at localhost.
 
