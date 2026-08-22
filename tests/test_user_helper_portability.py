@@ -9,6 +9,7 @@ by setup, never through their own filesystem location.
 """
 
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -31,11 +32,16 @@ HELPERS = {
 
 @pytest.fixture()
 def portable_home(tmp_path):
-    """Temp HOME with a fake venv whose python is the test interpreter."""
+    """Temp HOME with a fake venv that forwards to the test interpreter."""
     home = tmp_path / "home"
     venv_dir = home / ".venvs" / "chordflask"
     (venv_dir / "bin").mkdir(parents=True)
-    (venv_dir / "bin" / "python").symlink_to(sys.executable)
+    python = venv_dir / "bin" / "python"
+    python.write_text(
+        f"#!/bin/sh\nexec {shlex.quote(sys.executable)} \"$@\"\n",
+        encoding="utf-8",
+    )
+    python.chmod(python.stat().st_mode | stat.S_IXUSR)
     env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
     return home, env
 
