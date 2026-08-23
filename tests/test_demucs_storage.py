@@ -25,7 +25,7 @@ def _stem_facts():
     }
 
 
-def _write_registered_set(tmp_path, monkeypatch):
+def _write_registered_set(tmp_path, monkeypatch, *, device="cpu"):
     media = tmp_path / "song.mp3"
     media.write_bytes(b"source media")
     generation = storage.stems_root(media) / "generation"
@@ -43,7 +43,7 @@ def _write_registered_set(tmp_path, monkeypatch):
         source_size=media.stat().st_size,
         source_timeline={"available": False},
         runtime=runtime,
-        device="cpu",
+        device=device,
         stem_paths=paths,
         stem_facts=facts,
         stem_hashes={stem: hash_file(path) for stem, path in paths.items()},
@@ -71,6 +71,42 @@ def test_classify_distinguishes_todo_current_and_stale(tmp_path, monkeypatch):
     stale = storage.classify(media, runtime=runtime, device="cpu")
     assert stale.label == STALE
     assert "hash" in stale.reason
+
+
+@pytest.mark.parametrize(
+    ("stored_device", "current_device"),
+    (("cpu", "cuda"), ("cuda", "cpu")),
+)
+def test_classify_treats_device_change_as_provenance(
+    tmp_path, monkeypatch, stored_device, current_device
+):
+    media, runtime, _ = _write_registered_set(
+        tmp_path, monkeypatch, device=stored_device
+    )
+
+    status = storage.classify(media, runtime=runtime, device=current_device)
+
+    assert status.label == CURRENT
+    assert status.reason == (
+        f"valid stem set; generated on {stored_device}, current device {current_device}"
+    )
+
+
+def test_device_change_does_not_hide_runtime_or_stem_changes(tmp_path, monkeypatch):
+    media, runtime, _ = _write_registered_set(tmp_path, monkeypatch)
+    changed_runtime = RuntimeInfo(
+        runtime.venv, runtime.python, runtime.demucs_version, "2.7.0"
+    )
+
+    runtime_status = storage.classify(media, runtime=changed_runtime, device="cpu")
+    assert runtime_status.label == STALE
+    assert runtime_status.reason == "Demucs runtime or processing configuration differs"
+
+    vocals = storage.stems_root(media) / "generation" / "vocals.flac"
+    vocals.write_bytes(b"VOCALS-FLAC")
+    stem_status = storage.classify(media, runtime=runtime, device="cuda")
+    assert stem_status.label == STALE
+    assert "hash" in stem_status.reason
 
 
 def test_malformed_analysis_is_error_and_never_replaced(tmp_path):

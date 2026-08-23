@@ -211,7 +211,7 @@ def test_resolved_device_passed_to_process_one(monkeypatch, tmp_path):
     assert captured["device"] == "cuda"
 
 
-def test_provisional_current_becomes_stale_with_different_device(monkeypatch, tmp_path, capsys):
+def test_device_difference_remains_current_without_replace_prompt(monkeypatch, tmp_path, capsys):
     media = tmp_path / "song.mp3"
     media.write_bytes(b"source")
     runtime = _runtime(tmp_path)
@@ -220,16 +220,20 @@ def test_provisional_current_becomes_stale_with_different_device(monkeypatch, tm
     def fake_classify(path, runtime=None, device="auto"):
         if runtime is None:
             return DemucsStatus("CURRENT", "provisional")
-        return DemucsStatus("STALE", "processing device differs")
+        return DemucsStatus(
+            "CURRENT", "valid stem set; generated on cuda, current device cpu"
+        )
 
     monkeypatch.setattr(cli, "classify", fake_classify)
     monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
     monkeypatch.setattr(cli, "resolve_device", lambda d, r: "cpu")
 
-    code = cli.run(tmp_path, replace=False, dry_run=True, device="auto")
+    code = cli.run(tmp_path, replace=False, dry_run=False, device="auto")
 
     assert code == 0
-    assert "STALE" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "CURRENT: valid stem set; generated on cuda, current device cpu" in output
+    assert "Use --replace" not in output
 
 
 def test_provisional_current_with_broken_runtime_becomes_error(monkeypatch, tmp_path, capsys):

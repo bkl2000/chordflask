@@ -76,9 +76,9 @@ scripts/chordflask-demucs --device cuda song.mp4
 
 `--device auto` selects CUDA when the inspected Torch runtime reports it
 available, otherwise CPU. `--device cpu` and `--device cuda` request those
-devices explicitly. The resolved effective device is stored and participates
-in `CURRENT`/`STALE` classification; moving between CPU and CUDA can therefore
-make an existing set `STALE`.
+devices explicitly. The resolved effective device is stored as provenance and
+selects the device for future regeneration. Moving between CPU and CUDA does
+not by itself make an existing set `STALE`.
 
 Directory discovery is direct-only and uses the normal MP4, WebM, MP3
 same-stem priority. Processing is serial to keep resource use predictable.
@@ -101,9 +101,11 @@ The analysis JSON registers these four files as one
 `audio_tracks["demucs:htdemucs"]` set. `CURRENT` means its provider and model,
 source hash and size, and all four FLAC stem files still validate against the
 registered paths, hashes, sizes, and audio facts. The complete runtime check
-also compares the stored processing device and pipeline fingerprint, which
-tracks the `htdemucs` model, Demucs and Torch versions, effective device, and
-the fixed output/synchronization configuration. Otherwise the set is `STALE`.
+validates the pipeline fingerprint against the stored generation device. The
+fingerprint tracks the `htdemucs` model, Demucs and Torch versions, generation
+device, and fixed output/synchronization configuration. A different currently
+selected device is informational; runtime, model, source, content, or pipeline
+changes can still make the set `STALE`.
 Chord/rhythm tracks, Edited data, user data, and unrelated audio sets are
 preserved.
 

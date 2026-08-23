@@ -125,9 +125,10 @@ def _set_current(
         return False, "source media has changed"
 
     if runtime is not None:
-        if metadata.get("device") != device:
-            return False, "processing device differs"
-        expected_pipeline = pipeline_fingerprint(runtime, device=device)
+        stored_device = metadata.get("device")
+        if stored_device not in {"cpu", "cuda"}:
+            return False, "stored processing device is missing or invalid"
+        expected_pipeline = pipeline_fingerprint(runtime, device=stored_device)
         if metadata.get("pipeline_fingerprint") != expected_pipeline:
             return False, "Demucs runtime or processing configuration differs"
 
@@ -145,6 +146,8 @@ def _set_current(
                 return False, f"{stem_name} stem metadata changed"
         except (AudioCommandError, AudioValidationError, OSError, ValueError, DemucsStorageError) as error:
             return False, f"{stem_name} stem is invalid: {error}"
+    if runtime is not None and stored_device != device:
+        return True, f"valid stem set; generated on {stored_device}, current device {device}"
     return True, "all four stems and source metadata match"
 
 
