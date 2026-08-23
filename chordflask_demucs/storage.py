@@ -126,7 +126,7 @@ def _set_current(
 
     if runtime is not None:
         stored_device = metadata.get("device")
-        if stored_device not in {"cpu", "cuda"}:
+        if stored_device not in {"auto", "cpu", "cuda"}:
             return False, "stored processing device is missing or invalid"
         expected_pipeline = pipeline_fingerprint(runtime, device=stored_device)
         if metadata.get("pipeline_fingerprint") != expected_pipeline:
