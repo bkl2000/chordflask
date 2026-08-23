@@ -23,24 +23,29 @@ that the setup script never invokes `sudo`, `apt`, or `apt-get`.
 
 ## Python Version Policy
 
-The setup script permits installation attempts with CPython 3.10–3.13. Python
-3.14 produces a warning but proceeds, while Python 3.15 and later are rejected
-with a clear message. Permitting an attempt is not the same as release support.
+CPython 3.12 and 3.13 are supported and tested. CPython 3.13.5 was validated on
+a fresh LMDE 7 system with successful `make all` and `make standalone` runs.
+Python 3.14 remains a future validation target: the setup script warns but
+permits an installation attempt, which does not make that version supported.
+Python 3.15 and later are rejected with a clear message.
 
-Only CPython 3.12 has a reviewed constraint set (`constraints-python312.txt`)
-and release-validation evidence. Other permitted versions use the direct
-requirements from `requirements-core.txt` with compatible-version ranges and
-*no* pinned constraints. Python 3.13 and 3.14 must not be advertised as
-supported until clean CI plus real FFmpeg, Vamp, audio-analysis, and standalone
-validation pass.
+Only CPython 3.12 currently uses the optional reviewed constraint set
+(`constraints-python312.txt`). CPython 3.13 uses the compatible-version ranges
+from the requirements files without a separate pinned constraints file.
+Constraints improve repeatability for a reviewed dependency combination; they
+are not a prerequisite for a Python version to be supported.
 
 To add support for a new Python version:
 
 1. Run `make setup` with that version on the supported distro family.
-2. Run `make check` and `make standalone`.
-3. If all pass, add the version to the setup script's accepted list.
-4. Optionally add a `constraints-python314.txt` when the combination has been
-   reviewed across a full clean setup.
+2. Run `make check` with real system FFmpeg and Vamp plugins available, then
+   run `make standalone` and its smoke checks.
+3. Require the real Vamp integration tests so missing plugins cannot turn them
+   into skips.
+4. If all pass, add the version to the supported documentation and, if needed,
+   the setup script's accepted list.
+5. Optionally add a version-specific constraints file when the combination has
+   been reviewed across a full clean setup.
 
 ## System FFmpeg
 
@@ -66,10 +71,11 @@ binaries are not supplied in the source release or standalone build. The
 standalone ships an installer (`install_vamp.sh`) and complete target guide
 (`README.md`).
 
-The Python `vamp==1.1.0` host package has been validated on CPython 3.12.3,
-Linux x86_64. Plugin discovery and in-memory analysis are tested with real
-plugins via `test_vamp_integration.py`. Missing plugins produce a clear startup
-warning; the UI remains usable for browsing and playback without Vamp.
+The Python `vamp==1.1.0` host package and the real plugin integration tests are
+part of the supported-version validation on Linux x86_64. Plugin discovery and
+in-memory chord and beat analysis are tested with real plugins via
+`test_vamp_integration.py`. Missing plugins produce a clear startup warning;
+the UI remains usable for browsing and playback without Vamp.
 
 Forward compatibility for Vamp depends on:
 
@@ -121,7 +127,10 @@ make standalone
 PATH=/no-such-directory flask/dist/chordflask --help   # must show ffmpeg hint
 ```
 
-A concrete release is claimed as tested only after two successful `make all`
-runs on a clean installation of that release. Test results from mock-based
-synthetic tests indicate that detection logic is forward-compatible, but do not
-replace real-environment validation.
+A concrete Python version is claimed as tested only after a clean installation,
+the full checks with real FFmpeg and Vamp plugins, and a standalone build and
+smoke test succeed. `test_vamp_integration.py` skips when plugin binaries are
+unavailable unless `CHORDIFIER_REQUIRE_VAMP=1` is set, so strict compatibility
+validation must set that flag. Mock-based synthetic tests indicate that
+detection logic is forward-compatible, but do not replace real-environment
+validation.

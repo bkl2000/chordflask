@@ -1,5 +1,6 @@
 import os
 import fcntl
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -469,6 +470,40 @@ def test_index_contains_audio_player_and_web_directory_browser():
     assert "function queueNextBatch()" in body
     assert "filenames: currentFiles.map(file => file.name)" in body
     assert "chordflask.batchLimit" in body
+
+
+def test_audio_player_compact_rules_are_mobile_only():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    global_symbol_rules = re.findall(
+        r"(?ms)^    \.audio-symbol \{\n(.*?)^    \}", body
+    )
+    global_filename_rules = re.findall(
+        r"(?ms)^    #audioFileName \{\n(.*?)^    \}", body
+    )
+    mobile_block = body[body.rindex("@media (max-width: 640px)"):]
+
+    assert len(global_symbol_rules) == 1
+    assert "font-size: clamp(64px, 10vw, 120px)" in global_symbol_rules[0]
+    assert len(global_filename_rules) == 1
+    assert "font-size: 18px" in global_filename_rules[0]
+    assert "display: none" not in global_filename_rules[0]
+    assert re.search(
+        r"(?ms)\.audio-symbol \{\s+font-size: 36px;\s+\}", mobile_block
+    )
+    assert re.search(
+        r"(?ms)#audioFileName \{\s+display: none;\s+\}", mobile_block
+    )
+    assert re.search(
+        r"(?ms)\.audio-player-panel \{\s+padding: 8px;\s+gap: 8px;\s+\}",
+        mobile_block,
+    )
+    assert re.search(
+        r"(?ms)#audioPlayer \{\s+width: 100%;\s+max-width: 520px;"
+        r"\s+min-width: 0;\s+\}",
+        mobile_block,
+    )
 
 
 def test_index_hides_stem_controls_by_default():

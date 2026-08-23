@@ -39,6 +39,28 @@ def test_readme_names_portable_archive_and_complete_guide():
         assert command in guide
 
 
+def test_readme_standalone_download_matches_version():
+    readme = (REPO_ROOT / "README.md").read_text()
+    version = (REPO_ROOT / "VERSION").read_text().strip()
+    start_marker = "<!-- standalone-download:start -->"
+    end_marker = "<!-- standalone-download:end -->"
+
+    assert readme.count(start_marker) == 1
+    assert readme.count(end_marker) == 1
+    download_block = readme.split(start_marker, 1)[1].split(end_marker, 1)[0]
+
+    release_link = re.search(
+        r"\]\(https://github\.com/[^/]+/[^/]+/releases/download/"
+        r"v([^/]+)/([^\s)]+)\)",
+        download_block,
+    )
+    assert release_link
+    release_version, archive_name = release_link.groups()
+    assert release_version == version
+    assert re.search(rf"-v{re.escape(version)}\.tar\.gz$", archive_name)
+    assert f"Download {archive_name}" in download_block
+
+
 def test_public_documentation_links_resolve():
     readme = (REPO_ROOT / "README.md").read_text()
     linked_files = (
