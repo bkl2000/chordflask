@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -102,16 +103,63 @@ def _print_status(index: int, total: int, media_path: Path, status: DemucsStatus
     print(f"       {status.label}{suffix}")
 
 
+def _shell_path(path: Path) -> str:
+    return shlex.quote(str(path))
+
+
+def _guidance_directory(target: Path) -> Path:
+    return target if target.is_dir() else target.parent
+
+
+def _print_guidance(hints: set[str], target: Path, *, replace: bool) -> None:
+    if "runtime" in hints:
+        print("Check the optional Demucs runtime with:", file=sys.stderr)
+        print("  make demucs-check", file=sys.stderr)
+        print("Install it if needed with:", file=sys.stderr)
+        print("  make setup-demucs", file=sys.stderr)
+    if "cuda" in hints:
+        replace_option = " --replace" if replace else ""
+        print("Retry on the supported CPU device with:", file=sys.stderr)
+        print(
+            f"  chordflask-demucs --device cpu{replace_option} {_shell_path(target)}",
+            file=sys.stderr,
+        )
+    if "lock" in hints:
+        print("Retry after the other Demucs process has finished or stopped.", file=sys.stderr)
+    if "analysis" in hints:
+        directory = _shell_path(_guidance_directory(target))
+        print("Validate the existing analysis with:", file=sys.stderr)
+        print(f"  chordflask-maintain validate {directory}", file=sys.stderr)
+        print("Safe stem inspection:", file=sys.stderr)
+        print(f"  chordflask-maintain stems report {directory}", file=sys.stderr)
+    if "stems" in hints:
+        directory = _shell_path(_guidance_directory(target))
+        print("Safe stem inspection:", file=sys.stderr)
+        print(f"  chordflask-maintain stems report {directory}", file=sys.stderr)
+        print("Regenerate stale or incomplete stems with:", file=sys.stderr)
+        print(f"  chordflask-demucs --replace {_shell_path(target)}", file=sys.stderr)
+
+
+def _status_hint(status: DemucsStatus) -> str | None:
+    reason = status.reason.lower()
+    if status.label == ERROR and "analysis json" in reason:
+        return "analysis"
+    if status.label == ERROR and "stem set is malformed" in reason:
+        return "analysis"
+    return None
+
+
 def run(target: Path, *, replace: bool, dry_run: bool, device: str) -> int:
     validate_device(device)
     try:
         media_files = discover_target(target)
     except DiscoveryError as error:
-        print(f"Error: {error}", file=sys.stderr)
+        print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
     runtime = None
     resolved_device = None
+    guidance: set[str] = set()
     counts = {"current": 0, "todo": 0, "stale": 0, "processed": 0, "failed": 0}
     for index, media_path in enumerate(media_files, 1):
         effective_device = resolved_device if resolved_device is not None else device
@@ -129,6 +177,12 @@ def run(target: Path, *, replace: bool, dry_run: bool, device: str) -> int:
                 status = classify(media_path, runtime=runtime, device=resolved_device)
             except (DemucsRuntimeError, OSError, ValueError) as error:
                 status = DemucsStatus(ERROR, str(error))
+                if isinstance(error, DemucsRuntimeError):
+                    guidance.add("runtime")
+
+        hint = _status_hint(status)
+        if hint:
+            guidance.add(hint)
 
         if dry_run:
             if status.label in {CURRENT, STALE} and replace:
@@ -145,6 +199,7 @@ def run(target: Path, *, replace: bool, dry_run: bool, device: str) -> int:
             counts["stale"] += 1
             _print_status(index, len(media_files), media_path, status)
             print("       Use --replace to regenerate the complete stem set")
+            guidance.add("stems")
             continue
         if status.label == ERROR:
             counts["failed"] += 1
@@ -173,9 +228,22 @@ def run(target: Path, *, replace: bool, dry_run: bool, device: str) -> int:
             RuntimeError,
             ValueError,
         ) as error:
+            if isinstance(error, DemucsBusyError):
+                guidance.add("lock")
+            elif isinstance(error, DemucsRuntimeError):
+                guidance.add("runtime")
+            elif isinstance(error, DemucsProcessError):
+                if "cuda" in str(error).lower():
+                    guidance.add("cuda")
+                else:
+                    guidance.add("runtime")
             counts["failed"] += 1
             print(f"[{index}/{len(media_files)}] {media_path.name}", file=sys.stderr)
             print(f"       ERROR: {error}", file=sys.stderr)
+
+    if guidance:
+        print("", file=sys.stderr)
+        _print_guidance(guidance, target, replace=replace)
 
     print("")
     print("Demucs dry-run complete" if dry_run else "Demucs processing complete")

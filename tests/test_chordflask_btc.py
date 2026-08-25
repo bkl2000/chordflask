@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from chordflask_btc import analyze, schema
-from chordflask_btc.runtime import wrapper_path
+from chordflask_btc.runtime import detect_btc_runtime, wrapper_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -175,6 +175,34 @@ def test_analyze_btc_directory_dry_run_no_side_effects(monkeypatch, capsys, tmp_
     assert "would analyze: 1" in out
 
 
+def test_analyze_btc_directory_isolates_file_check_errors(
+    monkeypatch, capsys, tmp_path
+):
+    _patch_runtime(monkeypatch)
+    bad = tmp_path / "bad.mp3"
+    bad.write_bytes(b"bad")
+    good = tmp_path / "good.mp3"
+    good.write_bytes(b"good")
+    _write_analysis(bad)
+    _write_analysis(good)
+
+    def classify(media, model_hash):
+        if media.name == "bad.mp3":
+            raise OSError("media became unreadable")
+        return analyze.CLASS_STALE, "use --replace"
+
+    monkeypatch.setattr("chordflask_btc.analyze.classify_btc_file", classify)
+
+    code = analyze.analyze_btc_directory(tmp_path, dry_run=False, replace=False)
+
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "bad.mp3" in captured.out
+    assert "media became unreadable" in captured.err
+    assert "STALE: use --replace" in captured.out
+    assert "failed:      1" in captured.out
+
+
 def test_analyze_btc_missing_runtime_exits_two(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         "chordflask_btc.analyze.detect_btc_runtime",
@@ -187,7 +215,46 @@ def test_analyze_btc_missing_runtime_exits_two(monkeypatch, capsys, tmp_path):
 
     assert code == 2
     err = capsys.readouterr().err
-    assert "make setup-btc" in err
+    assert "optional BTC runtime" in err
+    assert "make btc-check" in err
+    assert "make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1" in err
+    assert "--analyzer chordino" in err
+
+
+def test_analyze_btc_invalid_analysis_suggests_validation(
+    monkeypatch, capsys, tmp_path
+):
+    _patch_runtime(monkeypatch)
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"x")
+    _write_analysis(media, data={"schema_version": 3, "chord_tracks": "bad"})
+
+    code = analyze.analyze_btc_file(media, replace=False)
+
+    assert code == 0
+    output = capsys.readouterr().out
+    assert "invalid ChordFlask analysis" in output
+    assert f"chordflask-maintain validate {tmp_path}" in output
+
+
+def test_analyze_btc_model_check_failure_suggests_runtime_diagnostic(
+    monkeypatch, capsys, tmp_path
+):
+    _patch_runtime(monkeypatch)
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"x")
+    _write_analysis(media)
+    monkeypatch.setattr(
+        "chordflask_btc.analyze.model_sha256",
+        lambda: (_ for _ in ()).throw(OSError("checkpoint unreadable")),
+    )
+
+    code = analyze.analyze_btc_file(media, replace=False)
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "checkpoint unreadable" in err
+    assert "make btc-check" in err
 
 
 def test_analyze_btc_file_dry_run_exits_two(monkeypatch, capsys, tmp_path):
@@ -222,6 +289,26 @@ def test_runtime_resolves_installed_wrapper():
     # ~/.venvs/chordflask-btc), never a private source-tree script.
     assert wrapper_path().name == "btc-predict-raw"
     assert ".venvs/chordflask-btc" in str(wrapper_path())
+
+
+def test_runtime_requires_executable_wrapper(monkeypatch, tmp_path):
+    btc_dir = tmp_path / "btc"
+    btc_dir.mkdir()
+    (btc_dir / "predict_raw.py").write_text("# stub\n")
+    (btc_dir / "btc_model_large_voca.pt").write_bytes(b"checkpoint")
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").write_text("python")
+    wrapper = venv / "bin" / "btc-predict-raw"
+    wrapper.write_text("#!/bin/sh\n")
+    wrapper.chmod(0o644)
+    monkeypatch.setenv("CHORDFLASK_BTC_DIR", str(btc_dir))
+    monkeypatch.setenv("CHORDFLASK_BTC_VENV", str(venv))
+
+    state = detect_btc_runtime()
+
+    assert state["complete"] is False
+    assert any("executable wrapper" in item for item in state["missing"])
 
 
 def test_predict_raw_uses_only_verified_default_checkpoint():

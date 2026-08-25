@@ -186,7 +186,7 @@ def test_vamp_runtime_reports_missing_plugins_clearly(monkeypatch):
         require_vamp_plugins()
     except RuntimeError as error:
         assert "qm-vamp-plugins:qm-barbeattracker" in str(error)
-        assert "install_vamp.sh" in str(error)
+        assert "make plugins" in str(error)
     else:
         raise AssertionError("should raise RuntimeError")
 

@@ -17,6 +17,7 @@ import fcntl
 import os
 import re
 import shutil
+import stat
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -273,8 +274,17 @@ class CleanupResult:
     removed_count: int = 0
     removed_bytes: int = 0
     refused: bool = False
+    refusal_kind: str = ""
     reason: str = ""
     failures: list = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class LockStatus:
+    """Result of safely inspecting a cleanup lock."""
+
+    state: str  # "inactive" | "active" | "error"
+    reason: str = ""
 
 
 def _storage_directory(media_dir):
@@ -300,21 +310,86 @@ def queue_dir() -> Path:
     return Path.home() / ".chordflask"
 
 
-def worker_is_active() -> bool:
-    """Return whether an analysis worker currently holds the worker lock."""
-    lock_file = queue_dir() / _WORKER_LOCK_NAME
-    if not lock_file.exists():
-        return False
+def check_lock_file(lock_file: Path, description: str) -> LockStatus:
+    """Inspect one lock without creating or following it, failing closed."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+
     try:
-        with lock_file.open("a+") as handle:
+        descriptor = os.open(lock_file, flags)
+    except FileNotFoundError:
+        return LockStatus("inactive")
+    except OSError as error:
+        return LockStatus("error", f"cannot open {description} {lock_file}: {error}")
+
+    try:
+        with os.fdopen(descriptor, "r") as handle:
             try:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    return LockStatus(
+                        "error", f"cannot inspect {description} {lock_file}: not a regular file"
+                    )
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                return True
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-            return False
-    except OSError:
+                return LockStatus("active")
+            except OSError as error:
+                return LockStatus(
+                    "error", f"cannot inspect {description} {lock_file}: {error}"
+                )
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except OSError as error:
+                return LockStatus(
+                    "error", f"cannot release {description} {lock_file}: {error}"
+                )
+    except OSError as error:
+        return LockStatus("error", f"cannot inspect {description} {lock_file}: {error}")
+    return LockStatus("inactive")
+
+
+def worker_lock_status() -> LockStatus:
+    """Return the analysis-worker lock state, including inspection errors."""
+    return check_lock_file(queue_dir() / _WORKER_LOCK_NAME, "analysis worker lock")
+
+
+def worker_is_active() -> bool:
+    """Compatibility helper returning whether the worker lock is held."""
+    return worker_lock_status().state == "active"
+
+
+def _refuse_for_worker_lock(result: CleanupResult, subject: str) -> bool:
+    status = worker_lock_status()
+    if status.state == "inactive":
         return False
+    result.refused = True
+    if status.state == "active":
+        result.refusal_kind = "worker_active"
+        result.reason = f"an analysis worker is active; {subject}"
+    else:
+        result.refusal_kind = "worker_lock_error"
+        result.reason = f"{status.reason}; cleanup cannot safely continue"
+    return True
+
+
+def _remove_candidate(
+    result: CleanupResult, entry: Path, size: int, *, dry_run: bool, directory: bool = False
+) -> None:
+    """Record a cleanup candidate, deleting it unless this is a dry run."""
+    if not dry_run:
+        try:
+            if directory:
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        except OSError as error:
+            result.failures.append(f"could not remove {entry.name}: {error}")
+            return
+    result.removed.append(entry.name)
+    result.removed_count += 1
+    result.removed_bytes += size
 
 
 def _is_orphan_temp_dir(name):
@@ -325,7 +400,7 @@ def _is_convert_temp_file(name):
     return bool(_CONVERT_TEMP_RE.match(name))
 
 
-def cleanup_orphan_temp(media_dir):
+def cleanup_orphan_temp(media_dir, *, dry_run: bool = False):
     """Delete orphaned analysis/conversion temp artifacts in one media directory.
 
     Refuses (without deleting anything) while an analysis worker is active.
@@ -336,9 +411,7 @@ def cleanup_orphan_temp(media_dir):
     if chordflask is None:
         return result
 
-    if worker_is_active():
-        result.refused = True
-        result.reason = "an analysis worker is active; temporary artifacts were not deleted"
+    if _refuse_for_worker_lock(result, "temporary artifacts were not deleted"):
         return result
 
     try:
@@ -356,23 +429,14 @@ def cleanup_orphan_temp(media_dir):
             continue
 
         _, size = _entry_size(entry)
-        try:
-            if is_dir_candidate:
-                shutil.rmtree(entry)
-            else:
-                entry.unlink()
-        except OSError as error:
-            result.failures.append(f"could not remove {entry.name}: {error}")
-            continue
-
-        result.removed.append(entry.name)
-        result.removed_count += 1
-        result.removed_bytes += size
+        _remove_candidate(
+            result, entry, size, dry_run=dry_run, directory=is_dir_candidate
+        )
 
     return result
 
 
-def cleanup_corrupt_backups(media_dir, older_than_days):
+def cleanup_corrupt_backups(media_dir, older_than_days, *, dry_run: bool = False):
     """Delete corrupt-analysis backup files older than a retention age.
 
     Only files matching the exact producer format are candidates. Age is
@@ -389,6 +453,9 @@ def cleanup_corrupt_backups(media_dir, older_than_days):
     chordflask = _storage_directory(media_dir)
     result = CleanupResult()
     if chordflask is None:
+        return result
+
+    if _refuse_for_worker_lock(result, "corrupt backups were not deleted"):
         return result
 
     cutoff = time.time() - older_than_days * 86400
@@ -411,20 +478,12 @@ def cleanup_corrupt_backups(media_dir, older_than_days):
             continue
         if stat.st_mtime >= cutoff:
             continue
-        try:
-            entry.unlink()
-        except OSError as error:
-            result.failures.append(f"could not remove {entry.name}: {error}")
-            continue
-
-        result.removed.append(entry.name)
-        result.removed_count += 1
-        result.removed_bytes += stat.st_size
+        _remove_candidate(result, entry, stat.st_size, dry_run=dry_run)
 
     return result
 
 
-def cleanup_cached_audio(media_dir):
+def cleanup_cached_audio(media_dir, *, dry_run: bool = False):
     """Delete verified cached-audio files in one media directory.
 
     Only a ``<stem>.mp3`` whose stem names a video source (``.mp4``/``.webm``)
@@ -437,12 +496,9 @@ def cleanup_cached_audio(media_dir):
     if chordflask is None:
         return result
 
-    if worker_is_active():
-        result.refused = True
-        result.reason = (
-            "an analysis worker is active; cached audio may be in use or "
-            "being regenerated"
-        )
+    if _refuse_for_worker_lock(
+        result, "cached audio may be in use or being regenerated"
+    ):
         return result
 
     media = chordflask.parent
@@ -463,20 +519,19 @@ def cleanup_cached_audio(media_dir):
 
         try:
             size = entry.stat().st_size
-            entry.unlink()
         except OSError as error:
-            result.failures.append(f"could not remove {entry.name}: {error}")
+            result.failures.append(f"cannot stat {entry.name}: {error}")
             continue
-
-        result.removed.append(entry.name)
-        result.removed_count += 1
-        result.removed_bytes += size
+        _remove_candidate(result, entry, size, dry_run=dry_run)
 
     return result
 
 
-def format_cleanup_result(result: CleanupResult, scope: str) -> str:
+def format_cleanup_result(
+    result: CleanupResult, scope: str, *, dry_run: bool = False
+) -> str:
     """Render one cleanup result."""
+    verb = "would remove" if dry_run else "removed"
     lines = [str(scope)]
     if result.refused:
         lines.append(f"  REFUSED: {result.reason}")
@@ -484,14 +539,15 @@ def format_cleanup_result(result: CleanupResult, scope: str) -> str:
         return "\n".join(lines)
 
     for name in result.removed:
-        lines.append(f"  removed  {name}")
+        lines.append(f"  {verb}  {name}")
     for failure in result.failures:
         lines.append(f"  ERROR    {failure}")
 
     if result.removed_count:
         lines.append(
-            f"  removed {result.removed_count} item(s), "
-            f"reclaimed {_format_bytes(result.removed_bytes)}"
+            f"  {verb} {result.removed_count} item(s), "
+            f"{'would reclaim' if dry_run else 'reclaimed'} "
+            f"{_format_bytes(result.removed_bytes)}"
         )
     else:
         lines.append("  nothing to remove")

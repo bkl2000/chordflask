@@ -11,8 +11,8 @@ REQUIRED_PLUGINS = {
 }
 
 INSTALL_HINT = (
-    "Install the required Vamp plugins with: "
-    "bash /path/to/chordflask/install_vamp.sh"
+    "From a ChordFlask source checkout, install the required Vamp plugins with: "
+    "make plugins"
 )
 
 

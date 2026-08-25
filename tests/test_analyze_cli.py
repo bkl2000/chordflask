@@ -170,15 +170,15 @@ def test_unknown_analyzer_exits_two():
     assert exc.value.code == 2
 
 
-def test_help_hides_btc_without_backend(monkeypatch, capsys, tmp_path):
+def test_help_identifies_btc_as_optional_without_backend(monkeypatch, capsys, tmp_path):
     _no_backend(monkeypatch, tmp_path)
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "--analyzer {chordino}" in out
+    assert "--analyzer {chordino,btc}" in out
     assert "Chordino is the default built-in analyzer." in out
-    assert "btc" not in out
+    assert "BTC is an optional analyzer" in out
 
 
 def test_help_shows_btc_with_backend(monkeypatch, capsys, tmp_path):
@@ -192,26 +192,40 @@ def test_help_shows_btc_with_backend(monkeypatch, capsys, tmp_path):
     assert "chordflask-analyze --analyzer btc song.mp4" in out
 
 
-def test_btc_rejected_when_backend_missing(monkeypatch, capsys, tmp_path):
+def test_btc_unavailable_has_setup_check_and_chordino_guidance(
+    monkeypatch, capsys, tmp_path
+):
     _no_backend(monkeypatch, tmp_path)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+    monkeypatch.setattr(
+        "chordflask_btc.analyze.detect_btc_runtime",
+        lambda: {
+            "venv": "",
+            "checkpoint": "",
+            "wrapper": "",
+            "complete": False,
+            "missing": ["executable wrapper (/missing)"],
+        },
+    )
     with pytest.raises(SystemExit) as exc:
-        analyze_cli.main(["--analyzer", "btc", "song.mp4"])
+        analyze_cli.main(["--analyzer", "btc", str(media)])
     assert exc.value.code == 2
     err = capsys.readouterr().err
-    assert "invalid choice" in err
-    assert "chordflask-setup-btc" not in err
+    assert "optional BTC runtime" in err
+    assert "make btc-check" in err
+    assert "make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1" in err
+    assert "--analyzer chordino" in err
 
 
-def test_btc_hidden_when_backend_not_executable(monkeypatch, tmp_path):
+def test_btc_choice_remains_available_for_actionable_runtime_error(monkeypatch, tmp_path):
     script = tmp_path / "btc-predict-raw"
     script.write_text("#!/bin/sh\n")
     script.chmod(0o644)  # present but not executable
     monkeypatch.setattr("chordflask_btc.runtime.wrapper_path", lambda: script)
     parser = analyze_cli.build_parser()
-    assert parser._option_string_actions["--analyzer"].choices == ("chordino",)
-    with pytest.raises(SystemExit) as exc:
-        parser.parse_args(["--analyzer", "btc", "song.mp4"])
-    assert exc.value.code == 2
+    assert parser._option_string_actions["--analyzer"].choices == ("chordino", "btc")
+    assert parser.parse_args(["--analyzer", "btc", "song.mp4"]).analyzer == "btc"
 
 
 # ── chordino dispatch ────────────────────────────────────────────────
@@ -388,6 +402,44 @@ def test_chordino_invalid_analysis_is_distinct_and_safe(monkeypatch, capsys, tmp
         analyze_cli.main([str(media)])
     assert exc.value.code == 0
     assert FakeAnalysisWorker.analyzed == [(str(media), False)]
+
+
+def test_chordino_invalid_analysis_dry_run_suggests_validation(
+    monkeypatch, capsys, tmp_path
+):
+    _patch_worker(monkeypatch)
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"x")
+    _write_analysis(media, invalid=True)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--dry-run", str(media)])
+
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    assert "INVALID" in captured.out
+    assert f"chordflask-maintain validate {tmp_path}" in captured.err
+
+
+def test_chordino_vamp_failure_has_one_canonical_hint_for_batch(
+    monkeypatch, capsys, tmp_path
+):
+    _patch_worker(monkeypatch)
+    for name in ("a.mp3", "b.mp3"):
+        (tmp_path / name).write_bytes(b"x")
+
+    def fail_vamp(self, media, force=False):
+        raise RuntimeError("Required Vamp plugins not found: nnls-chroma:chordino")
+
+    monkeypatch.setattr(FakeAnalysisWorker, "_analyze", fail_vamp)
+
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(tmp_path)])
+
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert err.count("make plugins") == 1
+    assert err.count("chordflask-maintain doctor") == 1
 
 
 def test_chordino_invalid_target_exits_two(monkeypatch, capsys, tmp_path):

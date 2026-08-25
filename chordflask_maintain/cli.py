@@ -3,12 +3,61 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
 
 def _scope(directory: str) -> str:
     return str(Path(directory).expanduser() / ".chordflask")
+
+
+def _target(directory: str) -> str:
+    return shlex.quote(str(Path(directory).expanduser()))
+
+
+def _cleanup_guidance(refusal_kind: str, directory: str, report: str) -> str:
+    """Return concise next steps for a known cleanup refusal."""
+    target = _target(directory)
+    lines = []
+    if refusal_kind == "worker_active":
+        lines.append("Retry after analysis has finished or stopped.")
+    elif refusal_kind == "demucs_active":
+        lines.append("Retry after Demucs processing has finished or stopped.")
+    elif refusal_kind in ("worker_lock_error", "demucs_lock_error"):
+        lines.extend(
+            (
+                "Cleanup was intentionally refused because the lock state "
+                "could not be verified safely.",
+                "Check permissions and process state, then retry.",
+            )
+        )
+    elif refusal_kind in ("analysis_json_error", "generation_unresolved"):
+        lines.extend(
+            (
+                "Validate the analysis data:",
+                f"  chordflask-maintain validate {target}",
+            )
+        )
+
+    if lines:
+        lines.extend(
+            (
+                "Safe inspection:",
+                f"  chordflask-maintain {report} report {target}",
+            )
+        )
+    return "\n".join(lines)
+
+
+def _print_cleanup_result(text: str, result, directory: str, report: str) -> None:
+    print(text)
+    if result.refused:
+        guidance = _cleanup_guidance(result.refusal_kind, directory, report)
+        if guidance:
+            print(guidance)
+    elif result.failures:
+        print("Check permissions for the listed paths, then retry.")
 
 
 def _cmd_storage_report(args) -> int:
@@ -26,14 +75,22 @@ def _cmd_storage_report(args) -> int:
 def _cleanup_args_error(args) -> str | None:
     if not args.orphan_temp and not args.corrupt_backups and not args.cached_audio:
         return (
-            "specify at least one cleanup category: --orphan-temp, "
-            "--cached-audio, or --corrupt-backups"
+            "specify at least one cleanup category:\n"
+            "  --orphan-temp\n"
+            "  --cached-audio\n"
+            "  --corrupt-backups\n"
+            "Safe preview: chordflask-maintain storage cleanup DIR "
+            "--orphan-temp --dry-run"
         )
     if args.corrupt_backups:
         if args.older_than_days is None or args.older_than_days <= 0:
-            return "--corrupt-backups requires --older-than-days N (a positive integer)"
+            return (
+                "--corrupt-backups requires --older-than-days N (a positive integer)\n"
+                "Example: chordflask-maintain storage cleanup DIR "
+                "--corrupt-backups --older-than-days 30 --dry-run"
+            )
     elif args.older_than_days is not None:
-        return "--older-than-days requires --corrupt-backups"
+        return "--older-than-days belongs to and requires --corrupt-backups"
     return None
 
 
@@ -55,34 +112,51 @@ def _cmd_storage_cleanup(args) -> int:
 
     if args.orphan_temp:
         try:
-            result = cleanup_orphan_temp(args.directory)
+            result = cleanup_orphan_temp(args.directory, dry_run=args.dry_run)
         except ValueError as value_error:
             print(f"ERROR: {value_error}", file=sys.stderr)
             return 2
-        print(format_cleanup_result(result, scope))
+        _print_cleanup_result(
+            format_cleanup_result(result, scope, dry_run=args.dry_run),
+            result,
+            args.directory,
+            "storage",
+        )
         print()
         if result.refused or result.failures:
             exit_code = 1
 
     if args.cached_audio:
         try:
-            result = cleanup_cached_audio(args.directory)
+            result = cleanup_cached_audio(args.directory, dry_run=args.dry_run)
         except ValueError as value_error:
             print(f"ERROR: {value_error}", file=sys.stderr)
             return 2
-        print(format_cleanup_result(result, scope))
+        _print_cleanup_result(
+            format_cleanup_result(result, scope, dry_run=args.dry_run),
+            result,
+            args.directory,
+            "storage",
+        )
         print()
         if result.refused or result.failures:
             exit_code = 1
 
     if args.corrupt_backups:
         try:
-            result = cleanup_corrupt_backups(args.directory, args.older_than_days)
+            result = cleanup_corrupt_backups(
+                args.directory, args.older_than_days, dry_run=args.dry_run
+            )
         except ValueError as value_error:
             print(f"ERROR: {value_error}", file=sys.stderr)
             return 2
-        print(format_cleanup_result(result, scope))
-        if result.failures:
+        _print_cleanup_result(
+            format_cleanup_result(result, scope, dry_run=args.dry_run),
+            result,
+            args.directory,
+            "storage",
+        )
+        if result.refused or result.failures:
             exit_code = 1
 
     return exit_code
@@ -164,7 +238,12 @@ def _cmd_stems_cleanup(args) -> int:
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
-    print(format_stems_cleanup(result, dry_run=args.dry_run))
+    _print_cleanup_result(
+        format_stems_cleanup(result, dry_run=args.dry_run),
+        result,
+        args.directory,
+        "stems",
+    )
     if result.refused or result.failures:
         return 1
     return 0
@@ -207,6 +286,11 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup.add_argument("--cached-audio", action="store_true", help="Delete cached audio (.mp3) regenerable from a video source")
     cleanup.add_argument("--corrupt-backups", action="store_true", help="Delete old corrupt-analysis backup files")
     cleanup.add_argument("--older-than-days", type=int, metavar="N", help="Retention age in days for --corrupt-backups")
+    cleanup.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be removed without deleting anything",
+    )
     cleanup.set_defaults(func=_cmd_storage_cleanup)
 
     migrate = subparsers.add_parser(

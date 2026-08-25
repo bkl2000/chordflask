@@ -59,12 +59,15 @@ def model_sha256() -> str:
 
 
 def _run_raw(wrapper: Path, media_path: Path) -> list[dict[str, Any]]:
-    result = subprocess.run(
-        [str(wrapper), str(media_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [str(wrapper), str(media_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise BtcPredictionError(f"Could not execute BTC wrapper: {exc}") from exc
     if result.returncode != 0:
         detail = " ".join((result.stderr or "").split())[:400]
         raise BtcPredictionError(f"BTC inference failed: {detail or 'no details'}")

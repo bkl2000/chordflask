@@ -52,7 +52,8 @@ scripts/chordflask-analyze --analyzer btc /music/videos
 
 BTC runs a pretrained model in an isolated environment and adds its result as a
 separate `btc` chord track to an existing ChordFlask analysis; it never
-replaces Chordino. Without the runtime, `--analyzer btc` is not offered.
+replaces Chordino. Without the runtime, `--analyzer btc` reports the optional
+setup and diagnostic commands while Chordino remains available.
 Chordino and BTC are both stored in the analysis file and can be switched in
 the browser with the chord-track selector.
 

@@ -420,6 +420,10 @@ def test_cli_cleanup_requires_category(tmp_path, capsys):
 
     assert code == 2
     assert "cleanup category" in captured.err
+    assert "--orphan-temp" in captured.err
+    assert "--cached-audio" in captured.err
+    assert "--corrupt-backups" in captured.err
+    assert "--dry-run" in captured.err
 
 
 def test_cli_older_than_days_requires_corrupt_backups(tmp_path, capsys):
@@ -431,7 +435,7 @@ def test_cli_older_than_days_requires_corrupt_backups(tmp_path, capsys):
     )
 
     assert code == 2
-    assert "--older-than-days requires --corrupt-backups" in captured.err
+    assert "--older-than-days belongs to and requires --corrupt-backups" in captured.err
 
 
 def test_cli_corrupt_backups_requires_age(tmp_path, capsys):
@@ -444,3 +448,157 @@ def test_cli_corrupt_backups_requires_age(tmp_path, capsys):
 
     assert code == 2
     assert "--older-than-days" in captured.err
+    assert (
+        "chordflask-maintain storage cleanup DIR --corrupt-backups "
+        "--older-than-days 30 --dry-run"
+    ) in captured.err
+
+
+def test_cli_orphan_temp_dry_run_reports_without_removing(tmp_path, capsys):
+    media = tmp_path / "album"
+    orphan = media / ".chordflask" / ".song.analyze-abc"
+    _write(orphan / "song.json", 20)
+
+    code, captured = _run_maintain_cli(
+        capsys, "storage", "cleanup", str(media), "--orphan-temp", "--dry-run"
+    )
+
+    assert code == 0
+    assert "would remove  .song.analyze-abc" in captured.out
+    assert "would reclaim 20 B" in captured.out
+    assert orphan.exists()
+
+
+def test_cli_cached_audio_dry_run_preserves_cache_source_and_analysis(tmp_path, capsys):
+    media = tmp_path / "album"
+    source = _write(media / "song.mp4", 5)
+    cache = _write(media / ".chordflask" / "song.mp3", 100)
+    analysis = _write(media / ".chordflask" / "song.json", 40)
+
+    code, captured = _run_maintain_cli(
+        capsys, "storage", "cleanup", str(media), "--cached-audio", "--dry-run"
+    )
+
+    assert code == 0
+    assert "would remove  song.mp3" in captured.out
+    assert cache.exists()
+    assert source.exists()
+    assert analysis.exists()
+
+
+def test_cli_corrupt_backup_dry_run_preserves_eligible_backup(tmp_path, capsys):
+    media = tmp_path / "album"
+    backup = _write(media / ".chordflask" / _corrupt_name(), 60)
+    _old_mtime(backup)
+
+    code, captured = _run_maintain_cli(
+        capsys,
+        "storage",
+        "cleanup",
+        str(media),
+        "--corrupt-backups",
+        "--older-than-days",
+        "30",
+        "--dry-run",
+    )
+
+    assert code == 0
+    assert f"would remove  {backup.name}" in captured.out
+    assert backup.exists()
+
+
+def test_cli_combined_storage_dry_run_mutates_nothing(tmp_path, capsys):
+    media = tmp_path / "album"
+    source = _write(media / "song.mp4", 5)
+    cache = _write(media / ".chordflask" / "song.mp3", 100)
+    analysis = _write(media / ".chordflask" / "song.json", 40)
+    orphan = media / ".chordflask" / ".song.analyze-abc"
+    _write(orphan / "partial.json", 20)
+    backup = _write(media / ".chordflask" / _corrupt_name(), 60)
+    _old_mtime(backup)
+
+    code, captured = _run_maintain_cli(
+        capsys,
+        "storage",
+        "cleanup",
+        str(media),
+        "--orphan-temp",
+        "--cached-audio",
+        "--corrupt-backups",
+        "--older-than-days",
+        "30",
+        "--dry-run",
+    )
+
+    assert code == 0
+    assert captured.out.count("would remove  ") == 3
+    assert all(path.exists() for path in (source, cache, analysis, orphan, backup))
+
+
+def test_cli_storage_cleanup_refuses_uninspectable_worker_lock(tmp_path, capsys):
+    queue = tmp_path / "queue"
+    (queue / "analysis_worker.lock").mkdir(parents=True)
+    media = tmp_path / "album"
+    orphan = media / ".chordflask" / ".song.analyze-abc"
+    _write(orphan / "song.json", 20)
+
+    code, captured = _run_maintain_cli(
+        capsys, "storage", "cleanup", str(media), "--orphan-temp"
+    )
+
+    assert code == 1
+    assert "REFUSED" in captured.out
+    assert "cannot inspect analysis worker lock" in captured.out
+    assert "lock state could not be verified safely" in captured.out
+    assert "Check permissions and process state, then retry." in captured.out
+    assert f"chordflask-maintain storage report {media}" in captured.out
+    assert "nothing deleted" in captured.out
+    assert orphan.exists()
+
+
+def test_cli_storage_cleanup_active_worker_has_retry_guidance(tmp_path, capsys):
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    media = tmp_path / "album"
+    orphan = media / ".chordflask" / ".song.analyze-abc"
+    _write(orphan / "song.json", 20)
+
+    lock_handle = (queue / "analysis_worker.lock").open("a+")
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        code, captured = _run_maintain_cli(
+            capsys, "storage", "cleanup", str(media), "--orphan-temp"
+        )
+    finally:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        lock_handle.close()
+
+    assert code == 1
+    assert "an analysis worker is active" in captured.out
+    assert "nothing deleted" in captured.out
+    assert "Retry after analysis has finished or stopped." in captured.out
+    assert f"chordflask-maintain storage report {media}" in captured.out
+    assert orphan.exists()
+
+
+def test_cli_storage_cleanup_nothing_to_remove_is_concise(tmp_path, capsys):
+    media = tmp_path / "album"
+    (media / ".chordflask").mkdir(parents=True)
+
+    code, captured = _run_maintain_cli(
+        capsys, "storage", "cleanup", str(media), "--orphan-temp"
+    )
+
+    assert code == 0
+    assert "nothing to remove" in captured.out
+    assert "Retry" not in captured.out
+    assert "Safe inspection" not in captured.out
+    assert "Check permissions" not in captured.out
+
+
+def test_storage_cleanup_help_describes_dry_run(capsys):
+    code, captured = _run_maintain_cli(capsys, "storage", "cleanup", "--help")
+
+    assert code == 0
+    assert "--dry-run" in captured.out
+    assert "without deleting anything" in captured.out

@@ -1,5 +1,6 @@
 """Tests for the ``chordflask-maintain stems`` report and cleanup."""
 
+import fcntl
 from pathlib import Path
 
 import pytest
@@ -89,6 +90,14 @@ def _write_full_song(media_root: Path, *, name="song.mp3", rel_dir=None):
     for stem in DEMUCS_STEM_NAMES:
         _write_flac(media_root, rel, stem)
     return media_root / name
+
+
+def _run_maintain_cli(capsys, *args):
+    from chordflask_maintain import cli
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(list(args))
+    return exc.value.code, capsys.readouterr()
 
 
 # ── report ────────────────────────────────────────────────────────────
@@ -213,6 +222,74 @@ def test_cleanup_refuses_on_invalid_analysis_json(tmp_path):
     assert orphan.exists()
 
 
+def test_cleanup_refuses_when_analysis_json_listing_errors(tmp_path, monkeypatch):
+    _write_full_song(tmp_path)
+    orphan = tmp_path / ".chordflask" / "stems" / "demucs" / "htdemucs" / "old-key" / "old-gen"
+    (orphan / "orphan.flac").parent.mkdir(parents=True, exist_ok=True)
+    (orphan / "orphan.flac").write_bytes(b"xxxxxx")
+
+    def error_listing(_chordflask, *, fail_closed=False):
+        assert fail_closed is True
+        raise PermissionError("analysis directory unreadable")
+
+    monkeypatch.setattr(stems_mod, "_iter_json_files", error_listing)
+
+    result = cleanup_orphan_stems(tmp_path)
+
+    assert result.refused is True
+    assert "cannot inspect analysis JSON files" in result.reason
+    assert orphan.exists()
+
+
+def test_cleanup_refuses_when_registered_generation_cannot_be_resolved(
+    tmp_path, monkeypatch
+):
+    _write_full_song(tmp_path)
+    referenced = tmp_path / STEMS_REL
+    monkeypatch.setattr(stems_mod, "_referenced_generation", lambda media, data: None)
+
+    result = cleanup_orphan_stems(tmp_path)
+
+    assert result.refused is True
+    assert "cannot resolve registered stem generation" in result.reason
+    assert referenced.exists()
+
+
+def test_cli_invalid_analysis_refusal_suggests_validation(tmp_path, capsys):
+    _write_full_song(tmp_path)
+    broken = tmp_path / ".chordflask" / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+
+    code, captured = _run_maintain_cli(
+        capsys, "stems", "cleanup", str(tmp_path), "--orphans"
+    )
+
+    assert code == 1
+    assert "broken.json" in captured.out
+    assert "orphan references cannot be determined safely" in captured.out
+    assert f"chordflask-maintain validate {tmp_path}" in captured.out
+    assert f"chordflask-maintain stems report {tmp_path}" in captured.out
+    assert "nothing deleted" in captured.out
+
+
+def test_cli_unresolved_generation_refusal_is_actionable(
+    tmp_path, monkeypatch, capsys
+):
+    _write_full_song(tmp_path)
+    monkeypatch.setattr(stems_mod, "_referenced_generation", lambda media, data: None)
+
+    code, captured = _run_maintain_cli(
+        capsys, "stems", "cleanup", str(tmp_path), "--orphans"
+    )
+
+    assert code == 1
+    assert "song.json" in captured.out
+    assert "orphan status cannot be proven safely" in captured.out
+    assert f"chordflask-maintain validate {tmp_path}" in captured.out
+    assert f"chordflask-maintain stems report {tmp_path}" in captured.out
+    assert "nothing deleted" in captured.out
+
+
 def test_cleanup_skips_symlink_generation(tmp_path):
     _write_full_song(tmp_path)
     outside = tmp_path / "outside.flac"
@@ -239,6 +316,100 @@ def test_cleanup_never_deletes_outside_stems_root(tmp_path):
 
     assert (stray / "keep.txt").exists()
     assert result.removed == []
+
+
+def test_cleanup_refuses_uninspectable_demucs_lock(tmp_path):
+    _write_full_song(tmp_path)
+    chordflask = tmp_path / ".chordflask"
+    (chordflask / "song.demucs.lock").mkdir()
+    orphan = chordflask / "stems" / "demucs" / "htdemucs" / "old-key" / "old-gen"
+    (orphan / "orphan.flac").parent.mkdir(parents=True, exist_ok=True)
+    (orphan / "orphan.flac").write_bytes(b"xxxxxx")
+
+    result = cleanup_orphan_stems(tmp_path)
+
+    assert result.refused is True
+    assert "cannot inspect Demucs lock" in result.reason
+    assert orphan.exists()
+
+
+def test_cli_uninspectable_demucs_lock_is_actionable(tmp_path, capsys):
+    _write_full_song(tmp_path)
+    chordflask = tmp_path / ".chordflask"
+    (chordflask / "song.demucs.lock").mkdir()
+
+    code, captured = _run_maintain_cli(
+        capsys, "stems", "cleanup", str(tmp_path), "--orphans"
+    )
+
+    assert code == 1
+    assert "cannot inspect Demucs lock" in captured.out
+    assert "lock state could not be verified safely" in captured.out
+    assert "Check permissions and process state, then retry." in captured.out
+    assert f"chordflask-maintain stems report {tmp_path}" in captured.out
+    assert "nothing deleted" in captured.out
+
+
+def test_cleanup_refuses_active_demucs_lock(tmp_path):
+    _write_full_song(tmp_path)
+    chordflask = tmp_path / ".chordflask"
+    lock_path = chordflask / "song.demucs.lock"
+    orphan = chordflask / "stems" / "demucs" / "htdemucs" / "old-key" / "old-gen"
+    (orphan / "orphan.flac").parent.mkdir(parents=True, exist_ok=True)
+    (orphan / "orphan.flac").write_bytes(b"xxxxxx")
+
+    lock_handle = lock_path.open("a+")
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        result = cleanup_orphan_stems(tmp_path)
+    finally:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        lock_handle.close()
+
+    assert result.refused is True
+    assert "Demucs process holds a lock" in result.reason
+    assert orphan.exists()
+
+
+def test_cli_active_demucs_lock_has_retry_guidance(tmp_path, capsys):
+    _write_full_song(tmp_path)
+    lock_path = tmp_path / ".chordflask" / "song.demucs.lock"
+    lock_handle = lock_path.open("a+")
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        code, captured = _run_maintain_cli(
+            capsys, "stems", "cleanup", str(tmp_path), "--orphans"
+        )
+    finally:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        lock_handle.close()
+
+    assert code == 1
+    assert "Demucs process holds a lock" in captured.out
+    assert "nothing deleted" in captured.out
+    assert "Retry after Demucs processing has finished or stopped." in captured.out
+    assert f"chordflask-maintain stems report {tmp_path}" in captured.out
+
+
+def test_cli_active_worker_stem_refusal_has_retry_guidance(tmp_path, capsys):
+    _write_full_song(tmp_path)
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    lock_handle = (queue / "analysis_worker.lock").open("a+")
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        code, captured = _run_maintain_cli(
+            capsys, "stems", "cleanup", str(tmp_path), "--orphans"
+        )
+    finally:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        lock_handle.close()
+
+    assert code == 1
+    assert "an analysis worker is active" in captured.out
+    assert "nothing deleted" in captured.out
+    assert "Retry after analysis has finished or stopped." in captured.out
+    assert f"chordflask-maintain stems report {tmp_path}" in captured.out
 
 
 def test_cleanup_requires_orphans_flag(tmp_path):

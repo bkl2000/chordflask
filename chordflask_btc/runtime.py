@@ -56,8 +56,8 @@ def detect_btc_runtime() -> dict:
         missing.append(f"venv python ({venv_python()})")
     if not raw_script_path().is_file():
         missing.append(f"wrapper source ({raw_script_path()})")
-    if not wrapper_path().is_file():
-        missing.append(f"wrapper ({wrapper_path()})")
+    if not wrapper_path().is_file() or not os.access(wrapper_path(), os.X_OK):
+        missing.append(f"executable wrapper ({wrapper_path()})")
     checkpoint = checkpoint_path()
     if not checkpoint.is_file():
         missing.append(f"checkpoint ({checkpoint})")
@@ -76,6 +76,9 @@ def require_btc_runtime() -> dict:
     if not state["complete"]:
         detail = "\n".join(f"  missing: {item}" for item in state["missing"])
         raise BtcRuntimeError(
-            "BTC runtime not installed.\nRun: make setup-btc\n" + detail
+            "BTC runtime not installed.\n"
+            "Check: make btc-check\n"
+            "Install: make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1\n"
+            + detail
         )
     return state

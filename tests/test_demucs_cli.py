@@ -2,7 +2,8 @@ from chordflask_demucs import cli
 from chordflask_demucs.audio import AudioFacts
 from chordflask_demucs.discovery import DiscoveryError
 from chordflask_demucs.runtime import DemucsRuntimeError, RuntimeInfo
-from chordflask_demucs.storage import DemucsStatus
+from chordflask_demucs.runner import DemucsProcessError
+from chordflask_demucs.storage import DemucsBusyError, DemucsStatus
 
 
 def _runtime(tmp_path):
@@ -250,4 +251,117 @@ def test_provisional_current_with_broken_runtime_becomes_error(monkeypatch, tmp_
     code = cli.run(tmp_path, replace=False, dry_run=True, device="auto")
 
     assert code == 0
-    assert "ERROR" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "ERROR" in captured.out
+    assert "make demucs-check" in captured.err
+    assert "make setup-demucs" in captured.err
+
+
+def test_missing_runtime_has_setup_and_check_guidance(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: DemucsStatus("TODO"))
+    monkeypatch.setattr(
+        cli,
+        "require_runtime",
+        lambda: (_ for _ in ()).throw(DemucsRuntimeError("runtime missing")),
+    )
+
+    code = cli.run(tmp_path, replace=False, dry_run=False, device="auto")
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "runtime missing" in err
+    assert "make demucs-check" in err
+    assert "make setup-demucs" in err
+
+
+def test_lock_conflict_has_retry_guidance(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: DemucsStatus("TODO"))
+    monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda device, info: "cpu")
+    monkeypatch.setattr(
+        cli,
+        "_process_one",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            DemucsBusyError("Demucs processing is already running")
+        ),
+    )
+
+    code = cli.run(media, replace=False, dry_run=False, device="auto")
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "already running" in err
+    assert "Retry after the other Demucs process" in err
+    assert "delete" not in err.lower()
+
+
+def test_invalid_analysis_has_safe_inspection_guidance(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(
+        cli,
+        "classify",
+        lambda path, **kwargs: DemucsStatus("ERROR", "analysis JSON is invalid: bad data"),
+    )
+
+    code = cli.run(media, replace=False, dry_run=False, device="auto")
+
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "analysis JSON is invalid" in captured.out
+    assert f"chordflask-maintain validate {tmp_path}" in captured.err
+    assert f"chordflask-maintain stems report {tmp_path}" in captured.err
+
+
+def test_stale_stems_have_inspection_and_regeneration_guidance(
+    monkeypatch, tmp_path, capsys
+):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(
+        cli,
+        "classify",
+        lambda path, **kwargs: DemucsStatus("STALE", "vocals stem is missing"),
+    )
+
+    code = cli.run(media, replace=False, dry_run=False, device="auto")
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert f"chordflask-maintain stems report {tmp_path}" in err
+    assert f"chordflask-demucs --replace {media}" in err
+
+
+def test_cuda_process_error_suggests_supported_cpu_command(
+    monkeypatch, tmp_path, capsys
+):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"source")
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(cli, "discover_target", lambda target: [media])
+    monkeypatch.setattr(cli, "classify", lambda path, **kwargs: DemucsStatus("TODO"))
+    monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda device, info: "cuda")
+    monkeypatch.setattr(
+        cli,
+        "_process_one",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            DemucsProcessError("CUDA device is unavailable")
+        ),
+    )
+
+    code = cli.run(media, replace=False, dry_run=False, device="cuda")
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "CUDA device is unavailable" in err
+    assert f"chordflask-demucs --device cpu {media}" in err

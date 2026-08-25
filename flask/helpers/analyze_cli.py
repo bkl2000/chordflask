@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -32,7 +33,7 @@ def _btc_backend_available() -> bool:
 
 
 def _analyzer_choices() -> tuple[str, ...]:
-    return ("chordino", "btc") if _btc_backend_available() else ("chordino",)
+    return ("chordino", "btc")
 
 
 def _epilog() -> str:
@@ -56,8 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Analyze a media file or directory with ChordFlask.\n\n"
         "Chordino is the default built-in analyzer."
     )
-    if _btc_backend_available():
-        description += "\nBTC is an optional analyzer that adds a separate chord track."
+    description += "\nBTC is an optional analyzer that adds a separate chord track."
     parser = argparse.ArgumentParser(
         prog="chordflask-analyze",
         description=description,
@@ -102,17 +102,42 @@ def _resolve_media_files(target: Path) -> list[Path] | None:
         try:
             return find_media_files(target)
         except FileNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
+            print(f"ERROR: {exc}", file=sys.stderr)
             return None
     if target.is_file():
         if target.suffix.lower() not in _MEDIA_SUFFIXES:
             print(
-                f"Error: not a supported media file (MP3/MP4/WebM): {target}",
+                f"ERROR: not a supported media file (MP3/MP4/WebM): {target}",
                 file=sys.stderr,
             )
             return None
         return [target]
-    print(f"Error: not a file or directory: {target}", file=sys.stderr)
+    print(f"ERROR: not a file or directory: {target}", file=sys.stderr)
+    return None
+
+
+def _validation_target(target: Path) -> Path:
+    return target if target.is_dir() else target.parent
+
+
+def _print_chordino_guidance(hints: set[str], target: Path) -> None:
+    if "invalid_analysis" in hints:
+        directory = shlex.quote(str(_validation_target(target)))
+        print("Validate the existing analysis with:", file=sys.stderr)
+        print(f"  chordflask-maintain validate {directory}", file=sys.stderr)
+    if "vamp" in hints:
+        print("Check the installation with:", file=sys.stderr)
+        print("  chordflask-maintain doctor", file=sys.stderr)
+        print("Install the required plugins from a source checkout with:", file=sys.stderr)
+        print("  make plugins", file=sys.stderr)
+
+
+def _chordino_failure_hint(error: Exception) -> str | None:
+    message = str(error).lower()
+    if "vamp" in message or "nnls-chroma" in message or "qm-barbeattracker" in message:
+        return "vamp"
+    if "valid current analysis" in message or "invalid chord data" in message:
+        return "invalid_analysis"
     return None
 
 
@@ -152,6 +177,7 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
 
     worker = None
     counts = {"ok": 0, "skipped": 0, "failed": 0}
+    guidance: set[str] = set()
     total = len(media_files)
     for index, media in enumerate(media_files, 1):
         print(f"[{index}/{total}] {media.name}")
@@ -161,6 +187,7 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
                 label = "REANALYZE" if replace else "CURRENT"
             elif status == "invalid":
                 label = "INVALID"
+                guidance.add("invalid_analysis")
             else:
                 label = "TODO"
             print(f"       {label}")
@@ -177,10 +204,17 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
             worker._analyze(media, force=status in ("current", "todo"))
         except Exception as exc:
             print(f"       ERROR: {exc}", file=sys.stderr)
+            hint = _chordino_failure_hint(exc)
+            if hint:
+                guidance.add(hint)
             counts["failed"] += 1
             continue
         counts["ok"] += 1
         print("       OK")
+
+    if guidance:
+        print("", file=sys.stderr)
+        _print_chordino_guidance(guidance, target)
 
     print("")
     print("Chordino dry-run complete" if dry_run else "Chordino analysis complete")

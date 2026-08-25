@@ -18,9 +18,9 @@ producer package.
 
 from __future__ import annotations
 
-import fcntl
 import os
 import shutil
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,7 +31,7 @@ from chordflask_maintain.migrate import (
     classify_analysis,
     read_analysis_json,
 )
-from chordflask_maintain.storage import worker_is_active
+from chordflask_maintain.storage import LockStatus, check_lock_file, worker_lock_status
 
 # Consumer-side identifier matching the producer's set id. It is defined here
 # so this framework-free package never imports the optional producer package.
@@ -76,6 +76,7 @@ class StemsCleanupResult:
     removed: list = field(default_factory=list)
     removed_bytes: int = 0
     refused: bool = False
+    refusal_kind: str = ""
     reason: str = ""
     failures: list = field(default_factory=list)
 
@@ -98,15 +99,24 @@ def _analysis_dir(media: Path) -> Path | None:
     return chordflask
 
 
-def _iter_json_files(chordflask: Path):
+def _iter_json_files(chordflask: Path, *, fail_closed: bool = False):
     try:
-        return sorted(
-            path
-            for path in chordflask.glob("*.json")
-            if path.is_file() and not path.is_symlink()
-        )
+        entries = list(chordflask.iterdir())
     except OSError:
+        if fail_closed:
+            raise
         return []
+    json_files = []
+    for path in entries:
+        if path.suffix != ".json":
+            continue
+        try:
+            if stat.S_ISREG(path.lstat().st_mode):
+                json_files.append(path)
+        except OSError:
+            if fail_closed:
+                raise
+    return sorted(json_files)
 
 
 def _referenced_generation(media: Path, set_data: dict) -> Path | None:
@@ -298,27 +308,24 @@ def format_stems_report(report: StemsReport) -> str:
     return "\n".join(lines)
 
 
-def demucs_lock_is_active(chordflask: Path) -> bool:
-    """Return whether any Demucs per-media lock is currently held."""
+def demucs_lock_status(chordflask: Path) -> LockStatus:
+    """Return the aggregate Demucs lock state, failing closed on errors."""
     try:
-        lock_files = [
-            path
-            for path in chordflask.glob("*.demucs.lock")
-            if path.is_file() and not path.is_symlink()
-        ]
-    except OSError:
-        return False
+        lock_files = sorted(
+            path for path in chordflask.iterdir() if path.name.endswith(".demucs.lock")
+        )
+    except OSError as error:
+        return LockStatus("error", f"cannot list Demucs locks in {chordflask}: {error}")
     for lock_path in lock_files:
-        try:
-            with lock_path.open("a+") as handle:
-                try:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError:
-                    return True
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        except OSError:
-            continue
-    return False
+        status = check_lock_file(lock_path, "Demucs lock")
+        if status.state != "inactive":
+            return status
+    return LockStatus("inactive")
+
+
+def demucs_lock_is_active(chordflask: Path) -> bool:
+    """Compatibility helper returning whether a Demucs lock is held."""
+    return demucs_lock_status(chordflask).state == "active"
 
 
 def cleanup_orphan_stems(media_dir, *, dry_run: bool = False) -> StemsCleanupResult:
@@ -336,33 +343,68 @@ def cleanup_orphan_stems(media_dir, *, dry_run: bool = False) -> StemsCleanupRes
 
     result = StemsCleanupResult()
 
-    if worker_is_active():
+    worker_status = worker_lock_status()
+    if worker_status.state != "inactive":
         result.refused = True
-        result.reason = "an analysis worker is active; stem storage was not changed"
+        result.refusal_kind = (
+            "worker_active" if worker_status.state == "active" else "worker_lock_error"
+        )
+        result.reason = (
+            "an analysis worker is active; stem storage was not changed"
+            if worker_status.state == "active"
+            else f"{worker_status.reason}; cleanup cannot safely continue"
+        )
         return result
 
     chordflask = _analysis_dir(media)
     if chordflask is None:
         return result
 
-    if demucs_lock_is_active(chordflask):
+    demucs_status = demucs_lock_status(chordflask)
+    if demucs_status.state != "inactive":
         result.refused = True
-        result.reason = "a Demucs process holds a lock; stem storage was not changed"
+        result.refusal_kind = (
+            "demucs_active" if demucs_status.state == "active" else "demucs_lock_error"
+        )
+        result.reason = (
+            "a Demucs process holds a lock; stem storage was not changed"
+            if demucs_status.state == "active"
+            else f"{demucs_status.reason}; cleanup cannot safely continue"
+        )
         return result
 
     referenced: set = set()
-    for json_path in _iter_json_files(chordflask):
+    try:
+        json_files = _iter_json_files(chordflask, fail_closed=True)
+    except OSError as error:
+        result.refused = True
+        result.refusal_kind = "analysis_json_error"
+        result.reason = (
+            f"cannot inspect analysis JSON files: {error}; "
+            "orphan references cannot be determined safely"
+        )
+        return result
+
+    for json_path in json_files:
         try:
             data = read_analysis_json(json_path)
         except MigrationFileError as error:
             result.refused = True
-            result.reason = f"cannot read {json_path.name}: {error}"
+            result.refusal_kind = "analysis_json_error"
+            result.reason = (
+                f"cannot read {json_path.name}: {error}; "
+                "orphan references cannot be determined safely"
+            )
             return result
         try:
             kind = classify_analysis(data)
         except MigrationFileError as error:
             result.refused = True
-            result.reason = f"cannot classify {json_path.name}: {error}"
+            result.refusal_kind = "analysis_json_error"
+            result.reason = (
+                f"cannot classify {json_path.name}: {error}; "
+                "orphan references cannot be determined safely"
+            )
             return result
         if kind is None:
             continue  # non-analysis JSON (e.g. *.training.json)
@@ -370,14 +412,25 @@ def cleanup_orphan_stems(media_dir, *, dry_run: bool = False) -> StemsCleanupRes
             track = ChordTrackRepository().load(str(json_path))
         except Exception as error:  # noqa: BLE001 - validation boundary
             result.refused = True
-            result.reason = f"invalid analysis JSON {json_path.name}: {error}"
+            result.refusal_kind = "analysis_json_error"
+            result.reason = (
+                f"invalid analysis JSON {json_path.name}: {error}; "
+                "orphan references cannot be determined safely"
+            )
             return result
         if track.has_audio_track(DEMUCS_AUDIO_SET_ID):
             generation = _referenced_generation(
                 media, track.audio_track_data(DEMUCS_AUDIO_SET_ID)
             )
-            if generation is not None:
-                referenced.add(generation)
+            if generation is None:
+                result.refused = True
+                result.refusal_kind = "generation_unresolved"
+                result.reason = (
+                    f"cannot resolve registered stem generation for {json_path.name}; "
+                    "orphan status cannot be proven safely"
+                )
+                return result
+            referenced.add(generation)
 
     orphans, _, _ = _orphan_generations(media, referenced)
     for gen_dir, size in orphans:
@@ -427,6 +480,7 @@ __all__ = [
     "StemsReport",
     "cleanup_orphan_stems",
     "demucs_lock_is_active",
+    "demucs_lock_status",
     "format_stems_cleanup",
     "format_stems_report",
     "inspect_stems",

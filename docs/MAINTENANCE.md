@@ -40,6 +40,7 @@ anything and never follows symlinks.
 scripts/chordflask-maintain storage cleanup /path/to/music --orphan-temp
 scripts/chordflask-maintain storage cleanup /path/to/music --cached-audio
 scripts/chordflask-maintain storage cleanup /path/to/music --corrupt-backups --older-than-days 30
+scripts/chordflask-maintain storage cleanup /path/to/music --orphan-temp --cached-audio --dry-run
 ```
 
 Cleanup is explicit and limited to one media directory (non-recursive). At
@@ -53,6 +54,8 @@ least one category flag is required:
   `--older-than-days N` (a positive number, required with this flag).
 
 Valid analysis JSON, source media, and user-edited data are never deleted.
+Use `--dry-run` first to show the candidates and totals without deleting
+anything. Dry runs use the same lock checks and refusal rules as real cleanup.
 
 ## Stems report
 
