@@ -1,10 +1,9 @@
 # ChordFlask
 
-ChordFlask is for exploring your own music collection with chords. Browse your
-songs, play whatever catches your interest, and analyze only the pieces you
-want. Completed analyses stay available, so your collection gradually becomes
-a reusable chord-and-beat library without having to process everything up
-front.
+ChordFlask is for exploring your own music collection — audio and video — with chords. Browse your
+audio tracks and music videos, play whatever catches your interest, and analyze only the pieces you
+want. Completed analyses stay available, so your collection gradually becomes a reusable
+chord-and-beat library without having to process everything up front.
 
 ChordFlask is a local-first automatic chord recognition tool. It analyzes the
 chords and beats in MP3, MP4, and WebM files and shows them in sync while you
