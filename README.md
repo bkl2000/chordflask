@@ -5,6 +5,8 @@ audio tracks and music videos, play whatever catches your interest, and analyze 
 want. Completed analyses stay available, so your collection gradually becomes a reusable
 chord-and-beat library without having to process everything up front.
 
+![ChordFlask example screenshot](docs/example-screenshot.png)
+
 ChordFlask is a local-first automatic chord recognition tool. It analyzes the
 chords and beats in MP3, MP4, and WebM files and shows them in sync while you
 play the song in the browser. The displayed chords can be transposed,
