@@ -7,7 +7,7 @@ chord-and-beat library without having to process everything up front.
 
 ![ChordFlask example screenshot](docs/example-screenshot.png)
 
-ChordFlask is a free, self-hosted chord analysis tool for local audio and video
+ChordFlask is a free, self-hosted Linux chord analysis tool for local audio and video
 collections. It analyzes chords and beats in MP3, MP4, and WebM files, supports
 fast on-demand and batch analysis, and shows the results in sync while you play
 the media in the browser. The displayed chords can be transposed, corrected,
