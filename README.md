@@ -77,6 +77,9 @@ Chord recognition quality is generally lower than mature commercial services,
 so the generated chords should be treated as an approximate starting point
 rather than an authoritative transcription.
 
+It is especially useful for playing along or improvising with songs from your
+own collection without searching for separate chord sheets or tabs.
+
 This local, on-demand workflow is the main reason ChordFlask exists:
 
 - prepare selected parts of a collection in bounded background batches;
