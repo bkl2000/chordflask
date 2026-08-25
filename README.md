@@ -7,11 +7,12 @@ chord-and-beat library without having to process everything up front.
 
 ![ChordFlask example screenshot](docs/example-screenshot.png)
 
-ChordFlask is a local-first automatic chord recognition tool. It analyzes the
-chords and beats in MP3, MP4, and WebM files and shows them in sync while you
-play the song in the browser. The displayed chords can be transposed,
-corrected, compared, and exported as Markdown or PDF. Everything runs locally;
-media and analysis data are never uploaded.
+ChordFlask is a free, self-hosted chord analysis tool for local audio and video
+collections. It analyzes chords and beats in MP3, MP4, and WebM files, supports
+fast on-demand and batch analysis, and shows the results in sync while you play
+the media in the browser. The displayed chords can be transposed, corrected,
+compared, and exported as Markdown or PDF. Everything runs locally; media and
+analysis data are never uploaded.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+ (CPython 3.12 and 3.13). Native Windows is not supported; Windows users can run
@@ -68,6 +69,13 @@ ChordFlask is a small local-first tool for working with a music collection you
 already have. Its emphasis is the workflow around chord analysis rather than a
 claim of uniquely accurate recognition: browse a directory, play any file, and
 generate reusable chord data only when it is useful.
+
+Compared with hosted services such as Chordify, ChordFlask takes a different
+trade-off: it is free, runs locally, works directly with your own audio and
+video collection, and is designed for fast on-demand and batch processing.
+Chord recognition quality is generally lower than mature commercial services,
+so the generated chords should be treated as an approximate starting point
+rather than an authoritative transcription.
 
 This local, on-demand workflow is the main reason ChordFlask exists:
 
