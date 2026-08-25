@@ -14,7 +14,11 @@ if str(FLASK_DIR) not in sys.path:
 import chordutils
 from analysis_queue import AnalysisQueue
 from analysis_worker import AnalysisWorker
-from chordflask_base import ChordData, ChordTrackRepository
+from chordflask_base import (
+    USER_EDITED_RHYTHM_TRACK_ID,
+    ChordData,
+    ChordTrackRepository,
+)
 from chordflask import CLIENT_COOKIE, FlaskMP4App
 from filerepr import FileRepr
 from mp4playerflask import MP4PlayerFlask
@@ -274,6 +278,23 @@ def test_player_reset_removes_edited_and_selects_original(tmp_path):
     assert player.active_chord_version() == "original"
 
 
+def test_player_reset_removes_edited_rhythm_snapshot(tmp_path):
+    _, _, player = _make_player(tmp_path)
+    rhythm = player.chord_data.rhythm_track_data("qm_barbeattracker")
+    player.chord_data.set_rhythm_track(USER_EDITED_RHYTHM_TRACK_ID, **rhythm)
+    player.chord_data.create_beat_aligned_track(
+        "user_edited",
+        source_rhythm_track_id=USER_EDITED_RHYTHM_TRACK_ID,
+    )
+    player.select_analysis_tracks(chord_track_id="user_edited")
+
+    player.reset_edited_chords()
+
+    assert not player.chord_data.has_chord_track("user_edited")
+    assert not player.chord_data.has_rhythm_track(USER_EDITED_RHYTHM_TRACK_ID)
+    assert player.chord_data.active_rhythm_track_id == "qm_barbeattracker"
+
+
 def test_player_edit_reverse_transposes_input(tmp_path):
     _, _, player = _make_player(tmp_path, semitones=2)
     player.start_chord_editing()
@@ -451,6 +472,121 @@ def test_forced_reanalysis_preserves_user_edited_by_default(tmp_path):
     assert loaded.chord_track_chords("chordino") == [{"timestamp": 0.0, "chord": "G"}]
 
 
+@pytest.mark.parametrize(
+    "new_beat_times,new_beat_numbers",
+    [
+        ([0.0, 0.55, 1.1, 1.65], [1, 2, 3, 1]),
+        ([0.0, 0.75], [1, 2]),
+    ],
+    ids=("timestamps-change", "beat-count-changes"),
+)
+def test_reanalysis_preserves_edited_chords_with_their_original_rhythm_grid(
+    tmp_path, new_beat_times, new_beat_numbers
+):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = tmp_path / ANALYSIS_DIR_NAME
+    analysis_dir.mkdir()
+    current_repr = FileRepr(str(media), datapath=str(analysis_dir))
+
+    current = ChordData()
+    current.set_chord_track(
+        "chordino",
+        [
+            {"timestamp": 0.0, "chord": "C"},
+            {"timestamp": 1.0, "chord": "G"},
+        ],
+    )
+    old_rhythm = {
+        "bpm": 120,
+        "meter_signature": 4,
+        "beat_times": [0.0, 0.5, 1.0, 1.5],
+        "beat_numbers": [1, 2, 3, 4],
+        "metadata": {"engine": "old-qm"},
+    }
+    current.set_rhythm_track("qm_barbeattracker", **old_rhythm)
+    current.create_beat_aligned_track("user_edited")
+    current.edit_chord_track_beat("user_edited", 1, "F")
+    current.edit_chord_track_beat("user_edited", 3, "Am")
+    edited_before = current.chord_track_chords("user_edited")
+    current.save_to_file(current_repr.get("json"))
+
+    class FreshAnalyzer:
+        def __init__(self, media_path, output_dir):
+            self.file_repr = FileRepr(media_path, datapath=output_dir)
+
+        def process(self):
+            replacement = ChordData()
+            replacement.set_chord_track(
+                "chordino", [{"timestamp": 0.0, "chord": "D"}]
+            )
+            replacement.set_rhythm_track(
+                "qm_barbeattracker",
+                bpm=100,
+                meter_signature=3,
+                beat_times=new_beat_times,
+                beat_numbers=new_beat_numbers,
+                metadata={"engine": "new-qm"},
+            )
+            replacement.save_to_file(self.file_repr.get("json"))
+
+    worker = AnalysisWorker(
+        queue=AnalysisQueue(tmp_path / "queue"), analyzer_cls=FreshAnalyzer
+    )
+    worker._analyze(str(media), force=True)
+
+    loaded = ChordData(current_repr.get("json"))
+    assert loaded.chord_track_chords("user_edited") == edited_before
+    assert loaded.chord_track_chords("chordino") == [
+        {"timestamp": 0.0, "chord": "D"}
+    ]
+    assert loaded.rhythm_track_data("qm_barbeattracker")["beat_times"] == new_beat_times
+    snapshot = loaded.rhythm_track_data(USER_EDITED_RHYTHM_TRACK_ID)
+    assert snapshot["beat_times"] == old_rhythm["beat_times"]
+    assert snapshot["beat_numbers"] == old_rhythm["beat_numbers"]
+    assert snapshot["meter_signature"] == old_rhythm["meter_signature"]
+    assert loaded.chord_track_metadata("user_edited")["sources"]["rhythm"] == (
+        USER_EDITED_RHYTHM_TRACK_ID
+    )
+
+    player = MP4PlayerFlask(current_repr)
+    player.set_chord_version("edited")
+    assert player.chord_data.active_rhythm_track_id == USER_EDITED_RHYTHM_TRACK_ID
+    assert player.playback_view.full_beat_view() == ["C", "F", "G", "Am"]
+
+
+def test_reanalysis_fails_safely_when_edited_rhythm_dependency_is_invalid(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = tmp_path / ANALYSIS_DIR_NAME
+    analysis_dir.mkdir()
+    current_repr = FileRepr(str(media), datapath=str(analysis_dir))
+    current = _editable_data()
+    current.set_chord_track(
+        "user_edited",
+        [{"timestamp": 0.0, "chord": "F"}],
+        metadata={"display_name": "Edited"},
+    )
+    current.save_to_file(current_repr.get("json"))
+    original = Path(current_repr.get("json")).read_bytes()
+
+    class FreshAnalyzer:
+        def __init__(self, media_path, output_dir):
+            self.file_repr = FileRepr(media_path, datapath=output_dir)
+
+        def process(self):
+            _save_analysis(self.file_repr, chord="G", bpm=130)
+
+    worker = AnalysisWorker(
+        queue=AnalysisQueue(tmp_path / "queue"), analyzer_cls=FreshAnalyzer
+    )
+    with pytest.raises(RuntimeError, match="Cannot safely preserve Edited chords"):
+        worker._analyze(str(media), force=True)
+
+    assert Path(current_repr.get("json")).read_bytes() == original
+    assert ChordData(current_repr.get("json")).has_chord_track("user_edited")
+
+
 def test_forced_reanalysis_drops_user_edited_when_discard_authorized(tmp_path):
     current_repr = _edited_worker_setup(tmp_path, discard_edits=True)
 
@@ -458,6 +594,40 @@ def test_forced_reanalysis_drops_user_edited_when_discard_authorized(tmp_path):
     assert loaded.has_chord_track("user_edited") is False
     assert loaded.active_chord_track_id == "chordino"
     assert loaded.chord_track_chords("chordino") == [{"timestamp": 0.0, "chord": "G"}]
+
+
+def test_explicit_discard_removes_edited_rhythm_snapshot(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = tmp_path / ANALYSIS_DIR_NAME
+    analysis_dir.mkdir()
+    current_repr = FileRepr(str(media), datapath=str(analysis_dir))
+    current = _editable_data()
+    current.set_rhythm_track(
+        USER_EDITED_RHYTHM_TRACK_ID,
+        **current.rhythm_track_data("qm_barbeattracker"),
+    )
+    current.create_beat_aligned_track(
+        "user_edited",
+        source_rhythm_track_id=USER_EDITED_RHYTHM_TRACK_ID,
+    )
+    current.save_to_file(current_repr.get("json"))
+
+    class FreshAnalyzer:
+        def __init__(self, media_path, output_dir):
+            self.file_repr = FileRepr(media_path, datapath=output_dir)
+
+        def process(self):
+            _save_analysis(self.file_repr, chord="G", bpm=130)
+
+    worker = AnalysisWorker(
+        queue=AnalysisQueue(tmp_path / "queue"), analyzer_cls=FreshAnalyzer
+    )
+    worker._analyze(str(media), force=True, discard_edits=True)
+
+    loaded = ChordData(current_repr.get("json"))
+    assert not loaded.has_chord_track("user_edited")
+    assert not loaded.has_rhythm_track(USER_EDITED_RHYTHM_TRACK_ID)
 
 
 def test_failed_discard_reanalysis_preserves_edited_json(tmp_path):
@@ -822,7 +992,7 @@ def test_reset_edited_chords_route(tmp_path):
     assert not ChordData(_state(app_wrapper).file_repr.get("json")).has_chord_track("user_edited")
 
 
-def test_reanalyze_refuses_edited_without_discard(tmp_path):
+def test_reanalyze_preserves_edited_by_default(tmp_path):
     app_wrapper, client = make_client()
     _activate_editable(app_wrapper, tmp_path)
     client.post("/start_chord_editing", json=_payload(tmp_path))
@@ -830,9 +1000,10 @@ def test_reanalyze_refuses_edited_without_discard(tmp_path):
 
     response = client.post("/reanalyze", json=_payload(tmp_path))
 
-    assert response.status_code == 409
-    assert "edited chords" in response.get_json()["error"]
-    assert app_wrapper.analysis_queue.status()["pending"] == []
+    assert response.status_code == 200
+    pending = app_wrapper.analysis_queue.status()["pending"]
+    assert pending[0]["force"] is True
+    assert pending[0]["discard_edits"] is False
 
 
 def test_reanalyze_accepts_discard_and_persists_flag(tmp_path):
@@ -1109,8 +1280,9 @@ def test_index_contains_editing_fetch_and_flow_contract():
     assert "function openEditDialog(cell)" in body
     assert "function undoLastEdit()" in body
     assert "function resetEditedChords()" in body
-    assert "discard_edits: discardEdits" in body
-    assert "discards your Edited chords" in body
+    assert "discard_edits: discardEdits" not in body
+    assert "Your Edited chords will be preserved" in body
+    assert "Permanently discard all Edited chords" in body
     assert "has_edited" in body
 
 

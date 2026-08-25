@@ -647,6 +647,18 @@ class ChordData:
     def has_rhythm_track(self, track_id):
         return track_id in self.__rhythm_tracks
 
+    def remove_rhythm_track(self, track_id):
+        """Remove one rhythm track, restoring the default view when active."""
+        self.__validate_track_id(track_id)
+        if track_id not in self.__rhythm_tracks:
+            raise ValueError(f'rhythm track "{track_id}" not available')
+        del self.__rhythm_tracks[track_id]
+        if self.__active_rhythm_track_id == track_id:
+            self.__active_rhythm_track_id = None
+            self.__rhythm_selection_explicit = False
+            self._rebuild_active_view()
+        self._get_chords_cached.cache_clear()
+
     # ── beat-aligned chord editing ─────────────────────────────────────
 
     def create_beat_aligned_track(self, track_id, source_chord_track_id=DEFAULT_CHORD_TRACK,

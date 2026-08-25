@@ -32,7 +32,9 @@ scripts/chordflask-analyze /music/videos
 - **`--dry-run`** previews what would happen without changing anything.
 - **`--replace`** renews only the chosen analyzer's analysis. For Chordino it
   re-runs Chordino/QM while preserving other tracks (reference, Edited),
-  display preferences, and user data. Other existing tracks are never deleted.
+  display preferences, and user data. Edited chords retain the rhythm grid
+  they were created against; Reset Edited explicitly removes them. Other
+  existing tracks are never deleted.
 - **Directory processing is non-recursive.** Only files directly inside the
   target directory are considered; subdirectories are skipped. Where several
   extensions share one base name, MP4 wins over WebM over MP3.

@@ -769,11 +769,6 @@ class FlaskMP4App:
             return jsonify(error="discard_edits must be a boolean"), 400
         if self._media_is_queued(media):
             return jsonify(error="This file already has queued analysis work."), 409
-        if self._analysis_has_edited_track(file_repr.get("json")) and not discard_edits:
-            return jsonify(
-                error="This file has edited chords. Confirm discarding them before reanalysis."
-            ), 409
-
         queue_status = self.analysis_queue.enqueue(
             str(media), force=True, discard_edits=discard_edits
         )

@@ -24,10 +24,15 @@ sys.path.insert(0, os.path.dirname(__file__))
 from batch_core import find_media_files  # noqa: E402
 from chord_markdown import download_track_slug, format_chord_markdown  # noqa: E402
 from chord_sheet_pdf import ChordSheetPdfRenderer  # noqa: E402
+from chordflask_base import (  # noqa: E402
+    DEFAULT_CHORD_TRACK,
+    DEFAULT_RHYTHM_TRACK,
+    USER_EDITED_TRACK_ID,
+)
 
-EDITED_TRACK_ID = "user_edited"
-CHORDINO_TRACK_ID = "chordino"
-QM_RHYTHM_TRACK_ID = "qm_barbeattracker"
+EDITED_TRACK_ID = USER_EDITED_TRACK_ID
+CHORDINO_TRACK_ID = DEFAULT_CHORD_TRACK
+QM_RHYTHM_TRACK_ID = DEFAULT_RHYTHM_TRACK
 
 _BUILTIN_TRACK_NAMES = {
     CHORDINO_TRACK_ID: "Chordino",
@@ -136,6 +141,18 @@ def resolve_chord_track(chord_data, choice):
     return choice
 
 
+def resolve_rhythm_track(chord_data, chord_track_id, choice):
+    """Keep Edited exports on the rhythm grid recorded in their metadata."""
+    if chord_track_id != EDITED_TRACK_ID:
+        return choice
+    metadata = chord_data.chord_track_metadata(chord_track_id)
+    sources = metadata.get("sources")
+    rhythm_track_id = sources.get("rhythm") if isinstance(sources, dict) else None
+    if not isinstance(rhythm_track_id, str) or not rhythm_track_id:
+        raise ValueError("Edited chord rhythm source metadata is invalid")
+    return rhythm_track_id
+
+
 def _write_atomic(path, content):
     path = os.path.abspath(os.fspath(path))
     directory = os.path.dirname(path)
@@ -205,7 +222,7 @@ def export_file(media_path, args):
         chord_track_id = resolve_chord_track(cd, args.chord_track)
         if not cd.has_chord_track(chord_track_id):
             raise ValueError(f'chord track "{chord_track_id}" not available')
-        rhythm_track_id = args.rhythm_track
+        rhythm_track_id = resolve_rhythm_track(cd, chord_track_id, args.rhythm_track)
         if not cd.has_rhythm_track(rhythm_track_id):
             raise ValueError(f'rhythm track "{rhythm_track_id}" not available')
 

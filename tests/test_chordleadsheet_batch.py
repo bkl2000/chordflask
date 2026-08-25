@@ -16,7 +16,7 @@ for path in (FLASK_DIR, HELPERS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from chordflask_base import ChordData  # noqa: E402
+from chordflask_base import USER_EDITED_RHYTHM_TRACK_ID, ChordData  # noqa: E402
 import chordleadsheet_batch  # noqa: E402
 from chordleadsheet_batch import (  # noqa: E402
     LeadsheetExportError,
@@ -147,6 +147,47 @@ def test_export_file_prefers_edited_for_auto(tmp_path):
     content = leadsheet.read_text()
     assert "· Edited ·" in content
     assert "Edited · QM Bar/Beat Tracker" in content
+
+
+def test_export_file_keeps_edited_on_its_preserved_rhythm_grid(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+    analysis_path = analysis_dir / "song.json"
+    chord_data = ChordData(analysis_path)
+    chord_data.set_rhythm_track(
+        USER_EDITED_RHYTHM_TRACK_ID,
+        bpm=120,
+        meter_signature=4,
+        beat_times=[0.0, 0.5, 1.0, 1.5],
+        beat_numbers=[1, 2, 3, 4],
+        metadata={"display_name": "Edited rhythm snapshot"},
+    )
+    chord_data.create_beat_aligned_track(
+        "user_edited",
+        source_rhythm_track_id=USER_EDITED_RHYTHM_TRACK_ID,
+        metadata={"display_name": "Edited"},
+    )
+    chord_data.edit_chord_track_beat(
+        "user_edited",
+        1,
+        "F",
+        rhythm_track_id=USER_EDITED_RHYTHM_TRACK_ID,
+    )
+    chord_data.set_rhythm_track(
+        "qm_barbeattracker",
+        bpm=100,
+        meter_signature=3,
+        beat_times=[0.0, 0.75],
+        beat_numbers=[1, 2],
+    )
+    chord_data.save_to_file(analysis_path)
+
+    export_file(media, _args(chord_track="edited"))
+
+    content = (analysis_dir / "song-chords-edited.md").read_text()
+    assert "Edited · Edited rhythm snapshot" in content
+    assert "C          F          G          -" in content
 
 
 def test_export_file_uses_named_chord_and_rhythm_tracks(tmp_path):

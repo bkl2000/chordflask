@@ -15,6 +15,7 @@ from chordflask_base import (
     DEFAULT_RHYTHM_TRACK,
     DEMUCS_STEM_NAMES,
     MADMOM_TRACK_ID,
+    USER_EDITED_RHYTHM_TRACK_ID,
     USER_EDITED_TRACK_ID,
 )
 from playbackview import GRID_MODES
@@ -27,7 +28,6 @@ _BUILTIN_TRACK_NAMES = {
 
 _EDITED_TRACK_ID = USER_EDITED_TRACK_ID
 _EDITED_SOURCE_CHORD = DEFAULT_CHORD_TRACK
-_EDITED_SOURCE_RHYTHM = DEFAULT_RHYTHM_TRACK
 _EDIT_GRID_ROWS = 16
 _EDIT_GRID_MEASURES_PER_ROW = 2
 
@@ -135,14 +135,13 @@ class MP4PlayerFlask:
             else self.chord_data.active_chord_track_id
         )
         if effective_chord == _EDITED_TRACK_ID:
-            if _EDITED_SOURCE_RHYTHM not in available_rhythms:
-                raise ValueError("QM beat track is not available")
-            if rhythm_track_id is not None and rhythm_track_id != _EDITED_SOURCE_RHYTHM:
+            edited_rhythm_id = self.__edited_rhythm_track_id()
+            if rhythm_track_id is not None and rhythm_track_id != edited_rhythm_id:
                 raise ValueError(
-                    "Rhythm source is fixed to QM Bar/Beat Tracker while the "
+                    "Rhythm source is fixed to the Edited rhythm grid while the "
                     "Edited version is active"
                 )
-            rhythm_track_id = _EDITED_SOURCE_RHYTHM
+            rhythm_track_id = edited_rhythm_id
 
         changed = False
         if chord_track_id in available_chords:
@@ -247,15 +246,15 @@ class MP4PlayerFlask:
         cd = self.chord_data
         if not cd.has_chord_track(_EDITED_SOURCE_CHORD):
             raise ValueError("Chordino analysis is not available")
-        if not cd.has_rhythm_track(_EDITED_SOURCE_RHYTHM):
+        if not cd.has_rhythm_track(DEFAULT_RHYTHM_TRACK):
             raise ValueError("QM beat track is not available")
-        if not cd.rhythm_track_data(_EDITED_SOURCE_RHYTHM)["beat_times"]:
+        if not cd.rhythm_track_data(DEFAULT_RHYTHM_TRACK)["beat_times"]:
             raise ValueError("QM beat track has no beat times")
         if not cd.has_chord_track(_EDITED_TRACK_ID):
             cd.create_beat_aligned_track(
                 _EDITED_TRACK_ID,
                 source_chord_track_id=_EDITED_SOURCE_CHORD,
-                source_rhythm_track_id=_EDITED_SOURCE_RHYTHM,
+                source_rhythm_track_id=DEFAULT_RHYTHM_TRACK,
                 metadata={"display_name": "Edited"},
             )
         self.select_analysis_tracks(chord_track_id=_EDITED_TRACK_ID)
@@ -281,9 +280,12 @@ class MP4PlayerFlask:
                 normalized, -cd.transpose_semitones, cd.prefer_flats
             )
 
-        if not cd.has_rhythm_track(_EDITED_SOURCE_RHYTHM):
-            raise ValueError("QM beat track is not available")
-        beat_times = cd.rhythm_track_data(_EDITED_SOURCE_RHYTHM)["beat_times"]
+        rhythm_track_id = (
+            self.__edited_rhythm_track_id()
+            if cd.has_chord_track(_EDITED_TRACK_ID)
+            else DEFAULT_RHYTHM_TRACK
+        )
+        beat_times = cd.rhythm_track_data(rhythm_track_id)["beat_times"]
         if not isinstance(beat_index, int) or isinstance(beat_index, bool):
             raise ValueError("beat_index must be an integer")
         if beat_index < 0 or beat_index >= len(beat_times):
@@ -295,7 +297,12 @@ class MP4PlayerFlask:
             self.start_chord_editing()
         elif cd.active_chord_track_id != _EDITED_TRACK_ID:
             self.select_analysis_tracks(chord_track_id=_EDITED_TRACK_ID)
-        cd.edit_chord_track_beat(_EDITED_TRACK_ID, beat_index, canonical)
+        cd.edit_chord_track_beat(
+            _EDITED_TRACK_ID,
+            beat_index,
+            canonical,
+            rhythm_track_id=rhythm_track_id,
+        )
         self.__build_playback_view()
         self.reset_render_cache()
 
@@ -304,13 +311,33 @@ class MP4PlayerFlask:
             raise ValueError("No edited chord version exists")
         if not self.chord_data.has_chord_track(_EDITED_SOURCE_CHORD):
             raise ValueError("Chordino analysis is not available")
-        if not self.chord_data.has_rhythm_track(_EDITED_SOURCE_RHYTHM):
+        if not self.chord_data.has_rhythm_track(DEFAULT_RHYTHM_TRACK):
             raise ValueError("QM beat track is not available")
+        metadata = self.chord_data.chord_track_metadata(_EDITED_TRACK_ID)
+        sources = metadata.get("sources", {})
+        edited_rhythm_id = sources.get("rhythm")
         self.chord_data.remove_chord_track(_EDITED_TRACK_ID)
+        if (
+            edited_rhythm_id == USER_EDITED_RHYTHM_TRACK_ID
+            and self.chord_data.has_rhythm_track(edited_rhythm_id)
+        ):
+            self.chord_data.remove_rhythm_track(edited_rhythm_id)
         self.chord_data.select_chord_track(_EDITED_SOURCE_CHORD)
-        self.chord_data.select_rhythm_track(_EDITED_SOURCE_RHYTHM)
+        self.chord_data.select_rhythm_track(DEFAULT_RHYTHM_TRACK)
         self.__build_playback_view()
         self.reset_render_cache()
+
+    def __edited_rhythm_track_id(self):
+        metadata = self.chord_data.chord_track_metadata(_EDITED_TRACK_ID)
+        sources = metadata.get("sources")
+        rhythm_track_id = sources.get("rhythm") if isinstance(sources, dict) else None
+        if not isinstance(rhythm_track_id, str) or not rhythm_track_id:
+            raise ValueError("Edited chord rhythm source metadata is invalid")
+        if not self.chord_data.has_rhythm_track(rhythm_track_id):
+            raise ValueError(
+                f'Edited chord rhythm source "{rhythm_track_id}" is not available'
+            )
+        return rhythm_track_id
 
     def reload_chord_data(self, chord_track_id=None, rhythm_track_id=None,
                           soft_fallback=False):

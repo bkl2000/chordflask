@@ -3141,12 +3141,10 @@
       if (!loadedMediaPath || reanalyzeButton.disabled) {
         return;
       }
-      let discardEdits = false;
       if (hasEditedChords) {
-        if (!window.confirm('Reanalyzing replaces Chordino/QM and discards your Edited chords. Continue?')) {
+        if (!window.confirm(`Reanalyze ${loadedFileName}? Automatic Chordino/QM analysis will be refreshed. Your Edited chords will be preserved.`)) {
           return;
         }
-        discardEdits = true;
       } else if (!window.confirm(`Reanalyze ${loadedFileName}? This can take a while.`)) {
         return;
       }
@@ -3160,8 +3158,7 @@
         },
         body: JSON.stringify({
           dirname: loadedFileDirectory,
-          filename: loadedFileName,
-          discard_edits: discardEdits
+          filename: loadedFileName
         })
       })
       .then(response => {
@@ -3541,7 +3538,7 @@
       if (editRequestInFlight) {
         return;
       }
-      if (!window.confirm('Discard all Edited chords and return to Original?')) {
+      if (!window.confirm('Permanently discard all Edited chords and return to Original?')) {
         return;
       }
       editRequestInFlight = true;
