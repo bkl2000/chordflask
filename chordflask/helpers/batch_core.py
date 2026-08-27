@@ -8,7 +8,7 @@ first.
 
 from pathlib import Path
 
-from media_library import preferred_media_files
+from ..media_library import preferred_media_files
 
 
 def find_media_files(media_dir):

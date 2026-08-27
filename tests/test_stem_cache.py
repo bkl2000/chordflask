@@ -13,9 +13,9 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from chordflask import CLIENT_COOKIE, FlaskMP4App, _parse_cli_args
+from chordflask.app import CLIENT_COOKIE, FlaskMP4App, _parse_cli_args
 from chordflask_base import ChordData, DEMUCS_STEM_NAMES
-from mp4playerflask import STEMS_AUDIO_SET_ID
+from chordflask.mp4playerflask import STEMS_AUDIO_SET_ID
 
 
 @pytest.fixture(autouse=True)

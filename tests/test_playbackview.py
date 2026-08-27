@@ -10,9 +10,9 @@ if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask_base import ChordData
-from filerepr import FileRepr
-from playbackview import PlaybackView
-from mp4playerflask import MP4PlayerFlask
+from chordflask.filerepr import FileRepr
+from chordflask.playbackview import PlaybackView
+from chordflask.mp4playerflask import MP4PlayerFlask
 
 
 def test_player_has_no_fixed_playback_anticipation():

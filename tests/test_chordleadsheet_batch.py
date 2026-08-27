@@ -9,24 +9,18 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-HELPERS_DIR = FLASK_DIR / "helpers"
-
-for path in (FLASK_DIR, HELPERS_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
 
 from chordflask_base import USER_EDITED_RHYTHM_TRACK_ID, ChordData  # noqa: E402
-import chordleadsheet_batch  # noqa: E402
-from chordleadsheet_batch import (  # noqa: E402
+from chordflask.helpers import chordleadsheet_batch
+from chordflask.helpers.chordleadsheet_batch import (  # noqa: E402
     LeadsheetExportError,
     build_argument_parser,
     export_file,
     run,
 )
-from chordflask import FlaskMP4App  # noqa: E402
-from filerepr import FileRepr  # noqa: E402
-from mp4playerflask import MP4PlayerFlask  # noqa: E402
+from chordflask.app import FlaskMP4App  # noqa: E402
+from chordflask.filerepr import FileRepr  # noqa: E402
+from chordflask.mp4playerflask import MP4PlayerFlask  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -453,9 +447,7 @@ def test_argument_parser_rejects_unknown_repeat_mode():
 def test_helper_imports_do_not_load_flask():
     probe = (
         "import sys\n"
-        f"sys.path.insert(0, {str(FLASK_DIR)!r})\n"
-        f"sys.path.insert(0, {str(HELPERS_DIR)!r})\n"
-        "import chordleadsheet_batch\n"
+        "import chordflask.helpers.chordleadsheet_batch as chordleadsheet_batch\n"
         "for name in ('flask', 'moviepy', 'vamp', 'librosa'):\n"
         "    assert name not in sys.modules, name\n"
         "print('PASS')\n"

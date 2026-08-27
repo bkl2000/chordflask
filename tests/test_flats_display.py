@@ -10,7 +10,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-import chordutils
+import chordflask.chordutils as chordutils
 from chordflask_base import ChordData
 
 

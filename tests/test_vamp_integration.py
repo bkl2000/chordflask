@@ -13,7 +13,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from chordflask_config import ANALYSIS_SAMPLE_RATE
+from chordflask.chordflask_config import ANALYSIS_SAMPLE_RATE
 
 
 def _unavailable(message):
@@ -149,7 +149,7 @@ def test_beat_tracker_processes_synthetic_120_bpm_clicks(
 
 def test_vamp_runtime_raises_without_required_plugins(monkeypatch):
     sys.path.insert(0, str(REPO_ROOT / "flask"))
-    from vamp_runtime import require_vamp_plugins, REQUIRED_PLUGINS
+    from chordflask.vamp_runtime import require_vamp_plugins, REQUIRED_PLUGINS
 
     monkeypatch.setattr("vamp.list_plugins", lambda: [])
 
@@ -165,7 +165,7 @@ def test_vamp_runtime_raises_without_required_plugins(monkeypatch):
 
 def test_vamp_runtime_succeeds_with_plugins_present(monkeypatch):
     sys.path.insert(0, str(REPO_ROOT / "flask"))
-    from vamp_runtime import require_vamp_plugins
+    from chordflask.vamp_runtime import require_vamp_plugins
 
     monkeypatch.setattr("vamp.list_plugins", lambda: list({
         "nnls-chroma:chordino",
@@ -178,7 +178,7 @@ def test_vamp_runtime_succeeds_with_plugins_present(monkeypatch):
 
 def test_vamp_runtime_reports_missing_plugins_clearly(monkeypatch):
     sys.path.insert(0, str(REPO_ROOT / "flask"))
-    from vamp_runtime import require_vamp_plugins
+    from chordflask.vamp_runtime import require_vamp_plugins
 
     monkeypatch.setattr("vamp.list_plugins", lambda: ["nnls-chroma:chordino"])
 
@@ -192,8 +192,8 @@ def test_vamp_runtime_reports_missing_plugins_clearly(monkeypatch):
 
 
 def test_madmom_analysis_still_preflights_beat_tracker(monkeypatch):
-    import audio_analyzer
-    import vamp_runtime
+    import chordflask.audio_analyzer as audio_analyzer
+    import chordflask.vamp_runtime as vamp_runtime
 
     monkeypatch.setattr(audio_analyzer, "require_system_ffmpeg", lambda: "/usr/bin/ffmpeg")
 

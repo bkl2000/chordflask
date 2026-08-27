@@ -12,13 +12,13 @@ from chordflask_base import ChordData
 class ChordAnalysisService:
     def __init__(self, converter=None, analyzer=None, exporter=None):
         if converter is None:
-            from media_converter import MediaConverter
+            from .media_converter import MediaConverter
             converter = MediaConverter()
         if analyzer is None:
-            from audio_analyzer import AudioAnalyzer
+            from .audio_analyzer import AudioAnalyzer
             analyzer = AudioAnalyzer()
         if exporter is None:
-            from chord_exporter import ChordExporter
+            from .chord_exporter import ChordExporter
             exporter = ChordExporter()
         self.converter = converter
         self.analyzer = analyzer

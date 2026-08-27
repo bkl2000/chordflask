@@ -6,7 +6,7 @@ from pathlib import Path
 from music21 import stream, meter, note, chord as m21_chord, metadata, harmony, tempo
 from PIL import Image, ImageDraw, ImageFont
 
-from chordutils import fix_chord_label
+from .chordutils import fix_chord_label
 
 
 class ChordExporter:

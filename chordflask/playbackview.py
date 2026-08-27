@@ -2,8 +2,8 @@
 
 import logging
 
-from chordutils import render_chord_output
-from metric_chords import filter_metric_chords, format_classification_diagnostic
+from .chordutils import render_chord_output
+from .metric_chords import filter_metric_chords, format_classification_diagnostic
 
 
 _GRID_SETTINGS = {

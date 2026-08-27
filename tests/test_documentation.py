@@ -147,7 +147,7 @@ def test_helpers_doc_filenames_exist():
 
     assert found, "HELPERS.md lists no bare .py helper filenames"
     for name in found:
-        assert (REPO_ROOT / "flask" / "helpers" / name).is_file(), name
+        assert (REPO_ROOT / "chordflask" / "helpers" / name).is_file(), name
 
 
 def test_readme_documents_command_line_tools_block():

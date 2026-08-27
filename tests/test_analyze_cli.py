@@ -10,11 +10,8 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-for _path in (REPO_ROOT / "flask", REPO_ROOT / "flask" / "helpers"):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
-import analyze_cli  # noqa: E402
+from chordflask.helpers import analyze_cli
 
 
 class FakeAnalysisWorker:
@@ -36,7 +33,7 @@ def reset_fake_worker():
 
 
 def _patch_worker(monkeypatch):
-    monkeypatch.setattr("analysis_worker.AnalysisWorker", FakeAnalysisWorker)
+    monkeypatch.setattr("chordflask.analysis_worker.AnalysisWorker", FakeAnalysisWorker)
     monkeypatch.setattr(
         "chordflask_base.analysis_json_path", lambda media: media.parent / ".chordflask" / "x.json"
     )
@@ -108,14 +105,12 @@ def test_launcher_bash_syntax():
     assert result.returncode == 0, result.stderr
 
 
-def test_cli_runs_with_launcher_path_setup(tmp_path):
-    # The launcher only puts the repository root on PYTHONPATH; the CLI module
-    # must make its sibling flask/ modules importable on its own.
-    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT)}
+def test_cli_runs_through_installed_package_module(tmp_path):
     result = subprocess.run(
         [
             sys.executable,
-            str(REPO_ROOT / "flask" / "helpers" / "analyze_cli.py"),
+            "-m",
+            "chordflask.helpers.analyze_cli",
             "--analyzer",
             "chordino",
             "--dry-run",
@@ -123,7 +118,7 @@ def test_cli_runs_with_launcher_path_setup(tmp_path):
         ],
         capture_output=True,
         text=True,
-        env=env,
+        env=os.environ,
     )
     assert result.returncode == 0, result.stderr
     assert "ModuleNotFoundError" not in result.stderr
@@ -512,7 +507,7 @@ def test_btc_forwards_backend_exit_code(monkeypatch, tmp_path):
 
 
 def test_dispatcher_has_no_torch_or_training_import():
-    src = (REPO_ROOT / "flask" / "helpers" / "analyze_cli.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "chordflask" / "helpers" / "analyze_cli.py").read_text(encoding="utf-8")
     assert "chordflask_training" not in src
     assert "import torch" not in src
     assert "from torch" not in src
@@ -523,10 +518,10 @@ def test_dispatcher_has_no_torch_or_training_import():
 
 
 def test_dispatcher_reuses_worker_and_batch_core():
-    src = (REPO_ROOT / "flask" / "helpers" / "analyze_cli.py").read_text(encoding="utf-8")
-    assert "from analysis_worker import AnalysisWorker" in src
-    assert "from batch_core import find_media_files" in src
-    assert "from chordanalyzer import ChordAnalyzer" in src
+    src = (REPO_ROOT / "chordflask" / "helpers" / "analyze_cli.py").read_text(encoding="utf-8")
+    assert "from ..analysis_worker import AnalysisWorker" in src
+    assert "from .batch_core import find_media_files" in src
+    assert "from ..chordanalyzer import ChordAnalyzer" in src
     assert "from chordflask_btc.analyze import analyze_btc" in src
     # No re-implementation of the chordino analysis itself.
     assert "def analyze_chords" not in src

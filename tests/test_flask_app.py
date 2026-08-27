@@ -10,18 +10,14 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
 
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
-
-import chordflask
-from analysis_queue import AnalysisQueue
-from analysis_worker import AnalysisWorker
+import chordflask.app as chordflask
+from chordflask.analysis_queue import AnalysisQueue
+from chordflask.analysis_worker import AnalysisWorker
 from chordflask_base import ChordData
-from chordflask import CLIENT_COOKIE, FlaskMP4App
-from filerepr import FileRepr
-from media_library import preferred_media_files
+from chordflask.app import CLIENT_COOKIE, FlaskMP4App
+from chordflask.filerepr import FileRepr
+from chordflask.media_library import preferred_media_files
 
 
 @pytest.fixture(autouse=True)
@@ -1600,9 +1596,9 @@ def test_lan_startup_without_media_roots_prints_clear_error():
     env.pop("CHORDIFIER_MEDIA_ROOTS", None)
 
     result = subprocess.run(
-        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--no-worker",
+        [sys.executable, "-m", "chordflask", "--no-worker",
          "--listen", "0.0.0.0"],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, env=env, cwd=REPO_ROOT,
     )
 
     assert result.returncode != 0
@@ -1625,9 +1621,9 @@ def test_lan_startup_rejects_invalid_media_root_without_traceback():
     env["CHORDIFIER_MEDIA_ROOTS"] = "/nonexistent/chordflask-root"
 
     result = subprocess.run(
-        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--no-worker",
+        [sys.executable, "-m", "chordflask", "--no-worker",
          "--listen", "0.0.0.0"],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, env=env, cwd=REPO_ROOT,
     )
 
     assert result.returncode != 0
@@ -1642,9 +1638,9 @@ def test_lan_startup_rejects_empty_media_root_entry_without_traceback(tmp_path):
     env["CHORDIFIER_MEDIA_ROOTS"] = f"{tmp_path}{os.pathsep}"
 
     result = subprocess.run(
-        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--no-worker",
+        [sys.executable, "-m", "chordflask", "--no-worker",
          "--listen", "0.0.0.0"],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, env=env, cwd=REPO_ROOT,
     )
 
     assert result.returncode != 0
@@ -2003,7 +1999,7 @@ def test_update_analysis_tracks_rejects_one_valid_one_invalid(tmp_path):
     app_wrapper, client = make_client()
     activate_analyzed_media(app_wrapper, tmp_path)
 
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
     track = ChordData(_state(app_wrapper).file_repr.get("json"))
     track.set_chord_track("custom", [{"timestamp": 0.0, "chord": "G"}])
     track.save_to_file(_state(app_wrapper).file_repr.get("json"))
@@ -2027,7 +2023,7 @@ def test_update_analysis_tracks_success_rerenders_position(tmp_path):
     app_wrapper, client = make_client()
     activate_analyzed_media(app_wrapper, tmp_path)
 
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
     track = ChordData(_state(app_wrapper).file_repr.get("json"))
     track.set_chord_track("custom", [{"timestamp": 0.0, "chord": "G"}])
     track.save_to_file(_state(app_wrapper).file_repr.get("json"))
@@ -2055,7 +2051,7 @@ def test_add_foreign_track_and_select_via_api(tmp_path):
     app_wrapper, client = make_client()
     activate_analyzed_media(app_wrapper, tmp_path)
 
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
     _state(app_wrapper).player = MP4PlayerFlask(_state(app_wrapper).file_repr)
     _state(app_wrapper).player.set_prefer_flats(True)
     _state(app_wrapper).player.set_repeat_mode("changes")

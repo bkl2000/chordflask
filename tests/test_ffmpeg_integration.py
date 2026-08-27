@@ -51,7 +51,7 @@ def test_ffmpeg_can_convert_short_audio_to_wav(tmp_path):
 
 
 def test_imageio_ffmpeg_exe_set_at_startup(monkeypatch):
-    import chordflask
+    import chordflask.app as chordflask
 
     def fake_worker_init(*args, **kwargs):
         raise SystemExit(0)
@@ -67,7 +67,7 @@ def test_imageio_ffmpeg_exe_set_at_startup(monkeypatch):
 
 
 def test_chordflask_startup_fails_without_ffmpeg(monkeypatch):
-    import chordflask
+    import chordflask.app as chordflask
 
     def missing_ffmpeg():
         raise RuntimeError(
@@ -86,7 +86,7 @@ def test_chordflask_startup_fails_without_ffmpeg(monkeypatch):
 
 
 def test_media_converter_fails_before_opening_media_without_ffmpeg(monkeypatch, tmp_path):
-    import media_converter
+    import chordflask.media_converter as media_converter
 
     class FakeFileRepr:
         def get(self, variant=None):
@@ -108,8 +108,8 @@ def test_media_converter_fails_before_opening_media_without_ffmpeg(monkeypatch, 
 
 
 def test_media_converter_uses_source_mp3_without_moviepy_or_copy(monkeypatch, tmp_path):
-    import media_converter
-    from filerepr import FileRepr
+    import chordflask.media_converter as media_converter
+    from chordflask.filerepr import FileRepr
 
     source = tmp_path / "song.MP3"
     source.write_bytes(b"audio")
@@ -131,8 +131,8 @@ def test_media_converter_uses_source_mp3_without_moviepy_or_copy(monkeypatch, tm
 
 
 def test_media_converter_does_not_publish_or_leave_partial_mp3(monkeypatch, tmp_path):
-    import media_converter
-    from filerepr import FileRepr
+    import chordflask.media_converter as media_converter
+    from chordflask.filerepr import FileRepr
 
     source = tmp_path / "song.mp4"
     source.write_bytes(b"video")
@@ -167,7 +167,7 @@ def test_media_converter_does_not_publish_or_leave_partial_mp3(monkeypatch, tmp_
 
 
 def test_audio_analyzer_fails_before_loading_audio_without_ffmpeg(monkeypatch):
-    import audio_analyzer
+    import chordflask.audio_analyzer as audio_analyzer
 
     def missing_ffmpeg():
         raise RuntimeError("sudo apt install ffmpeg")
@@ -187,7 +187,7 @@ def test_build_script_excludes_embedded_ffmpeg():
     content = build_script.read_text()
 
     assert "--exclude-module=imageio_ffmpeg.binaries" in content
-    assert "--additional-hooks-dir=pyinstaller_hooks" in content
+    assert '--additional-hooks-dir="${SCRIPT_DIR}/pyinstaller_hooks"' in content
     assert "--copy-metadata=imageio-ffmpeg" not in content
     assert "--add-data \"${VAMP_VENDOR_DIR}:vamp_plugins\"" not in content
     assert "pyi-archive-viewer" not in content
@@ -200,11 +200,17 @@ def test_build_script_excludes_batch_helper_but_keeps_shared_formatter():
     build_script = REPO_ROOT / "flask" / "build_standalone.sh"
     content = build_script.read_text()
 
-    assert "--exclude-module=chordleadsheet_batch" in content
-    assert (REPO_ROOT / "flask" / "chord_markdown.py").is_file()
-    assert (REPO_ROOT / "flask" / "chord_sheet_pdf.py").is_file()
-    assert (REPO_ROOT / "flask" / "helpers" / "chordleadsheet_batch.py").is_file()
-    assert '--add-data "assets:assets"' in content
+    assert "--exclude-module=chordflask.helpers.chordleadsheet_batch" in content
+    assert (REPO_ROOT / "chordflask" / "chord_markdown.py").is_file()
+    assert (REPO_ROOT / "chordflask" / "chord_sheet_pdf.py").is_file()
+    assert (REPO_ROOT / "chordflask" / "helpers" / "chordleadsheet_batch.py").is_file()
+    assert (
+        '--add-data "${PROJECT_ROOT}/chordflask/assets:chordflask/assets"'
+        in content
+    )
+    assert "--exclude-module=chordflask_btc" in content
+    assert "--exclude-module=chordflask_demucs" in content
+    assert "excluded optional heavy runtime" in content
     assert 'LIBERATION-FONTS-LICENSE.txt' in content
     for pattern in ("Beat | Time (s) | Chord",):
-        assert pattern not in (REPO_ROOT / "flask" / "chord_markdown.py").read_text()
+        assert pattern not in (REPO_ROOT / "chordflask" / "chord_markdown.py").read_text()

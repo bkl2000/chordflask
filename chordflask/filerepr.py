@@ -7,7 +7,7 @@ FileRepr class handles file paths and representations for different file types.
 from functools import lru_cache
 from pathlib import Path
 
-from chordflask_config import ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME
+from .chordflask_config import ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME
 
 class FileRepr:
     def __init__(self, filename, datapath=ANALYSIS_DIR_NAME, create=False):

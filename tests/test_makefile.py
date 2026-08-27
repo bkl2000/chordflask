@@ -291,7 +291,7 @@ def test_permission_contract_matches_repair_targets():
     )
     for rel in executable_targets:
         assert (REPO_ROOT / rel).stat().st_mode & stat.S_IXUSR, rel
-    assert not (REPO_ROOT / "flask/chordanalyzer.py").stat().st_mode & stat.S_IXUSR
+    assert not (REPO_ROOT / "chordflask/chordanalyzer.py").stat().st_mode & stat.S_IXUSR
 
 
 def test_public_ci_installs_vamp_plugins_outside_repository():
@@ -327,7 +327,7 @@ def test_launchers_delegate_worker_ownership_to_chordflask():
     source_launcher = (REPO_ROOT / "scripts/chordflask.sh").read_text()
     standalone_builder = (REPO_ROOT / "flask/build_standalone.sh").read_text()
 
-    assert 'exec "${PYTHON_BIN}" flask/chordflask.py "$@"' in source_launcher
+    assert 'exec "${CHORDFLASK_BIN}" "$@"' in source_launcher
     assert 'exec "${CHORDFLASK_BIN}" "$@"' in standalone_builder
     for launcher in (source_launcher, standalone_builder):
         assert "--worker &" not in launcher
@@ -343,7 +343,9 @@ def test_chordflask_launcher_resolves_project_venv():
     assert "LEGACY_VENV_DIR" in launcher
     # The bare system-python fallback must be gone.
     assert 'PYTHON_BIN="${PYTHON_BIN:-python3}"' not in launcher
-    assert 'PYTHON_BIN="${PYTHON_BIN:-${VENV_DIR}/bin/python}"' in launcher
+    assert 'CHORDFLASK_BIN="${VENV_DIR}/bin/chordflask"' in launcher
+    assert 'exec "${CHORDFLASK_BIN}" "$@"' in launcher
+    assert "PYTHONPATH" not in launcher
 
 
 def test_fix_permissions_repairs_once_and_is_then_idempotent(tmp_path):

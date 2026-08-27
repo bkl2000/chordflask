@@ -13,10 +13,10 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-import audio_analyzer as audio_analyzer_mod
-from chordanalyzer import AudioAnalyzer
+import chordflask.audio_analyzer as audio_analyzer_mod
+from chordflask.chordanalyzer import AudioAnalyzer
 from chordflask_base import ChordData
-from chordflask_config import ANALYSIS_SAMPLE_RATE
+from chordflask.chordflask_config import ANALYSIS_SAMPLE_RATE
 
 
 def test_default_analysis_profile_uses_44100_hz():

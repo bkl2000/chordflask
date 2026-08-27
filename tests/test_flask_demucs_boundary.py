@@ -6,12 +6,11 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
 
 
 def test_flask_python_sources_have_no_demucs_runtime_import():
     offenders = []
-    for path in (REPO_ROOT / "flask").rglob("*.py"):
+    for path in (REPO_ROOT / "chordflask").rglob("*.py"):
         if "chordflask_demucs" in path.read_text(encoding="utf-8"):
             offenders.append(str(path.relative_to(REPO_ROOT)))
     assert offenders == []
@@ -33,7 +32,7 @@ def test_flask_loads_plain_and_audio_track_v3_json_without_demucs_import(tmp_pat
                 return None
 
         sys.meta_path.insert(0, BlockDemucs())
-        from chordflask import FlaskMP4App
+        from chordflask.app import FlaskMP4App
         from chordflask_base import ChordData
 
         def audio_set():
@@ -101,7 +100,7 @@ def test_flask_loads_plain_and_audio_track_v3_json_without_demucs_import(tmp_pat
         """
     )
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = os.pathsep.join((str(FLASK_DIR), str(REPO_ROOT)))
+    environment["PYTHONPATH"] = str(REPO_ROOT)
     result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=REPO_ROOT,

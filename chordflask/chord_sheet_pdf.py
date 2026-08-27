@@ -65,11 +65,10 @@ class ChordSheetPdfRenderer:
     """
 
     def __init__(self, font_dir: str | os.PathLike | None = None):
-        self.__font_dir = (
-            Path(font_dir)
-            if font_dir is not None
-            else Path(__file__).resolve().parent / "assets" / "fonts"
-        )
+        if font_dir is not None:
+            self.__font_dir = Path(font_dir)
+        else:
+            self.__font_dir = Path(__file__).resolve().parent / "assets" / "fonts"
         self.__title_font = self.__font("LiberationSans-Bold.ttf", 32)
         self.__metadata_font = self.__font("LiberationSans-Regular.ttf", 16)
         self.__bar_number_font = self.__font("LiberationSans-Regular.ttf", 12)

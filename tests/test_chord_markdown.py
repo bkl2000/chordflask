@@ -13,16 +13,16 @@ if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask_base import ChordData
-from chordflask import CLIENT_COOKIE, FlaskMP4App
-from chord_markdown import (
+from chordflask.app import CLIENT_COOKIE, FlaskMP4App
+from chordflask.chord_markdown import (
     download_track_slug,
     escape_markdown_cell,
     format_chord_markdown,
     group_beats_into_measures,
     safe_track_slug,
 )
-from filerepr import FileRepr
-from mp4playerflask import MP4PlayerFlask
+from chordflask.filerepr import FileRepr
+from chordflask.mp4playerflask import MP4PlayerFlask
 
 
 @pytest.fixture(autouse=True)
@@ -546,7 +546,7 @@ def test_download_chords_returns_no_partial_zip_when_pdf_rendering_fails(
     def fail_render(self, markdown):
         raise OSError("render failed")
 
-    monkeypatch.setattr("chordflask.ChordSheetPdfRenderer.render_markdown", fail_render)
+    monkeypatch.setattr("chordflask.app.ChordSheetPdfRenderer.render_markdown", fail_render)
 
     response = client.post("/download_chords", json=_payload(tmp_path))
 

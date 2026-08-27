@@ -260,20 +260,38 @@ validate_existing_venv() {
 
 verify_installation() {
     local import_check
-    import_check=$(cat <<'PY'
-import analysis_queue
-import analysis_worker
-import chordanalyzer
-import chorddata
-import chordutils
+import_check=$(cat <<'PY'
 import chordflask
-import filerepr
+import chordflask.analysis_queue
+import chordflask.analysis_worker
+import chordflask.chordanalyzer
+import chordflask.chorddata
+import chordflask.chordutils
+import chordflask.filerepr
 PY
 )
     run_setup_command \
         "required application imports could not be verified" \
-        env PYTHONPATH="${ROOT_DIR}/flask${PYTHONPATH:+:${PYTHONPATH}}" \
-        python3 -c "$import_check"
+        "${VENV_DIR}/bin/python3" -c "$import_check"
+
+    run_setup_command \
+        "the installed chordflask command could not be verified" \
+        "${VENV_DIR}/bin/chordflask" --version
+    run_setup_command \
+        "the installed chordflask help could not be verified" \
+        "${VENV_DIR}/bin/chordflask" --help
+    run_setup_command \
+        "the installed chordflask-analyze command could not be verified" \
+        "${VENV_DIR}/bin/chordflask-analyze" --help
+    run_setup_command \
+        "the installed chordflask-export command could not be verified" \
+        "${VENV_DIR}/bin/chordflask-export" --help
+    run_setup_command \
+        "the installed chordflask-maintain command could not be verified" \
+        "${VENV_DIR}/bin/chordflask-maintain" --help
+    run_setup_command \
+        "the installed chordflask-demucs command could not be verified" \
+        "${VENV_DIR}/bin/chordflask-demucs" --help
 
     if [[ "$INSTALL_DEV" == true ]]; then
         run_setup_command \
@@ -430,10 +448,14 @@ if [[ "$INSTALL_OPTIONAL" == true ]]; then
         python3 -m pip install "${PIP_CONSTRAINT_ARGS[@]}" -r "$OPTIONAL_REQUIREMENTS_FILE"
 fi
 
+run_setup_command \
+    "the ChordFlask editable install could not be installed" \
+    python3 -m pip install --no-deps --editable "${ROOT_DIR}"
+
 verify_installation
 
-# Record the absolute checkout root so the user-facing helper scripts can be
-# copied or symlinked to an arbitrary location and still find the project.
+# Retain the absolute checkout marker for compatibility and diagnostics. Normal
+# source startup uses the editable install and does not read this marker.
 ROOT_FILE="${VENV_DIR}/.chordflask-root"
 printf '%s\n' "${ROOT_DIR}" > "${ROOT_FILE}"
 

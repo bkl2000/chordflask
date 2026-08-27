@@ -158,17 +158,14 @@ def test_installer_verification_does_not_interpolate_destination_into_python():
 
 
 def test_build_script_documents_bundled_runtime_plugin_check():
-    chordflask_source = (REPO_ROOT / "flask" / "chordflask.py").read_text()
+    chordflask_source = (REPO_ROOT / "chordflask" / "app.py").read_text()
 
     assert '"--check-vamp"' in chordflask_source and 'check-vamp' in chordflask_source
     assert "require_vamp_plugins()" in chordflask_source
 
 
 def test_chordflask_startup_checks_plugins_without_failing(tmp_path):
-    import sys
-
-    sys.path.insert(0, str(REPO_ROOT / "flask"))
-    from chordflask import FlaskMP4App
+    from chordflask.app import FlaskMP4App
 
     app = FlaskMP4App()
     app.setup_vamp_plugins()

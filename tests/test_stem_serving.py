@@ -10,9 +10,9 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from chordflask import FlaskMP4App
+from chordflask.app import FlaskMP4App
 from chordflask_base import ChordData, DEMUCS_STEM_NAMES
-from mp4playerflask import STEMS_AUDIO_SET_ID
+from chordflask.mp4playerflask import STEMS_AUDIO_SET_ID
 
 
 @pytest.fixture(autouse=True)
@@ -95,7 +95,7 @@ def _load_song(client, tmp_path, name="song.mp3"):
 
 
 def test_audio_stems_state_none_without_set():
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     class _Stub:
         pass
@@ -106,7 +106,7 @@ def test_audio_stems_state_none_without_set():
 
 
 def _player_stub(media):
-    from filerepr import FileRepr
+    from chordflask.filerepr import FileRepr
 
     class _Stub:
         pass
@@ -118,7 +118,7 @@ def _player_stub(media):
 
 
 def test_audio_stems_state_reports_complete_set(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     media = tmp_path / "song.mp3"
     media.write_bytes(b"media")
@@ -133,7 +133,7 @@ def test_audio_stems_state_reports_complete_set(tmp_path):
 
 
 def test_audio_stems_state_none_when_one_flac_deleted(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     media = tmp_path / "song.mp3"
     media.write_bytes(b"media")
@@ -146,7 +146,7 @@ def test_audio_stems_state_none_when_one_flac_deleted(tmp_path):
 
 
 def test_audio_stems_state_none_when_multiple_flacs_missing(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     media = tmp_path / "song.mp3"
     media.write_bytes(b"media")
@@ -157,7 +157,7 @@ def test_audio_stems_state_none_when_multiple_flacs_missing(tmp_path):
 
 
 def test_audio_stems_state_none_for_symlink_or_outside_path(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     media = tmp_path / "song.mp3"
     media.write_bytes(b"media")
@@ -180,7 +180,7 @@ def test_audio_stems_state_none_for_symlink_or_outside_path(tmp_path):
 
 
 def test_audio_stems_state_none_for_malformed_stem_path(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     media = tmp_path / "song.mp3"
     media.write_bytes(b"media")
@@ -195,7 +195,7 @@ def test_audio_stems_state_none_for_malformed_stem_path(tmp_path):
 
 
 def test_audio_stems_state_none_for_missing_tracks_dict():
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     class _Stub:
         pass
@@ -209,7 +209,7 @@ def test_audio_stems_state_none_for_missing_tracks_dict():
 
 
 def test_audio_stems_state_none_for_non_flac_stem():
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     class _Stub:
         pass

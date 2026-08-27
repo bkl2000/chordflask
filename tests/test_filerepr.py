@@ -8,7 +8,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from filerepr import FileRepr
+from chordflask.filerepr import FileRepr
 
 
 def test_default_data_directory_is_chordflask(tmp_path):

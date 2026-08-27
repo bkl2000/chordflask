@@ -4,7 +4,7 @@ from pathlib import Path
 
 from moviepy.video.io.VideoFileClip import VideoFileClip
 
-from ffmpeg_runtime import require_system_ffmpeg
+from .ffmpeg_runtime import require_system_ffmpeg
 
 
 class MediaConverter:

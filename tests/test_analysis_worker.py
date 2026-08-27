@@ -10,12 +10,12 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-import analysis_worker
-from analysis_queue import AnalysisQueue
-from analysis_worker import AnalysisWorker, WorkerSupervisor
+import chordflask.analysis_worker as analysis_worker
+from chordflask.analysis_queue import AnalysisQueue
+from chordflask.analysis_worker import AnalysisWorker, WorkerSupervisor
 from chordflask_base import ChordData
-from chordflask_config import ANALYSIS_DIR_NAME
-from filerepr import FileRepr
+from chordflask.chordflask_config import ANALYSIS_DIR_NAME
+from chordflask.filerepr import FileRepr
 
 
 class FakeProcess:
@@ -78,7 +78,7 @@ def test_supervisor_starts_source_worker_and_stops_owned_child(tmp_path, monkeyp
 
     assert supervisor.start() is True
     assert commands == [(
-        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--worker"],
+        [sys.executable, "-m", "chordflask", "--worker"],
         {"start_new_session": True},
     )]
     assert supervisor.child_running() is True

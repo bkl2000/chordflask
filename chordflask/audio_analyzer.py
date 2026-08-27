@@ -9,10 +9,10 @@ import librosa
 import vamp
 
 from chordflask_base import ChordData
-from chord_postprocess import ChordPostProcessor
-from chordutils import detect_tempo_from_audio
-from chordflask_config import ANALYSIS_SAMPLE_RATE
-from ffmpeg_runtime import require_system_ffmpeg
+from .chord_postprocess import ChordPostProcessor
+from .chordutils import detect_tempo_from_audio
+from .chordflask_config import ANALYSIS_SAMPLE_RATE
+from .ffmpeg_runtime import require_system_ffmpeg
 
 
 class AudioAnalyzer:
@@ -32,7 +32,7 @@ class AudioAnalyzer:
 
     def analyze(self, mp3_path, use_madmom=False):
         require_system_ffmpeg()
-        from vamp_runtime import require_vamp_plugins
+        from .vamp_runtime import require_vamp_plugins
         require_vamp_plugins()
         chord_data = ChordData(prefer_flats=True, use_unicode=False)
         chord_data.sr = self.sample_rate

@@ -13,9 +13,9 @@ if str(FLASK_DIR) not in sys.path:
 from mido import MidiFile, tick2second
 from music21 import converter
 
-from chordanalyzer import ChordAnalysisService, ChordAnalyzer, ChordExporter
+from chordflask.chordanalyzer import ChordAnalysisService, ChordAnalyzer, ChordExporter
 from chordflask_base import ChordData
-from filerepr import FileRepr
+from chordflask.filerepr import FileRepr
 
 
 class FakeConverter:

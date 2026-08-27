@@ -1,18 +1,11 @@
-import sys
 from pathlib import Path
 
 import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-HELPERS_DIR = FLASK_DIR / "helpers"
 
-for path in (FLASK_DIR, HELPERS_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from batch_core import find_media_files  # noqa: E402
+from chordflask.helpers.batch_core import find_media_files
 
 
 def test_find_media_files_returns_preferred_media_sorted_by_size(tmp_path):

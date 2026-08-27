@@ -16,15 +16,10 @@ import os
 import sys
 import tempfile
 
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.dirname(__file__))
-
-from batch_core import find_media_files  # noqa: E402
-from chord_markdown import download_track_slug, format_chord_markdown  # noqa: E402
-from chord_sheet_pdf import ChordSheetPdfRenderer  # noqa: E402
-from chordflask_base import (  # noqa: E402
+from .batch_core import find_media_files
+from ..chord_markdown import download_track_slug, format_chord_markdown
+from ..chord_sheet_pdf import ChordSheetPdfRenderer
+from chordflask_base import (
     DEFAULT_CHORD_TRACK,
     DEFAULT_RHYTHM_TRACK,
     USER_EDITED_TRACK_ID,
@@ -194,7 +189,7 @@ def _load_chord_data(json_path, args):
 
 
 def _analyze_media(media_path):
-    from chordanalyzer import ChordAnalyzer
+    from ..chordanalyzer import ChordAnalyzer
 
     analyzer = ChordAnalyzer(str(media_path))
     analyzer.process()
@@ -202,8 +197,8 @@ def _analyze_media(media_path):
 
 def export_file(media_path, args):
     """Reuse or create the analysis and write one leadsheet file."""
-    from filerepr import FileRepr
-    from playbackview import PlaybackView
+    from ..filerepr import FileRepr
+    from ..playbackview import PlaybackView
 
     file_repr = FileRepr(str(media_path), create=True)
     json_path = file_repr.get("json")

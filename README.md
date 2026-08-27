@@ -411,6 +411,7 @@ the whole filesystem is not automatically exposed.
 
 ## More documentation
 
+- [Architecture and developer map](docs/ARCHITECTURE.md)
 - [Playback, analysis tracks, and chord display](docs/ANALYSIS.md)
 - [Maintenance commands](docs/MAINTENANCE.md)
 - [Supported command-line helpers](docs/HELPERS.md)

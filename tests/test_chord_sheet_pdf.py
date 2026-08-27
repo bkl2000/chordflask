@@ -1,20 +1,16 @@
 from pathlib import Path
 import re
-import sys
 
 import pytest
 from PIL import ImageDraw, ImageFont
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
+PACKAGE_DIR = REPO_ROOT / "chordflask"
 REFERENCE = REPO_ROOT / "tests" / "fixtures" / "chord_sheet_reference.md"
 
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
-
-from chord_markdown import format_leadsheet_markdown  # noqa: E402
-from chord_sheet_pdf import ChordSheetPdfRenderer  # noqa: E402
+from chordflask.chord_markdown import format_leadsheet_markdown
+from chordflask.chord_sheet_pdf import ChordSheetPdfRenderer
 
 
 def _page_count(pdf):
@@ -127,7 +123,7 @@ def test_render_requires_bundled_fonts(tmp_path):
 
 
 def test_bundled_fonts_are_open_licensed_and_loadable():
-    font_dir = FLASK_DIR / "assets" / "fonts"
+    font_dir = PACKAGE_DIR / "assets" / "fonts"
     license_text = (font_dir / "LICENSE.txt").read_text(encoding="utf-8")
 
     assert "SIL OPEN FONT LICENSE Version 1.1" in license_text

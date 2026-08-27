@@ -1,7 +1,7 @@
 """Compatibility re-export of the chord data model.
 
 The implementation lives in :mod:`chordflask_base`. This module only keeps
-``from chorddata import ChordData, ChordTrackRepository`` working for legacy
+``from chordflask.chorddata import ChordData, ChordTrackRepository`` for legacy
 callers; new code should import from ``chordflask_base``.
 """
 

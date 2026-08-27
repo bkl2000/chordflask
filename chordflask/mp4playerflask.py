@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 from chordflask_base import ChordData
-from songdata import SongData
-from playbackview import PlaybackView
+from .songdata import SongData
+from .playbackview import PlaybackView
 from collections import deque
 import logging
 
 from pathlib import Path
 
-import chordutils
+from . import chordutils
 
 from chordflask_base import (
     DEFAULT_CHORD_TRACK,
@@ -18,7 +18,7 @@ from chordflask_base import (
     USER_EDITED_RHYTHM_TRACK_ID,
     USER_EDITED_TRACK_ID,
 )
-from playbackview import GRID_MODES
+from .playbackview import GRID_MODES
 
 _BUILTIN_TRACK_NAMES = {
     DEFAULT_CHORD_TRACK: "Chordino",

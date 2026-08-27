@@ -4,8 +4,8 @@
 ``scripts/chordflask-demucs``, ``scripts/chordflask-export``, and
 ``scripts/chordflask-maintain`` must work when copied or symlinked to an
 arbitrary location and invoked from any current working directory. They resolve
-the repository root through the ``${VENV_DIR}/.chordflask-root`` marker written
-by setup, never through their own filesystem location.
+the configured/default project venv and execute the command installed there,
+never inferring the repository root from their own filesystem location.
 """
 
 import os
@@ -29,19 +29,40 @@ HELPERS = {
     "chordflask-demucs": "chordflask-demucs",
 }
 
+COMMAND_MODULES = {
+    "chordflask": "chordflask",
+    "chordflask-analyze": "chordflask.helpers.analyze_cli",
+    "chordflask-export": "chordflask.helpers.export_cli",
+    "chordflask-maintain": "chordflask_maintain.cli",
+    "chordflask-demucs": "chordflask_demucs.cli",
+}
 
-@pytest.fixture()
-def portable_home(tmp_path):
-    """Temp HOME with a fake venv that forwards to the test interpreter."""
-    home = tmp_path / "home"
-    venv_dir = home / ".venvs" / "chordflask"
-    (venv_dir / "bin").mkdir(parents=True)
-    python = venv_dir / "bin" / "python"
+
+def _write_forwarding_venv(venv_dir):
+    """Create command stubs that preserve installed-module behavior."""
+    bin_dir = venv_dir / "bin"
+    bin_dir.mkdir(parents=True)
+    python = bin_dir / "python"
     python.write_text(
         f"#!/bin/sh\nexec {shlex.quote(sys.executable)} \"$@\"\n",
         encoding="utf-8",
     )
     python.chmod(python.stat().st_mode | stat.S_IXUSR)
+    for command, module in COMMAND_MODULES.items():
+        target = bin_dir / command
+        target.write_text(
+            f"#!/bin/sh\nexec {shlex.quote(sys.executable)} -m {module} \"$@\"\n",
+            encoding="utf-8",
+        )
+        target.chmod(target.stat().st_mode | stat.S_IXUSR)
+
+
+@pytest.fixture()
+def portable_home(tmp_path):
+    """Temp HOME with installed commands forwarded to the test interpreter."""
+    home = tmp_path / "home"
+    venv_dir = home / ".venvs" / "chordflask"
+    _write_forwarding_venv(venv_dir)
     env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
     return home, env
 
@@ -74,7 +95,6 @@ def test_setup_writes_absolute_repo_root_marker():
 @pytest.mark.parametrize("name,prog", sorted(HELPERS.items()))
 def test_copied_helper_runs_from_unrelated_cwd(tmp_path, portable_home, name, prog):
     home, env = portable_home
-    _write_marker(home, REPO_ROOT)
     bin_dir = home / "bin"
     bin_dir.mkdir()
     target = bin_dir / name
@@ -91,7 +111,6 @@ def test_copied_helper_runs_from_unrelated_cwd(tmp_path, portable_home, name, pr
 @pytest.mark.parametrize("name,prog", sorted(HELPERS.items()))
 def test_symlinked_helper_runs_from_unrelated_cwd(tmp_path, portable_home, name, prog):
     home, env = portable_home
-    _write_marker(home, REPO_ROOT)
     bin_dir = home / "bin"
     bin_dir.mkdir()
     target = bin_dir / name
@@ -103,7 +122,7 @@ def test_symlinked_helper_runs_from_unrelated_cwd(tmp_path, portable_home, name,
     assert prog in result.stdout
 
 
-def test_missing_marker_fails_clearly(tmp_path, portable_home):
+def test_missing_marker_is_not_required(tmp_path, portable_home):
     home, env = portable_home
     bin_dir = home / "bin"
     bin_dir.mkdir()
@@ -112,12 +131,11 @@ def test_missing_marker_fails_clearly(tmp_path, portable_home):
     cwd = tmp_path / "elsewhere"
     cwd.mkdir()
     result = _run(target, cwd, env)
-    assert result.returncode == 1
-    assert ".chordflask-root" in result.stderr
-    assert "make setup" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "chordflask-analyze" in result.stdout
 
 
-def test_stale_marker_fails_clearly(tmp_path, portable_home):
+def test_stale_marker_is_ignored(tmp_path, portable_home):
     home, env = portable_home
     _write_marker(home, tmp_path / "moved-checkout")
     bin_dir = home / "bin"
@@ -127,15 +145,13 @@ def test_stale_marker_fails_clearly(tmp_path, portable_home):
     cwd = tmp_path / "elsewhere"
     cwd.mkdir()
     result = _run(target, cwd, env)
-    assert result.returncode == 1
-    assert "rerun 'make setup'" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "chordflask-analyze" in result.stdout
 
 
-def test_invalid_marker_without_command_target_fails_clearly(tmp_path, portable_home):
+def test_missing_installed_command_fails_clearly(tmp_path, portable_home):
     home, env = portable_home
-    wrong_root = tmp_path / "wrong-root"
-    wrong_root.mkdir()
-    _write_marker(home, wrong_root)
+    (home / ".venvs" / "chordflask" / "bin" / "chordflask-analyze").unlink()
     bin_dir = home / "bin"
     bin_dir.mkdir()
     target = bin_dir / "chordflask-analyze"
@@ -144,7 +160,8 @@ def test_invalid_marker_without_command_target_fails_clearly(tmp_path, portable_
     cwd.mkdir()
     result = _run(target, cwd, env)
     assert result.returncode == 1
-    assert "rerun 'make setup'" in result.stderr
+    assert "Installed ChordFlask command not found" in result.stderr
+    assert "make setup" in result.stderr
 
 
 def test_helpers_do_not_infer_root_from_own_location():
@@ -158,6 +175,50 @@ def test_helpers_preserve_caller_cwd():
     for name in HELPERS:
         text = (REPO_ROOT / "scripts" / name).read_text(encoding="utf-8")
         assert 'cd "${ROOT_DIR}"' not in text, name
+
+
+def test_helpers_do_not_construct_pythonpath_or_read_root_marker():
+    for name in HELPERS:
+        text = (REPO_ROOT / "scripts" / name).read_text(encoding="utf-8")
+        assert "PYTHONPATH" not in text, name
+        assert ".chordflask-root" not in text, name
+
+
+def test_chordflask_venv_override_selects_installed_command(tmp_path, portable_home):
+    _, env = portable_home
+    alternate_venv = tmp_path / "alternate-venv"
+    _write_forwarding_venv(alternate_venv)
+    env["CHORDFLASK_VENV"] = str(alternate_venv)
+    result = _run(REPO_ROOT / "scripts" / "chordflask-analyze", tmp_path, env)
+    assert result.returncode == 0, result.stderr
+    assert "chordflask-analyze" in result.stdout
+
+
+def test_legacy_venv_override_selects_installed_command(tmp_path, portable_home):
+    _, env = portable_home
+    alternate_venv = tmp_path / "legacy-override-venv"
+    _write_forwarding_venv(alternate_venv)
+    env["CHORDIFIER_VENV"] = str(alternate_venv)
+    result = _run(REPO_ROOT / "scripts" / "chordflask-analyze", tmp_path, env)
+    assert result.returncode == 0, result.stderr
+    assert "chordflask-analyze" in result.stdout
+
+
+def test_legacy_default_venv_fallback_selects_installed_command(tmp_path):
+    home = tmp_path / "home"
+    _write_forwarding_venv(home / ".venvs" / "chordifier")
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    result = _run(REPO_ROOT / "scripts" / "chordflask-analyze", tmp_path, env)
+    assert result.returncode == 0, result.stderr
+    assert "chordflask-analyze" in result.stdout
+
+
+def test_chordflask_python_override_uses_package_module(tmp_path, portable_home):
+    _, env = portable_home
+    env["CHORDFLASK_PYTHON"] = sys.executable
+    result = _run(REPO_ROOT / "scripts" / "chordflask-analyze", tmp_path, env)
+    assert result.returncode == 0, result.stderr
+    assert "chordflask-analyze" in result.stdout
 
 
 RELATIVE_ARG_CASES = {
@@ -192,7 +253,6 @@ def test_relative_argument_resolves_against_caller_cwd(
     """
     args, expected = case
     home, env = portable_home
-    _write_marker(home, REPO_ROOT)
     bin_dir = home / "bin"
     bin_dir.mkdir()
     target = bin_dir / name

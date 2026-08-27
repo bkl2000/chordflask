@@ -591,8 +591,8 @@ def test_v3_accepts_null_bpm_and_meter(tmp_path):
 
 
 def test_player_analysis_track_state(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
-    from filerepr import FileRepr
+    from chordflask.mp4playerflask import MP4PlayerFlask
+    from chordflask.filerepr import FileRepr
 
     media = tmp_path / "song.mp4"
     media.write_bytes(b"not used")
@@ -629,8 +629,8 @@ def test_player_analysis_track_state(tmp_path):
 
 
 def test_player_select_analysis_tracks_soft_fallback(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
-    from filerepr import FileRepr
+    from chordflask.mp4playerflask import MP4PlayerFlask
+    from chordflask.filerepr import FileRepr
 
     media = tmp_path / "song.mp4"
     media.write_bytes(b"not used")
@@ -648,8 +648,8 @@ def test_player_select_analysis_tracks_soft_fallback(tmp_path):
 
 
 def test_player_select_analysis_tracks_strict_raises(tmp_path):
-    from mp4playerflask import MP4PlayerFlask
-    from filerepr import FileRepr
+    from chordflask.mp4playerflask import MP4PlayerFlask
+    from chordflask.filerepr import FileRepr
 
     media = tmp_path / "song.mp4"
     media.write_bytes(b"not used")

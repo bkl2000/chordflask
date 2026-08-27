@@ -192,6 +192,7 @@ exit 0
 """
     )
     python.chmod(0o755)
+    _write_mock_commands(bin_dir, call_log)
     (bin_dir / "activate").write_text(f'export PATH="{bin_dir}:$PATH"\n')
     cp = _run_setup(
         extra_env={
@@ -252,6 +253,24 @@ def test_setup_never_executes_package_manager_commands(tmp_path):
     assert not command_log.exists()
 
 
+def _write_mock_commands(bin_dir, call_log):
+    for command in (
+        "chordflask",
+        "chordflask-analyze",
+        "chordflask-export",
+        "chordflask-maintain",
+        "chordflask-demucs",
+    ):
+        target = bin_dir / command
+        target.write_text(
+            f'''#!/bin/bash
+echo "$0 $*" >> "{call_log}"
+exit 0
+'''
+        )
+        target.chmod(0o755)
+
+
 def _healthy_mock_venv(tmp_path):
     venv_dir = tmp_path / "venv"
     bin_dir = venv_dir / "bin"
@@ -269,6 +288,7 @@ fi
 exit 0
 """)
     mock_python.chmod(0o755)
+    _write_mock_commands(bin_dir, call_log)
     (bin_dir / "activate").write_text(f'export PATH="{bin_dir}:$PATH"\n')
     return venv_dir, call_log
 
@@ -302,7 +322,14 @@ def test_healthy_venv_is_reused_and_verifies_available_runtime(tmp_path):
     assert cp.returncode == 0, cp.stderr
     calls = call_log.read_text()
     assert "-m venv" not in calls
-    assert "import analysis_queue" in calls
+    assert f"-m pip install --no-deps --editable {REPO_ROOT}" in calls
+    assert "import chordflask.analysis_queue" in calls
+    assert "chordflask --version" in calls
+    assert "chordflask --help" in calls
+    assert "chordflask-analyze --help" in calls
+    assert "chordflask-export --help" in calls
+    assert "chordflask-maintain --help" in calls
+    assert "chordflask-demucs --help" in calls
     assert ("vamp.list_plugins" in calls) is VENDORED_PLUGINS_AVAILABLE
     assert marker.read_text() == "yes"
     assert "make check" in cp.stdout
@@ -334,7 +361,7 @@ def test_import_verification_failure_is_actionable(tmp_path):
         extra_env={
             "PATH": f"{mock_dir}:/usr/bin:/bin",
             "CHORDFLASK_VENV": str(venv_dir),
-            "MOCK_FAIL_MATCH": "import analysis_queue",
+            "MOCK_FAIL_MATCH": "import chordflask.analysis_queue",
         }
     )
     assert cp.returncode == 17

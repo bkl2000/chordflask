@@ -12,13 +12,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-for _path in (REPO_ROOT, FLASK_DIR):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from chorddata import ChordData, ChordTrackRepository
-from metric_chords import filter_metric_chords
+from chordflask.chorddata import ChordData, ChordTrackRepository
+from chordflask.metric_chords import filter_metric_chords
 
 
 def diff_one(filename):

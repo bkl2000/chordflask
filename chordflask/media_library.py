@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from chordflask_config import MEDIA_SUFFIX_PRIORITY, SUPPORTED_MEDIA_SUFFIXES
+from .chordflask_config import MEDIA_SUFFIX_PRIORITY, SUPPORTED_MEDIA_SUFFIXES
 
 
 def preferred_media_files(directory):

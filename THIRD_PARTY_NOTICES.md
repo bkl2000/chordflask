@@ -92,7 +92,7 @@ Liberation Mono font files for rasterized PDF leadsheets.
 - **Copyright:** Digitized data copyright (c) 2010 Google Corporation;
   copyright (c) 2012 Red Hat, Inc.
 - **Upstream:** https://github.com/liberationfonts/liberation-fonts
-- **Full license:** `flask/assets/fonts/LICENSE.txt` in the source tree and
+- **Full license:** `chordflask/assets/fonts/LICENSE.txt` in the source tree and
   `LIBERATION-FONTS-LICENSE.txt` in the standalone archive
 
 ## Python Dependencies

@@ -15,13 +15,6 @@ import shlex
 import sys
 from pathlib import Path
 
-# Make the sibling ``flask/`` modules (analysis_worker, chordanalyzer, …)
-# importable when this script is run directly. The launcher only adds the
-# repository root to PYTHONPATH (for ``chordflask_base``).
-_FLASK_DIR = Path(__file__).resolve().parent.parent
-if str(_FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(_FLASK_DIR))
-
 _MEDIA_SUFFIXES = {".mp3", ".mp4", ".webm"}
 
 
@@ -97,7 +90,7 @@ def _run_btc_backend(target: Path, *, replace: bool, dry_run: bool) -> int:
 def _resolve_media_files(target: Path) -> list[Path] | None:
     """Return the media files to process, or None after printing an error."""
     if target.is_dir():
-        from batch_core import find_media_files
+        from .batch_core import find_media_files
 
         try:
             return find_media_files(target)
@@ -169,7 +162,7 @@ def _chordino_status(media: Path) -> str:
 
 
 def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
-    from analysis_worker import AnalysisWorker
+    from ..analysis_worker import AnalysisWorker
 
     media_files = _resolve_media_files(target)
     if media_files is None:
@@ -197,7 +190,7 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
             counts["skipped"] += 1
             continue
         if worker is None:
-            from chordanalyzer import ChordAnalyzer
+            from ..chordanalyzer import ChordAnalyzer
 
             worker = AnalysisWorker(analyzer_cls=ChordAnalyzer)
         try:

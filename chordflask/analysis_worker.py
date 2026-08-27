@@ -16,14 +16,14 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from analysis_queue import AnalysisQueue
-from chordflask_config import (
+from .analysis_queue import AnalysisQueue
+from .chordflask_config import (
     ANALYSIS_DIR_NAME,
     DEFAULT_CHORD_TRACK,
     DEFAULT_RHYTHM_TRACK,
     LEGACY_ANALYSIS_DIR_NAME,
 )
-from filerepr import FileRepr
+from .filerepr import FileRepr
 
 
 def _worker_log(msg):
@@ -127,7 +127,7 @@ class AnalysisWorker:
         _worker_log(f"Analyzing queued file: {media_path}")
         analyzer_cls = self.analyzer_cls
         if analyzer_cls is None:
-            from chordanalyzer import ChordAnalyzer
+            from .chordanalyzer import ChordAnalyzer
 
             analyzer_cls = ChordAnalyzer
 
@@ -190,7 +190,7 @@ class AnalysisWorker:
 
             analyzer_cls = self.analyzer_cls
             if analyzer_cls is None:
-                from chordanalyzer import ChordAnalyzer
+                from .chordanalyzer import ChordAnalyzer
 
                 analyzer_cls = ChordAnalyzer
 
@@ -385,7 +385,7 @@ class WorkerSupervisor:
     def command():
         if getattr(sys, "frozen", False):
             return [sys.executable, "--worker"]
-        return [sys.executable, str(Path(__file__).with_name("chordflask.py")), "--worker"]
+        return [sys.executable, "-m", "chordflask", "--worker"]
 
     def start(self):
         if AnalysisWorker.is_running(self.queue):

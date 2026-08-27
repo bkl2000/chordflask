@@ -1,6 +1,6 @@
 # Helper Classification
 
-This document classifies files under `flask/helpers/`. It does not move files
+This document classifies files under `chordflask/helpers/`. It does not move files
 or change runtime behavior. The active Flask GUI does not import these helpers
 directly.
 
@@ -38,7 +38,7 @@ These are kept as usable command-line tools and have smoke-test coverage.
 
 - `batch_core.py` - shared non-recursive media discovery (MP4/WebM/MP3 with the
   active same-stem priority) used by `analyze_cli.py`, `export_cli.py`, and
-  `chordleadsheet_batch.py`; backed by `flask/media_library.py`.
+  `chordleadsheet_batch.py`; backed by `chordflask/media_library.py`.
 
 - `chordleadsheet_batch.py` - the leadsheet library used by `export_cli.py`. It
   holds the shared render/write logic and the export option definitions; new
@@ -46,16 +46,18 @@ These are kept as usable command-line tools and have smoke-test coverage.
 
 ## Production Boundary
 
-The active production `ChordAnalyzer` lives in `flask/chordanalyzer.py` (facade
-over `media_converter.py`, `audio_analyzer.py`, `chord_exporter.py`, and
-`analysis_service.py`).
+The active production `ChordAnalyzer` lives in `chordflask/chordanalyzer.py`
+(facade over `media_converter.py`, `audio_analyzer.py`, `chord_exporter.py`,
+and `analysis_service.py`).
 
-Do not import from `flask/helpers/` into the active `flask/` app modules. The
-active GUI, worker, and analysis service import only from the main `flask/`
-modules. Tests may import helpers for standalone testing.
+Do not import from `chordflask/helpers/` into the active application modules.
+The GUI, worker, and analysis service use the main `chordflask` package. Tests
+may import helpers for focused CLI testing.
 
 ## Maintenance Rule
 
-Keep new production behavior out of `flask/helpers/` unless it is explicitly a
-supported CLI helper. Active GUI and analyzer behavior should live in the main
-`flask/` modules and be covered by tests.
+Keep new production behavior out of `chordflask/helpers/` unless it is
+explicitly a supported CLI helper. Active GUI and analyzer behavior should
+live in the main `chordflask` package and be covered by tests. Portable scripts
+under `scripts/` select the project venv and execute the installed console
+entries; they do not make these modules importable with `PYTHONPATH`.

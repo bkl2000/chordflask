@@ -11,19 +11,19 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-import chordutils
-from analysis_queue import AnalysisQueue
-from analysis_worker import AnalysisWorker
+import chordflask.chordutils as chordutils
+from chordflask.analysis_queue import AnalysisQueue
+from chordflask.analysis_worker import AnalysisWorker
 from chordflask_base import (
     USER_EDITED_RHYTHM_TRACK_ID,
     ChordData,
     ChordTrackRepository,
 )
-from chordflask import CLIENT_COOKIE, FlaskMP4App
-from filerepr import FileRepr
-from mp4playerflask import MP4PlayerFlask
+from chordflask.app import CLIENT_COOKIE, FlaskMP4App
+from chordflask.filerepr import FileRepr
+from chordflask.mp4playerflask import MP4PlayerFlask
 
-from chordflask_config import ANALYSIS_DIR_NAME
+from chordflask.chordflask_config import ANALYSIS_DIR_NAME
 
 
 @pytest.fixture(autouse=True)

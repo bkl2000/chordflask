@@ -1,18 +1,14 @@
 """Tests for the ``chordflask-export`` CLI."""
 
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-for _path in (REPO_ROOT / "flask", REPO_ROOT / "flask" / "helpers"):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
-import export_cli  # noqa: E402
+from chordflask.helpers import export_cli
 
 
 def test_export_help_is_user_facing(capsys):
@@ -102,7 +98,7 @@ def test_export_directory_dispatches(monkeypatch, capsys, tmp_path):
 
 
 def test_export_has_no_torch_or_training_import():
-    src = (REPO_ROOT / "flask" / "helpers" / "export_cli.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "chordflask" / "helpers" / "export_cli.py").read_text(encoding="utf-8")
     assert "chordflask_training" not in src
     assert "import torch" not in src
     assert "from torch" not in src

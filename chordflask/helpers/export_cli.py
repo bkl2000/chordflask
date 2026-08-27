@@ -12,13 +12,8 @@ import argparse
 import sys
 from pathlib import Path
 
-# Make the sibling flask/ modules importable when this script is run directly.
-_FLASK_DIR = Path(__file__).resolve().parent.parent
-if str(_FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(_FLASK_DIR))
-
-from batch_core import find_media_files  # noqa: E402
-from chordleadsheet_batch import (  # noqa: E402
+from .batch_core import find_media_files
+from .chordleadsheet_batch import (
     LeadsheetExportError,
     add_export_options,
     export_file,

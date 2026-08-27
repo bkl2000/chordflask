@@ -70,17 +70,22 @@ pyinstaller \
     --hidden-import=llvmlite \
     --copy-metadata=imageio \
     --copy-metadata=moviepy \
-    --additional-hooks-dir=pyinstaller_hooks \
+    --additional-hooks-dir="${SCRIPT_DIR}/pyinstaller_hooks" \
     --exclude-module=imageio_ffmpeg.binaries \
+    --exclude-module=chordflask_btc \
     --exclude-module=chordflask_demucs \
-    --exclude-module=chordleadsheet_batch \
-    --add-data "templates:templates" \
-    --add-data "assets:assets" \
-    chordflask.py
+    --exclude-module=chordflask.helpers.chordleadsheet_batch \
+    --add-data "${PROJECT_ROOT}/chordflask/templates:chordflask/templates" \
+    --add-data "${PROJECT_ROOT}/chordflask/assets:chordflask/assets" \
+    "${PROJECT_ROOT}/chordflask/__main__.py"
 
 archive_listing="$(pyi-archive_viewer -l "${SCRIPT_DIR}/dist/chordflask")"
 if grep -Eiq "imageio_ffmpeg/binaries/[^']*ffmpeg|vamp_plugins/[^']*\.so|vendor/vamp/[^']*\.so" <<<"$archive_listing"; then
     echo "Standalone archive contains a prohibited FFmpeg or Vamp executable." >&2
+    exit 1
+fi
+if grep -Eiq "chordflask_(btc|demucs)" <<<"$archive_listing"; then
+    echo "Standalone archive contains an excluded optional heavy runtime." >&2
     exit 1
 fi
 
@@ -100,7 +105,7 @@ EOF
 cp "${SCRIPT_DIR}/install_vamp.sh" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/docs/STANDALONE.md" "${RELEASE_DIR}/README.md"
 cp "${PROJECT_ROOT}/THIRD_PARTY_NOTICES.md" "${RELEASE_DIR}/"
-cp "${SCRIPT_DIR}/assets/fonts/LICENSE.txt" "${RELEASE_DIR}/LIBERATION-FONTS-LICENSE.txt"
+cp "${PROJECT_ROOT}/chordflask/assets/fonts/LICENSE.txt" "${RELEASE_DIR}/LIBERATION-FONTS-LICENSE.txt"
 printf '%s %s %s\n' "$semver" "$(date -u +'%Y-%m-%d %H:%M')" "$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD)" \
     > "${RELEASE_DIR}/VERSION"
 chmod +x "${RELEASE_DIR}/chordflask" "${RELEASE_DIR}/chordflask.sh" "${RELEASE_DIR}/install_vamp.sh"

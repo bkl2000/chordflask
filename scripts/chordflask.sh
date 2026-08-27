@@ -3,9 +3,6 @@ set -euo pipefail
 
 # Start the ChordFlask web app plus worker from the project virtual environment.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
 DEFAULT_VENV_DIR="${HOME}/.venvs/chordflask"
 LEGACY_VENV_DIR="${HOME}/.venvs/chordifier"
 VENV_DIR="${CHORDFLASK_VENV:-${CHORDIFIER_VENV:-${DEFAULT_VENV_DIR}}}"
@@ -13,15 +10,20 @@ if [[ -z "${CHORDFLASK_VENV:-}${CHORDIFIER_VENV:-}" \
     && ! -d "$VENV_DIR" && -d "$LEGACY_VENV_DIR" ]]; then
     VENV_DIR="$LEGACY_VENV_DIR"
 fi
-PYTHON_BIN="${PYTHON_BIN:-${VENV_DIR}/bin/python}"
+CHORDFLASK_BIN="${VENV_DIR}/bin/chordflask"
 
-if [[ ! -x "$PYTHON_BIN" ]]; then
+if [[ -n "${PYTHON_BIN:-}" ]]; then
+    if [[ ! -x "$PYTHON_BIN" ]]; then
+        echo "Configured Python interpreter not found: ${PYTHON_BIN}" >&2
+        exit 1
+    fi
+    exec "${PYTHON_BIN}" -m chordflask "$@"
+fi
+
+if [[ ! -x "$CHORDFLASK_BIN" ]]; then
     echo "Project virtual environment not found: ${VENV_DIR}" >&2
-    echo "Create it with:" >&2
-    echo "  scripts/setup_venv.sh --dev" >&2
+    echo "Run 'make setup' in the ChordFlask repository." >&2
     exit 1
 fi
 
-cd "${ROOT_DIR}"
-export PYTHONPATH="${ROOT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-exec "${PYTHON_BIN}" flask/chordflask.py "$@"
+exec "${CHORDFLASK_BIN}" "$@"

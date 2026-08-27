@@ -8,7 +8,7 @@ FLASK_DIR = REPO_ROOT / "flask"
 if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
-from chord_postprocess import ChordPostProcessor
+from chordflask.chord_postprocess import ChordPostProcessor
 
 
 def test_disabled_postprocessor_returns_original_chords():

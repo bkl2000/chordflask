@@ -4,9 +4,8 @@ set -euo pipefail
 # Start the ChordFlask player (web app plus analysis worker) from the project
 # virtual environment.
 #
-# This script may be copied or symlinked to an arbitrary location; the
-# repository root is read from the venv marker file, never inferred from
-# this script's own location.
+# This script may be copied or symlinked to an arbitrary location. It selects
+# the project venv and executes the command installed there.
 
 DEFAULT_VENV_DIR="${HOME}/.venvs/chordflask"
 LEGACY_VENV_DIR="${HOME}/.venvs/chordifier"
@@ -15,27 +14,20 @@ if [[ -z "${CHORDFLASK_VENV:-}${CHORDIFIER_VENV:-}" \
     && ! -d "$VENV_DIR" && -d "$LEGACY_VENV_DIR" ]]; then
     VENV_DIR="$LEGACY_VENV_DIR"
 fi
-PYTHON_BIN="${CHORDFLASK_PYTHON:-${VENV_DIR}/bin/python}"
+CHORDFLASK_BIN="${VENV_DIR}/bin/chordflask"
 
-if [[ ! -x "$PYTHON_BIN" ]]; then
-    echo "Project virtual environment not found: ${VENV_DIR}" >&2
-    echo "Create it with 'make setup' in the ChordFlask repository." >&2
+if [[ -n "${CHORDFLASK_PYTHON:-}" ]]; then
+    if [[ ! -x "$CHORDFLASK_PYTHON" ]]; then
+        echo "Configured ChordFlask Python interpreter not found: ${CHORDFLASK_PYTHON}" >&2
+        exit 1
+    fi
+    exec "${CHORDFLASK_PYTHON}" -m chordflask "$@"
+fi
+
+if [[ ! -x "$CHORDFLASK_BIN" ]]; then
+    echo "Installed ChordFlask command not found: ${CHORDFLASK_BIN}" >&2
+    echo "Rerun 'make setup' in the ChordFlask repository." >&2
     exit 1
 fi
 
-ROOT_FILE="${VENV_DIR}/.chordflask-root"
-if [[ ! -f "${ROOT_FILE}" ]]; then
-    echo "ChordFlask repository root marker not found: ${ROOT_FILE}" >&2
-    echo "Create it with 'make setup' in the ChordFlask repository." >&2
-    exit 1
-fi
-
-ROOT_DIR="$(cat "${ROOT_FILE}")"
-if [[ ! -f "${ROOT_DIR}/flask/chordflask.py" ]]; then
-    echo "ChordFlask repository root not found or invalid: ${ROOT_DIR}" >&2
-    echo "The checkout may have moved; rerun 'make setup'." >&2
-    exit 1
-fi
-
-export PYTHONPATH="${ROOT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-exec "${PYTHON_BIN}" "${ROOT_DIR}/flask/chordflask.py" "$@"
+exec "${CHORDFLASK_BIN}" "$@"

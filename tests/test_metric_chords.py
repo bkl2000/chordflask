@@ -11,14 +11,14 @@ if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask_base import ChordData
-from chordflask import FlaskMP4App, _parse_cli_args
-from metric_chords import (
+from chordflask.app import FlaskMP4App, _parse_cli_args
+from chordflask.metric_chords import (
     classify_beat_grid,
     filter_metric_chords,
     format_classification_diagnostic,
     is_strong_beat,
 )
-from playbackview import PlaybackView
+from chordflask.playbackview import PlaybackView
 
 
 def _make_clean_grid(n_beats, meter=4, beat_interval=0.5):
@@ -325,8 +325,9 @@ def test_format_classification_no_dict():
 
 def test_cli_help_mentions_metric_chords():
     result = subprocess.run(
-        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--help"],
+        [sys.executable, "-m", "chordflask", "--help"],
         capture_output=True, text=True,
+        cwd=REPO_ROOT,
     )
     assert result.returncode == 0
     assert "--metric-chords" in result.stdout
@@ -346,8 +347,9 @@ def test_worker_keeps_metric_chords_disabled_by_default():
 
 def test_cli_rejects_worker_with_metric_chords():
     result = subprocess.run(
-        [sys.executable, str(FLASK_DIR / "chordflask.py"), "--worker", "--metric-chords"],
+        [sys.executable, "-m", "chordflask", "--worker", "--metric-chords"],
         capture_output=True, text=True,
+        cwd=REPO_ROOT,
     )
     assert result.returncode != 0
     assert "metric-chords" in result.stderr.lower()
@@ -423,7 +425,7 @@ def test_flask_app_constructor_accepts_metric_chords():
 
 
 def test_player_passes_metric_chords_to_view():
-    from mp4playerflask import MP4PlayerFlask
+    from chordflask.mp4playerflask import MP4PlayerFlask
 
     data = ChordData()
     data.set_base_chords(

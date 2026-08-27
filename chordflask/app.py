@@ -14,19 +14,13 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-# Ensure the repository root (and the neutral ``chordflask_base`` package) is
-# importable when this entry point is run directly as ``python flask/chordflask.py``.
-_root = Path(__file__).resolve().parents[1]
-if str(_root) not in sys.path:
-    sys.path.insert(0, str(_root))
-
 from flask import Flask, g, render_template, jsonify, request, send_file, make_response
 
-from analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
-from client_state import ClientRegistry, PathLockRegistry
-from chord_markdown import download_track_slug, format_chord_markdown
-from chord_sheet_pdf import ChordSheetPdfRenderer
-from chordflask_config import (
+from .analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
+from .client_state import ClientRegistry, PathLockRegistry
+from .chord_markdown import download_track_slug, format_chord_markdown
+from .chord_sheet_pdf import ChordSheetPdfRenderer
+from .chordflask_config import (
     ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME,
     ALLOWED_MEDIA_ROOTS_ENV, LEGACY_MEDIA_ROOTS_ENV,
     LISTEN_ENV, LEGACY_LISTEN_ENV,
@@ -35,12 +29,12 @@ from chordflask_config import (
     DEFAULT_HOST, DEFAULT_PORT,
     SUPPORTED_MEDIA_SUFFIXES,
 )
-from filerepr import FileRepr  # Import FileRepr class for file path management
-from ffmpeg_runtime import require_system_ffmpeg
-from media_library import preferred_media_files
+from .filerepr import FileRepr  # Import FileRepr class for file path management
+from .ffmpeg_runtime import require_system_ffmpeg
+from .media_library import preferred_media_files
 
-from mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4PlayerFlask class
-from playbackview import GRID_MODES
+from .mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4PlayerFlask class
+from .playbackview import GRID_MODES
 
 from chordflask_base import DEMUCS_STEM_NAMES
 
@@ -331,15 +325,11 @@ class FlaskMP4App:
 
     def resource_path(self, relative_path):
         """
-        Get the absolute path to resource, works for dev and for PyInstaller
+        Get an absolute path to a resource owned by the application package.
         :param relative_path: Relative path to the resource.
         :return: Absolute path to the resource.
         """
-        try:
-            base_path = sys._MEIPASS  # PyInstaller temp path
-        except Exception:
-            base_path = os.path.abspath(os.path.dirname(__file__))  # Get the directory where chordflask.py is located
-        return os.path.join(base_path, relative_path)
+        return str(Path(__file__).resolve().parent / relative_path)
 
     def is_frozen(self):
         return getattr(sys, "frozen", False)
@@ -424,7 +414,7 @@ class FlaskMP4App:
                 print("Or set VAMP_PATH to a directory containing the .so files.")
 
         try:
-            from vamp_runtime import require_vamp_plugins
+            from .vamp_runtime import require_vamp_plugins
             require_vamp_plugins()
         except (RuntimeError, ImportError, OSError) as error:
             if not quiet:
@@ -1238,7 +1228,7 @@ class FlaskMP4App:
         """
         Return pending and failed local analysis queue entries.
         """
-        from analysis_worker import AnalysisWorker
+        from .analysis_worker import AnalysisWorker
 
         status = self.analysis_queue.status()
         status["worker"] = {
@@ -1319,17 +1309,18 @@ class FlaskMP4App:
         )
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    """Run the existing ChordFlask command-line entry path."""
     import multiprocessing
     multiprocessing.freeze_support()
 
-    args = _parse_cli_args()
+    args = _parse_cli_args(argv)
 
     if args.debug:
         os.environ[DEBUG_ENV] = "1"
 
     if args.check_vamp:
-        from vamp_runtime import REQUIRED_PLUGINS, require_vamp_plugins
+        from .vamp_runtime import REQUIRED_PLUGINS, require_vamp_plugins
         try:
             plugins = require_vamp_plugins()
         except (RuntimeError, ImportError, OSError) as error:
@@ -1354,12 +1345,12 @@ if __name__ == "__main__":
         raise SystemExit(1) from None
     flask_app.setup_vamp_plugins()
     if args.worker:
-        from analysis_worker import AnalysisWorker
+        from .analysis_worker import AnalysisWorker
         raise SystemExit(AnalysisWorker(queue=flask_app.analysis_queue).run_forever())
 
     supervisor = None
     if not args.no_worker:
-        from analysis_worker import WorkerSupervisor
+        from .analysis_worker import WorkerSupervisor
         supervisor = WorkerSupervisor(flask_app.analysis_queue)
         supervisor.start()
         flask_app.worker_supervisor = supervisor
@@ -1372,3 +1363,7 @@ if __name__ == "__main__":
     finally:
         if supervisor:
             supervisor.stop()
+
+
+if __name__ == "__main__":
+    main()

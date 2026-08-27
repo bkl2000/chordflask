@@ -1,3 +1,48 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chordflask"
+description = "Local-first chord and rhythm analysis with synchronized playback"
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+dynamic = ["version", "dependencies"]
+
+[project.scripts]
+chordflask = "chordflask.app:main"
+chordflask-analyze = "chordflask.helpers.analyze_cli:main"
+chordflask-export = "chordflask.helpers.export_cli:main"
+chordflask-maintain = "chordflask_maintain.cli:main"
+chordflask-demucs = "chordflask_demucs.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "chordflask",
+    "chordflask.*",
+    "chordflask_base",
+    "chordflask_base.*",
+    "chordflask_btc",
+    "chordflask_btc.*",
+    "chordflask_demucs",
+    "chordflask_demucs.*",
+    "chordflask_maintain",
+    "chordflask_maintain.*",
+]
+namespaces = false
+
+[tool.setuptools.dynamic]
+version = {file = ["VERSION"]}
+dependencies = {file = ["requirements-core.txt"]}
+
+[tool.setuptools.package-data]
+chordflask = [
+    "templates/*.html",
+    "assets/fonts/*.ttf",
+    "assets/fonts/LICENSE.txt",
+]
+
 [tool.ruff]
 line-length = 110
 target-version = "py312"
