@@ -106,7 +106,7 @@ def run_btc_batch(directory: Path, *, replace: bool = False) -> int:
             print(f"       SKIP: {item['reason']}")
             counts["no_analysis"] += 1
             continue
-        if item["classification"] == CLASS_CURRENT:
+        if item["classification"] == CLASS_CURRENT and not replace:
             print("       SKIP: BTC already current")
             counts["current"] += 1
             continue

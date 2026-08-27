@@ -101,16 +101,30 @@ def test_predicts_and_writes_btc_track(tmp_path, runtime_ok):
     assert analysis["rhythm_tracks"]["qm_barbeattracker"]["bpm"] == 120.0
 
 
-def test_idempotent_skip_no_rewrite(tmp_path, runtime_ok):
+def test_matching_hashes_skip_without_replace_and_rewrite_with_replace(tmp_path, runtime_ok):
     media = _make_media(tmp_path)
     assert predict_btc_media(media)["status"] == "predicted"
 
     json_path = media.parent / ANALYSIS_DIR_NAME / "song.json"
+    analysis = json.loads(json_path.read_text(encoding="utf-8"))
+    analysis["chord_tracks"][BTC_TRACK_ID]["chords"] = [
+        {"timestamp": 0.0, "chord": "C"}
+    ]
+    json_path.write_text(json.dumps(analysis), encoding="utf-8")
     before = json_path.read_bytes()
+
     result = predict_btc_media(media)
     assert result["status"] == "skipped"
     assert result["events"] == 0
     assert json_path.read_bytes() == before
+
+    result = predict_btc_media(media, replace=True)
+    assert result == {"status": "predicted", "events": 2}
+    rewritten = json.loads(json_path.read_text(encoding="utf-8"))
+    assert [event["chord"] for event in rewritten["chord_tracks"][BTC_TRACK_ID]["chords"]] == [
+        "N",
+        "F#7",
+    ]
 
 
 def test_stale_requires_replace(tmp_path, runtime_ok):

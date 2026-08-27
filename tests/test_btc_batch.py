@@ -202,6 +202,21 @@ def test_batch_runs_and_reports(tmp_path, runtime):
     assert BTC_TRACK_ID in analysis["chord_tracks"]
 
 
+def test_batch_current_with_replace_reprocesses(tmp_path, runtime, capsys):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"m")
+    _write_analysis(tmp_path, "song")
+    assert run_btc_batch(tmp_path) == 0
+    capsys.readouterr()
+
+    code = run_btc_batch(tmp_path, replace=True)
+
+    assert code == 0
+    output = capsys.readouterr().out
+    assert "processed:   1" in output
+    assert "current:     0" in output
+
+
 def test_batch_creates_btc_for_unanalyzed_file(tmp_path, runtime):
     media = tmp_path / "fresh.mp3"
     media.write_bytes(b"m")

@@ -108,6 +108,7 @@ def predict_btc_media(media_path: Path, *, replace: bool = False) -> dict[str, A
         if (
             existing_metadata.get("model_sha256") == model_hash
             and existing_metadata.get("media_sha256") == media_hash
+            and not replace
         ):
             return {"status": "skipped", "events": 0}
         if not replace:

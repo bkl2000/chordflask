@@ -156,6 +156,50 @@ def test_analyze_btc_file_predicts_existing_analysis(monkeypatch, capsys, tmp_pa
     assert "OK: 3 events" in capsys.readouterr().out
 
 
+def test_analyze_btc_file_current_without_replace_skips(monkeypatch, capsys, tmp_path):
+    _patch_runtime(monkeypatch)
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"x")
+    _write_analysis(media)
+    monkeypatch.setattr(
+        "chordflask_btc.analyze.classify_btc_file",
+        lambda media_path, model_hash: (analyze.CLASS_CURRENT, "BTC already current"),
+    )
+    monkeypatch.setattr(
+        "chordflask_btc.analyze.predict_btc_media",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not predict")),
+    )
+
+    code = analyze.analyze_btc_file(media, replace=False)
+
+    assert code == 0
+    assert "SKIP: BTC track already current" in capsys.readouterr().out
+
+
+def test_analyze_btc_file_current_with_replace_predicts(monkeypatch, capsys, tmp_path):
+    _patch_runtime(monkeypatch)
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"x")
+    _write_analysis(media)
+    monkeypatch.setattr(
+        "chordflask_btc.analyze.classify_btc_file",
+        lambda media_path, model_hash: (analyze.CLASS_CURRENT, "BTC already current"),
+    )
+    calls = []
+
+    def fake_predict(media_path, *, replace):
+        calls.append((media_path, replace))
+        return {"status": "predicted", "events": 4}
+
+    monkeypatch.setattr("chordflask_btc.analyze.predict_btc_media", fake_predict)
+
+    code = analyze.analyze_btc_file(media, replace=True)
+
+    assert code == 0
+    assert calls == [(media.resolve(), True)]
+    assert "OK: 4 events" in capsys.readouterr().out
+
+
 def test_analyze_btc_directory_dry_run_no_side_effects(monkeypatch, capsys, tmp_path):
     _patch_runtime(monkeypatch)
     media = tmp_path / "song.mp3"
@@ -173,6 +217,49 @@ def test_analyze_btc_directory_dry_run_no_side_effects(monkeypatch, capsys, tmp_
     out = capsys.readouterr().out
     assert "ANALYZE" in out
     assert "would analyze: 1" in out
+
+
+@pytest.mark.parametrize(
+    ("classification", "replace", "expected_counts", "should_predict"),
+    [
+        (analyze.CLASS_CURRENT, False, {"processed": 0, "current": 1, "stale": 0}, False),
+        (analyze.CLASS_CURRENT, True, {"processed": 1, "current": 0, "stale": 0}, True),
+        (analyze.CLASS_STALE, False, {"processed": 0, "current": 0, "stale": 1}, False),
+        (analyze.CLASS_STALE, True, {"processed": 1, "current": 0, "stale": 0}, True),
+    ],
+)
+def test_analyze_btc_directory_replace_matrix(
+    monkeypatch,
+    capsys,
+    tmp_path,
+    classification,
+    replace,
+    expected_counts,
+    should_predict,
+):
+    _patch_runtime(monkeypatch)
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"x")
+    _write_analysis(media)
+    monkeypatch.setattr(
+        "chordflask_btc.analyze.classify_btc_file",
+        lambda media_path, model_hash: (classification, "classification reason"),
+    )
+    calls = []
+
+    def fake_predict(media_path, *, replace):
+        calls.append((media_path, replace))
+        return {"status": "predicted", "events": 2}
+
+    monkeypatch.setattr("chordflask_btc.analyze.predict_btc_media", fake_predict)
+
+    code = analyze.analyze_btc_directory(tmp_path, dry_run=False, replace=replace)
+
+    assert code == 0
+    assert calls == ([(media.resolve(), True)] if should_predict else [])
+    output = capsys.readouterr().out
+    for name, count in expected_counts.items():
+        assert f"{name + ':':<13}{count}" in output
 
 
 def test_analyze_btc_directory_isolates_file_check_errors(

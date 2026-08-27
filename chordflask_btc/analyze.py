@@ -98,7 +98,7 @@ def analyze_btc_file(target: Path, *, replace: bool) -> int:
         if _is_invalid_analysis(reason):
             _print_validation_hint(media)
         return 0
-    if classification == CLASS_CURRENT:
+    if classification == CLASS_CURRENT and not replace:
         print("SKIP: BTC track already current")
         return 0
     if classification == CLASS_STALE and not replace:
@@ -164,7 +164,7 @@ def analyze_btc_directory(directory: Path, *, dry_run: bool, replace: bool) -> i
             invalid_analysis = invalid_analysis or _is_invalid_analysis(reason)
             counts["no_analysis"] += 1
             continue
-        if classification == CLASS_CURRENT:
+        if classification == CLASS_CURRENT and not replace:
             print("       SKIP: BTC track already current")
             counts["current"] += 1
             continue
