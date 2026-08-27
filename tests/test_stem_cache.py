@@ -1,17 +1,10 @@
 """Optional ``--stem-cache`` browser HTTP-cache experiment for stem audio."""
 
 import os
-import sys
 from pathlib import Path
 
 import pytest
 
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask.app import CLIENT_COOKIE, FlaskMP4App, _parse_cli_args
 from chordflask_base import ChordData, DEMUCS_STEM_NAMES

@@ -1,6 +1,6 @@
 """Shared non-recursive media discovery for the batch/CLI helpers.
 
-Discovery is shared with the active app through ``flask/media_library.py``:
+Discovery is shared with the active app through ``chordflask/media_library.py``:
 only MP4/WebM/MP3 files directly inside the target directory are returned,
 using the active same-stem priority (MP4 > WebM > MP3) and sorted smallest
 first.

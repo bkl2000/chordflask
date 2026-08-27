@@ -117,6 +117,15 @@ make all
 cp scripts/chordflask scripts/chordflask-{analyze,demucs,export,maintain} ~/bin/
 ```
 
+When upgrading from 0.9.x, copy these launchers again: older copied launchers
+still target the pre-package source layout.
+
+```bash
+cp scripts/chordflask \
+   scripts/chordflask-{analyze,demucs,export,maintain} \
+   ~/bin/
+```
+
 Then run `chordflask` from any directory (once `~/bin` is on your `PATH`). The
 source launchers locate the configured ChordFlask virtual environment
 themselves, so activating the venv is not normally required.
@@ -356,7 +365,7 @@ The transferable archive is named after the build machine's distro, CPU
 architecture, Python version, and ChordFlask version, for example:
 
 ```text
-flask/dist/chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz
+flask/dist/chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz
 ```
 
 Test the unpackaged build locally with `make standalone-run`. The archive does

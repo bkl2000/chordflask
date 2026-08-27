@@ -168,13 +168,9 @@ clean:
 		"$(ROOT_DIR)/.mypy_cache" \
 		"$(ROOT_DIR)/htmlcov" \
 		"$(ROOT_DIR)/.coverage"
-	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
-		"$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
+	@find "$(ROOT_DIR)"/chordflask* "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
 		-type d -name __pycache__ -prune -exec rm -rf {} +
-	@find "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
-		"$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
+	@find "$(ROOT_DIR)"/chordflask* "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" "$(ROOT_DIR)/tests" \
 		-type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
 clean-report:

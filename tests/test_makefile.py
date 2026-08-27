@@ -165,6 +165,7 @@ def test_make_dry_runs_preserve_target_order_and_variables():
     assert " -q" in standalone
     assert "flask/build" in cleanup
     assert "flask/dist" in cleanup
+    assert "chordflask*" in cleanup
     assert "videos" not in cleanup
     assert "backups" not in cleanup
     assert ".chordflask" not in cleanup
@@ -176,6 +177,36 @@ def test_clean_report_target_is_read_only_by_interface():
     assert "clean_report.sh" in output
     assert "rm " not in output
     assert "rm -rf" not in output
+
+
+def test_clean_removes_python_caches_from_current_package_tree(tmp_path):
+    project = tmp_path / "project"
+    cache_dir = project / "chordflask" / "nested" / "__pycache__"
+    package_bytecode = project / "chordflask_base" / "generated.pyc"
+    source_file = project / "chordflask" / "module.py"
+    for path in (cache_dir, package_bytecode.parent, project / "flask", project / "scripts", project / "tests"):
+        path.mkdir(parents=True, exist_ok=True)
+    (cache_dir / "module.cpython-312.pyc").write_bytes(b"cache")
+    package_bytecode.write_bytes(b"bytecode")
+    source_file.write_text("VALUE = 1\n", encoding="utf-8")
+
+    subprocess.run(
+        [
+            "make",
+            "--no-print-directory",
+            "-f",
+            str(REPO_ROOT / "Makefile"),
+            "clean",
+            f"ROOT_DIR={project}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert not cache_dir.exists()
+    assert not package_bytecode.exists()
+    assert source_file.read_text(encoding="utf-8") == "VALUE = 1\n"
 
 
 def test_clean_report_finds_all_cache_types_without_touching_protected_data(tmp_path):

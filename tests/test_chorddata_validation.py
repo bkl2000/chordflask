@@ -1,10 +1,7 @@
 import json
 import os
-import pytest
-from pathlib import Path
 
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "flask"))
+import pytest
 
 from chordflask_base import schema as chordflask_schema
 from chordflask_base import ChordTrackRepository, ChordData

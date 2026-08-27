@@ -1,7 +1,7 @@
 """Neutral, framework-free base layer.
 
 Contains the Schema-v3 contract (``schema``), pure chord-label logic
-(``chordlabel``), and the chord data model (``model``). Both the app (``flask/``)
+(``chordlabel``), and the chord data model (``model``). Both the app (``chordflask/``)
 and external chord-track producers import from here, so the model and the schema
 stay independent of the Flask view.
 """

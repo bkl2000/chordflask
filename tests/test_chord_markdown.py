@@ -1,16 +1,8 @@
 from io import BytesIO
-import sys
-from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
 
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask_base import ChordData
 from chordflask.app import CLIENT_COOKIE, FlaskMP4App

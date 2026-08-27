@@ -1,6 +1,6 @@
 """Schema-v3 analysis contract (neutral, framework-free).
 
-Part of :mod:`chordflask_base` — the base layer shared by the app (``flask/``)
+Part of :mod:`chordflask_base` — the base layer shared by the app (``chordflask/``)
 and by external chord-track producers. This module is pure stdlib: no Flask, no
 audio, no torch.
 

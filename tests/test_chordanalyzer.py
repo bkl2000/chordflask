@@ -8,12 +8,9 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
 
 import chordflask.audio_analyzer as audio_analyzer_mod
+import chordflask.vamp_runtime as vamp_runtime_mod
 from chordflask.chordanalyzer import AudioAnalyzer
 from chordflask_base import ChordData
 from chordflask.chordflask_config import ANALYSIS_SAMPLE_RATE
@@ -153,11 +150,7 @@ def test_analyze_labels_chord_and_rhythm_sources(
             return chords
 
     monkeypatch.setattr(audio_analyzer_mod, "require_system_ffmpeg", lambda: None)
-    monkeypatch.setitem(
-        sys.modules,
-        "vamp_runtime",
-        types.SimpleNamespace(require_vamp_plugins=lambda: None),
-    )
+    monkeypatch.setattr(vamp_runtime_mod, "require_vamp_plugins", lambda: None)
     monkeypatch.setattr(
         audio_analyzer_mod,
         "librosa",

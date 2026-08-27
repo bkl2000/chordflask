@@ -10,6 +10,7 @@ import secrets
 import sys
 import time
 from datetime import datetime
+from importlib import metadata
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -44,21 +45,30 @@ CLIENT_COOKIE = "chordflask_client"
 
 
 def _load_version():
-    """Read VERSION semver and append git date+hash when available."""
+    """Read the frozen, source-checkout, or installed package version."""
     if getattr(sys, "frozen", False):
         frozen_version = os.path.join(os.path.dirname(sys.executable), "VERSION")
         if os.path.isfile(frozen_version):
             return open(frozen_version).read().strip()
-        return "unknown"
+        try:
+            return metadata.version("chordflask")
+        except metadata.PackageNotFoundError:
+            return "unknown"
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    version_file = os.path.join(script_dir, os.pardir, "VERSION")
-    base = open(version_file).read().strip() if os.path.isfile(version_file) else "unknown"
+    repository_root = os.path.join(script_dir, os.pardir)
+    version_file = os.path.join(repository_root, "VERSION")
+    if not os.path.isfile(version_file):
+        try:
+            return metadata.version("chordflask")
+        except metadata.PackageNotFoundError:
+            return "unknown"
+    base = open(version_file).read().strip()
     try:
         import subprocess
         git_info = subprocess.run(
             ["git", "log", "-1", "--format=%cd %h", "--date=format:%Y-%m-%d %H:%M"],
             capture_output=True, text=True,
-            cwd=os.path.join(script_dir, os.pardir),
+            cwd=repository_root,
         ).stdout.strip()
         if git_info:
             return f"{base} {git_info}"

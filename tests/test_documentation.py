@@ -28,15 +28,27 @@ def test_readme_names_portable_archive_and_complete_guide():
     guide = (REPO_ROOT / "docs" / "STANDALONE.md").read_text()
 
     assert "## Download" in readme
-    assert "flask/dist/chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz" in readme
+    assert "flask/dist/chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz" in readme
     assert "docs/STANDALONE.md" in readme
     for command in (
-        "tar -xzf chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz",
+        "tar -xzf chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz",
         "./install_vamp.sh",
         "./chordflask --version",
         "./chordflask.sh",
     ):
         assert command in guide
+
+
+def test_readme_documents_launcher_refresh_for_0_9_upgrades():
+    readme = (REPO_ROOT / "README.md").read_text()
+    copy_command = (
+        "cp scripts/chordflask \\\n"
+        "   scripts/chordflask-{analyze,demucs,export,maintain} \\\n"
+        "   ~/bin/"
+    )
+
+    assert "When upgrading from 0.9.x" in readme
+    assert copy_command in readme
 
 
 def test_readme_standalone_download_matches_version():

@@ -9,9 +9,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VENDOR_DIR = REPO_ROOT / "vendor" / "vamp" / "linux-x86_64"
 PLUGIN_DIR = Path(os.environ.get("CHORDIFIER_TEST_VAMP_PATH", VENDOR_DIR))
-FLASK_DIR = REPO_ROOT / "flask"
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask.chordflask_config import ANALYSIS_SAMPLE_RATE
 
@@ -148,7 +145,6 @@ def test_beat_tracker_processes_synthetic_120_bpm_clicks(
 
 
 def test_vamp_runtime_raises_without_required_plugins(monkeypatch):
-    sys.path.insert(0, str(REPO_ROOT / "flask"))
     from chordflask.vamp_runtime import require_vamp_plugins, REQUIRED_PLUGINS
 
     monkeypatch.setattr("vamp.list_plugins", lambda: [])
@@ -164,7 +160,6 @@ def test_vamp_runtime_raises_without_required_plugins(monkeypatch):
 
 
 def test_vamp_runtime_succeeds_with_plugins_present(monkeypatch):
-    sys.path.insert(0, str(REPO_ROOT / "flask"))
     from chordflask.vamp_runtime import require_vamp_plugins
 
     monkeypatch.setattr("vamp.list_plugins", lambda: list({
@@ -177,7 +172,6 @@ def test_vamp_runtime_succeeds_with_plugins_present(monkeypatch):
 
 
 def test_vamp_runtime_reports_missing_plugins_clearly(monkeypatch):
-    sys.path.insert(0, str(REPO_ROOT / "flask"))
     from chordflask.vamp_runtime import require_vamp_plugins
 
     monkeypatch.setattr("vamp.list_plugins", lambda: ["nnls-chroma:chordino"])

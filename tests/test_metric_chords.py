@@ -4,11 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
-
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
 
 from chordflask_base import ChordData
 from chordflask.app import FlaskMP4App, _parse_cli_args

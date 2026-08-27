@@ -4,7 +4,7 @@ Part of :mod:`chordflask_base`. Contains only the label utilities that depend on
 nothing but the standard library: label validation, run-length
 encoding/expansion, and root/bass-only transposition and respelling.
 
-The audio-, music21-, and Unicode-dependent parts stay in ``flask/chordutils.py``
+The audio-, music21-, and Unicode-dependent parts stay in ``chordflask/chordutils.py``
 (the view/analysis helper); that module re-exports the names below so existing
 ``chordutils.<name>`` call sites keep working.
 """

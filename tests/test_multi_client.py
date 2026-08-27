@@ -6,7 +6,6 @@ display, editing, or serving state, while genuinely shared resources (the
 analysis queue) remain shared and deduplicated.
 """
 
-import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -14,12 +13,6 @@ from pathlib import Path
 
 import pytest
 
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-FLASK_DIR = REPO_ROOT / "flask"
-
-if str(FLASK_DIR) not in sys.path:
-    sys.path.insert(0, str(FLASK_DIR))
 
 import chordflask.client_state as client_state
 from chordflask.app import CLIENT_COOKIE, FlaskMP4App

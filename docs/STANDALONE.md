@@ -23,7 +23,7 @@ whose name records the build machine's distro, CPU architecture, Python
 version, and ChordFlask version, for example:
 
 ```text
-flask/dist/chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz
+flask/dist/chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz
 ```
 
 Run the freshly built local copy with:
@@ -34,14 +34,14 @@ make standalone-run
 
 ## Install on the target machine
 
-Copy the archive (for example `chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz`)
+Copy the archive (for example `chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz`)
 to the target. Then run:
 
 ```bash
 sudo apt update
 sudo apt install --no-install-recommends ffmpeg curl
-tar -xzf chordflask-debian13-x86_64-py3.12-v0.6.3.tar.gz
-cd chordflask-debian13-x86_64-py3.12-v0.6.3
+tar -xzf chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz
+cd chordflask-debian13-x86_64-py3.12-vX.Y.Z
 ./install_vamp.sh
 ./chordflask --version
 ./chordflask.sh

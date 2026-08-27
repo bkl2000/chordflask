@@ -27,7 +27,7 @@ Producer:
     optional heavy runtime      (Demucs + Torch, isolated venv)
 
 Consumer:
-    ChordFlask player           (flask/, chordflask_base)
+    ChordFlask player           (chordflask/, chordflask_base)
     reads generic audio_tracks  (audio_tracks["demucs:htdemucs"])
     no Demucs/Torch dependency
 ```
