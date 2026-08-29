@@ -4,7 +4,7 @@
 
 This CLI helper is independent of the Flask server. It discovers MP3/MP4/WebM
 media non-recursively, reuses valid analysis JSON, analyzes only missing files
-serially, and writes matching playable Markdown and PDF leadsheets into each
+serially, and writes matching Markdown, PDF, and ChordPro leadsheets into each
 ``.chordflask`` directory.
 
 Exit codes: 0 all exports succeeded, 1 partial or file errors, 2 argparse or
@@ -17,6 +17,7 @@ import sys
 import tempfile
 
 from .batch_core import find_media_files
+from ..chord_chordpro import format_chordpro
 from ..chord_markdown import download_track_slug, format_chord_markdown
 from ..chord_sheet_pdf import ChordSheetPdfRenderer
 from chordflask_base import (
@@ -39,6 +40,8 @@ _FORMAT_FILES = {
     "markdown": {"md"},
     "pdf": {"pdf"},
     "both": {"md", "pdf"},
+    "chordpro": {"cho"},
+    "all": {"md", "pdf", "cho"},
 }
 
 
@@ -84,7 +87,10 @@ def add_export_options(parser):
         "--repeat-mode",
         choices=("changes", "chords"),
         default="changes",
-        help="changes writes held beats as -, chords writes every beat (default: changes)",
+        help=(
+            "changes writes held beats as - in Markdown or . in ChordPro; "
+            "chords writes every beat (default: changes)"
+        ),
     )
     parser.add_argument(
         "--no-metric-chords",
@@ -93,7 +99,7 @@ def add_export_options(parser):
     )
     parser.add_argument(
         "--format",
-        choices=("markdown", "pdf", "both"),
+        choices=("markdown", "pdf", "both", "chordpro", "all"),
         default="both",
         help="Leadsheet format to write (default: both)",
     )
@@ -237,32 +243,51 @@ def export_file(media_path, args):
             (beat_numbers[i] if i < len(beat_numbers) else "", chord) for i, chord in enumerate(beat_chords)
         ]
 
-        chord_label = _track_display_name(chord_track_id, cd.chord_track_metadata(chord_track_id))
-        rhythm_label = _track_display_name(rhythm_track_id, cd.rhythm_track_metadata(rhythm_track_id))
-        markdown = format_chord_markdown(
-            title=file_repr.basename,
-            chord_track=chord_label,
-            rhythm_track=rhythm_label,
-            version=_version_label(chord_track_id),
-            transpose=args.transpose,
-            spelling="Sharps" if args.sharps else "Flats",
-            unicode_symbols=args.unicode,
-            bpm=cd.bpm,
-            meter=cd.meter_signature,
-            beats=beats,
-            repeat_mode=args.repeat_mode,
-        )
-
         output_stem = os.path.join(
             file_repr.datapath,
             f"{file_repr.basename}-chords-{download_track_slug(chord_track_id)}",
         )
         formats = _FORMAT_FILES[getattr(args, "format", "both")]
+        markdown = None
+        if formats & {"md", "pdf"}:
+            chord_label = _track_display_name(
+                chord_track_id,
+                cd.chord_track_metadata(chord_track_id),
+            )
+            rhythm_label = _track_display_name(
+                rhythm_track_id,
+                cd.rhythm_track_metadata(rhythm_track_id),
+            )
+            markdown = format_chord_markdown(
+                title=file_repr.basename,
+                chord_track=chord_label,
+                rhythm_track=rhythm_label,
+                version=_version_label(chord_track_id),
+                transpose=args.transpose,
+                spelling="Sharps" if args.sharps else "Flats",
+                unicode_symbols=args.unicode,
+                bpm=cd.bpm,
+                meter=cd.meter_signature,
+                beats=beats,
+                repeat_mode=args.repeat_mode,
+            )
+        chordpro = None
+        if "cho" in formats:
+            chordpro = format_chordpro(
+                title=file_repr.basename,
+                bpm=cd.bpm,
+                meter=cd.meter_signature,
+                beats=beat_chords,
+                beat_numbers=beat_numbers,
+                repeat_mode=args.repeat_mode,
+            )
         pdf = ChordSheetPdfRenderer().render_markdown(markdown) if "pdf" in formats else None
         if "md" in formats:
             _write_atomic(f"{output_stem}.md", markdown)
         if "pdf" in formats:
             _write_atomic(f"{output_stem}.pdf", pdf)
+        if "cho" in formats:
+            _write_atomic(f"{output_stem}.cho", chordpro)
     except LeadsheetExportError:
         raise
     except Exception as error:

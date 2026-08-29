@@ -158,10 +158,11 @@ scripts/chordflask-analyze /music/videos
 scripts/chordflask-analyze --dry-run /music/videos
 scripts/chordflask-analyze --replace song.mp4
 
-# Export leadsheets (Markdown and/or PDF)
+# Export leadsheets (Markdown, PDF, and ChordPro .cho)
 scripts/chordflask-export song.mp4
 scripts/chordflask-export --format markdown song.mp4
 scripts/chordflask-export --format pdf song.mp4
+scripts/chordflask-export --format chordpro song.mp4
 
 # Maintenance
 scripts/chordflask-maintain doctor
@@ -299,9 +300,10 @@ retry.
 ### Batch leadsheet export
 
 The `chordflask-export` command turns one media file or every supported media
-file in a directory into matching playable Markdown and print-ready A4 PDF
-leadsheets. Existing analyses are reused; missing files are analyzed serially
-only when needed, so a second run costs no new analysis time.
+file in a directory into matching playable Markdown, print-ready A4 PDF, and
+ChordPro (`.cho`) chord-grid leadsheets. Existing analyses are reused; missing
+files are analyzed serially only when needed, so a second run costs no new
+analysis time.
 
 ```bash
 scripts/chordflask-export ~/Music

@@ -177,11 +177,15 @@ def test_export_file_keeps_edited_on_its_preserved_rhythm_grid(tmp_path):
     )
     chord_data.save_to_file(analysis_path)
 
-    export_file(media, _args(chord_track="edited"))
+    export_file(media, _args(chord_track="edited", format="all"))
 
-    content = (analysis_dir / "song-chords-edited.md").read_text()
-    assert "Edited · Edited rhythm snapshot" in content
-    assert "C          F          G          -" in content
+    markdown = (analysis_dir / "song-chords-edited.md").read_text()
+    assert "Edited · Edited rhythm snapshot" in markdown
+    assert "C          F          G          -" in markdown
+    chordpro = (analysis_dir / "song-chords-edited.cho").read_text()
+    assert "{tempo: 120}" in chordpro
+    assert "{time: 4/4}" in chordpro
+    assert "| C F G . |" in chordpro
 
 
 def test_export_file_uses_named_chord_and_rhythm_tracks(tmp_path):
@@ -213,6 +217,65 @@ def test_export_file_applies_transpose_sharps_unicode(tmp_path):
     assert "Sharps" in content
     assert "Unicode" in content
     assert "D          -          A          -" in content
+
+
+@pytest.mark.parametrize(
+    ("sharps", "expected"),
+    [(False, "Db"), (True, "C#")],
+)
+def test_export_file_chordpro_applies_transpose_and_spelling(
+    tmp_path, sharps, expected
+):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+
+    export_file(
+        media,
+        _args(format="chordpro", transpose=1, sharps=sharps),
+    )
+
+    content = (analysis_dir / "song-chords-chordino.cho").read_text()
+    assert f"| {expected} ." in content
+
+
+def test_export_file_chordpro_only_writes_cho_without_changing_analysis(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+    analysis_path = analysis_dir / "song.json"
+    original_analysis = analysis_path.read_bytes()
+
+    export_file(media, _args(format="chordpro"))
+
+    assert (analysis_dir / "song-chords-chordino.cho").is_file()
+    assert not (analysis_dir / "song-chords-chordino.md").exists()
+    assert not (analysis_dir / "song-chords-chordino.pdf").exists()
+    assert analysis_path.read_bytes() == original_analysis
+
+
+def test_export_file_both_still_writes_only_markdown_and_pdf(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+
+    export_file(media, _args(format="both"))
+
+    assert (analysis_dir / "song-chords-chordino.md").is_file()
+    assert (analysis_dir / "song-chords-chordino.pdf").is_file()
+    assert not (analysis_dir / "song-chords-chordino.cho").exists()
+
+
+def test_export_file_all_writes_markdown_pdf_and_chordpro(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+
+    export_file(media, _args(format="all"))
+
+    assert (analysis_dir / "song-chords-chordino.md").is_file()
+    assert (analysis_dir / "song-chords-chordino.pdf").is_file()
+    assert (analysis_dir / "song-chords-chordino.cho").is_file()
 
 
 def test_export_file_missing_analysis_is_created_serially(tmp_path, monkeypatch):

@@ -246,11 +246,16 @@ scripts/chordflask-export /music/videos
 scripts/chordflask-export --format markdown song.mp4
 scripts/chordflask-export --format pdf song.mp4
 scripts/chordflask-export --format both song.mp4
+scripts/chordflask-export --format chordpro song.mp4
+scripts/chordflask-export --format all song.mp4
 ```
 
-The default format is `both` (Markdown and PDF). A directory is processed
-non-recursively; a missing analysis is created serially only when needed, and a
-second run reuses it. One failing file does not stop later files.
+The default format is `both` (Markdown and PDF). `--format chordpro` writes a
+ChordPro `.cho` chord grid without lyrics; artist, key, and song-section
+metadata are not invented. `--format all` writes Markdown, PDF, and ChordPro.
+A directory is processed non-recursively; a missing analysis is created
+serially only when needed, and a second run reuses it. One failing file does
+not stop later files.
 
 Options:
 
@@ -266,9 +271,12 @@ Options:
 - `--no-metric-chords` — use the unfiltered nearest-beat display instead of the
   enabled-by-default rhythm-aware smoothing.
 
+An Edited export keeps the rhythm source recorded in the Edited track metadata,
+including for ChordPro output.
+
 Output files land beside the analysis, named
-`.chordflask/<name>-chords-<track>.md` and `.pdf`. Existing files are replaced
-atomically. The target media must already have an analysis (or ChordFlask
-creates one); a requested chord/rhythm track that is not present fails that
-file with an error. Exit code 0 means all exports succeeded, 1 means one or
-more files failed, and 2 means an invalid invocation.
+`.chordflask/<name>-chords-<track>.md`, `.pdf`, and/or `.cho`. Existing files
+are replaced atomically. The target media must already have an analysis (or
+ChordFlask creates one); a requested chord/rhythm track that is not present
+fails that file with an error. Exit code 0 means all exports succeeded, 1 means
+one or more files failed, and 2 means an invalid invocation.

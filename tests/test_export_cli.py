@@ -16,7 +16,7 @@ def test_export_help_is_user_facing(capsys):
         export_cli.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "--format {markdown,pdf,both}" in out
+    assert "--format {markdown,pdf,both,chordpro,all}" in out
     assert "chordflask-export" in out
 
 
@@ -38,6 +38,14 @@ def test_export_missing_target_is_error(capsys):
 def test_export_parser_default_format_is_both():
     args = export_cli.build_parser().parse_args(["song.mp4"])
     assert args.format == "both"
+
+
+@pytest.mark.parametrize("format_name", ["chordpro", "all"])
+def test_export_parser_accepts_chordpro_formats(format_name):
+    args = export_cli.build_parser().parse_args(
+        ["--format", format_name, "song.mp4"]
+    )
+    assert args.format == format_name
 
 
 def test_export_file_dispatches(monkeypatch, capsys, tmp_path):
