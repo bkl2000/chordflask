@@ -19,6 +19,7 @@ from flask import Flask, g, render_template, jsonify, request, send_file, make_r
 
 from .analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from .client_state import ClientRegistry, PathLockRegistry
+from .chord_chordpro import format_chordpro
 from .chord_markdown import download_track_slug, format_chord_markdown
 from .chord_sheet_pdf import ChordSheetPdfRenderer
 from .chordflask_config import (
@@ -953,7 +954,7 @@ class FlaskMP4App:
         return jsonify({"success": True, **track_state})
 
     def download_chords(self):
-        """Return the active displayed beat-level chords as Markdown and PDF."""
+        """Return the active displayed beat-level chords as Markdown, PDF, and ChordPro."""
         data, error_response = self._json_body()
         if error_response:
             return error_response
@@ -985,14 +986,23 @@ class FlaskMP4App:
         )
         try:
             pdf = ChordSheetPdfRenderer().render_markdown(markdown)
+            chordpro = format_chordpro(
+                title=media_or_error.stem,
+                bpm=snapshot["bpm"],
+                meter=snapshot["meter"],
+                beats=[chord for _, chord in snapshot["beats"]],
+                beat_numbers=[number for number, _ in snapshot["beats"]],
+                repeat_mode=snapshot["repeat_mode"],
+            )
             archive = BytesIO()
             with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
                 output.writestr(f"{export_stem}.md", markdown.encode("utf-8"))
                 output.writestr(f"{export_stem}.pdf", pdf)
+                output.writestr(f"{export_stem}.cho", chordpro.encode("utf-8"))
             archive.seek(0)
         except Exception:  # noqa: BLE001 - preserve the all-or-nothing download contract
-            logging.exception("Could not render the chord leadsheet PDF")
-            return jsonify(error="Could not render the chord leadsheet PDF."), 500
+            logging.exception("Could not render the chord leadsheet export")
+            return jsonify(error="Could not render the chord leadsheet export."), 500
         return send_file(
             archive,
             mimetype="application/zip",

@@ -104,7 +104,7 @@ def test_browser_and_batch_exports_are_byte_identical(tmp_path):
     media = tmp_path / "song.mp4"
     media.write_bytes(b"media")
     analysis_dir = _write_analysis(media)
-    export_file(media, _args())
+    export_file(media, _args(format="all"))
 
     file_repr = FileRepr(str(media), create=True)
     app_wrapper = FlaskMP4App()
@@ -127,6 +127,9 @@ def test_browser_and_batch_exports_are_byte_identical(tmp_path):
             analysis_dir / "song-chords-chordino.md"
         ).read_bytes()
         assert archive.read("song-chords-chordino.pdf").startswith(b"%PDF")
+        assert archive.read("song-chords-chordino.cho") == (
+            analysis_dir / "song-chords-chordino.cho"
+        ).read_bytes()
 
 
 def test_export_file_prefers_edited_for_auto(tmp_path):

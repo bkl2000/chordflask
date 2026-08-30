@@ -431,7 +431,7 @@ def _download_markdown(response):
     return files[markdown_name].decode("utf-8")
 
 
-def test_download_chords_returns_markdown_and_pdf_zip(tmp_path):
+def test_download_chords_returns_markdown_pdf_and_chordpro_zip(tmp_path):
     app_wrapper, client = make_client()
     _activate(app_wrapper, tmp_path)
 
@@ -443,6 +443,7 @@ def test_download_chords_returns_markdown_and_pdf_zip(tmp_path):
     assert "song-chords-chordino.zip" in disposition
     files = _download_archive(response)
     assert set(files) == {
+        "song-chords-chordino.cho",
         "song-chords-chordino.md",
         "song-chords-chordino.pdf",
     }
@@ -454,6 +455,11 @@ def test_download_chords_returns_markdown_and_pdf_zip(tmp_path):
     assert "```text\n" in body
     assert "C          -          G          -" in body
     assert "|" not in body
+    chordpro = files["song-chords-chordino.cho"].decode("utf-8")
+    assert "{title: song}" in chordpro
+    assert "{tempo: 120}" in chordpro
+    assert "{time: 4/4}" in chordpro
+    assert "| C . G . |" in chordpro
     assert not list((tmp_path / ".chordflask").glob("song-chords-*"))
 
 
@@ -484,9 +490,11 @@ def test_download_chords_uses_edited_slug_and_version(tmp_path):
 
     assert response.status_code == 200
     assert "song-chords-edited.zip" in response.headers["Content-Disposition"]
-    body = _download_markdown(response)
+    files = _download_archive(response)
+    body = files["song-chords-edited.md"].decode("utf-8")
     assert "· Edited ·" in body
     assert "Edited · QM Bar/Beat Tracker" in body
+    assert "| C . G . |" in files["song-chords-edited.cho"].decode("utf-8")
 
 
 def test_download_chords_rejects_stale_media(tmp_path):
@@ -544,7 +552,25 @@ def test_download_chords_returns_no_partial_zip_when_pdf_rendering_fails(
 
     assert response.status_code == 500
     assert response.content_type == "application/json"
-    assert response.get_json() == {"error": "Could not render the chord leadsheet PDF."}
+    assert response.get_json() == {"error": "Could not render the chord leadsheet export."}
+
+
+def test_download_chords_returns_no_partial_zip_when_chordpro_rendering_fails(
+    tmp_path, monkeypatch
+):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+
+    def fail_render(**kwargs):
+        raise ValueError("render failed")
+
+    monkeypatch.setattr("chordflask.app.format_chordpro", fail_render)
+
+    response = client.post("/download_chords", json=_payload(tmp_path))
+
+    assert response.status_code == 500
+    assert response.content_type == "application/json"
+    assert response.get_json() == {"error": "Could not render the chord leadsheet export."}
 
 
 def test_download_chords_snapshot_uses_metric_filtered_full_beat_view(tmp_path):
@@ -593,9 +619,12 @@ def test_download_chords_uses_chords_repeat_mode(tmp_path):
     response = client.post("/download_chords", json=_payload(tmp_path))
 
     assert response.status_code == 200
-    body = _download_markdown(response)
+    files = _download_archive(response)
+    body = files["song-chords-chordino.md"].decode("utf-8")
     assert "C          C          G          G" in body
     assert "-" not in body.split("```text\n", 1)[1]
+    chordpro = files["song-chords-chordino.cho"].decode("utf-8")
+    assert "| C C G G |" in chordpro
 
 
 def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path):
@@ -642,10 +671,13 @@ def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path
 
     assert response.status_code == 200
     assert "song-chords-other.zip" in response.headers["Content-Disposition"]
-    body = _download_markdown(response)
+    files = _download_archive(response)
+    body = files["song-chords-other.md"].decode("utf-8")
     assert "**100 BPM · 4/4 · Original · Flats · Transpose 0 · Unicode**" in body
     assert "Neural · Pulse" in body
     assert "D♭/A♭      N          X          G♭/D♭" in body
+    chordpro = files["song-chords-other.cho"].decode("utf-8")
+    assert "| D♭/A♭ N X G♭/D♭ |" in chordpro
 
 
 # ── browser contract ─────────────────────────────────────────────────
@@ -657,7 +689,7 @@ def test_index_contains_save_control_and_download_contract():
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="saveButton"' in body
-    assert 'aria-label="Download chords as Markdown and PDF"' in body
+    assert 'aria-label="Download chords as Markdown, PDF, and ChordPro"' in body
     assert "'chords.zip'" in body
     assert "#saveButton" in body
     assert "fetch('/download_chords'" in body
