@@ -20,6 +20,7 @@ from flask import Flask, g, render_template, jsonify, request, send_file, make_r
 from .analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from .client_state import ClientRegistry, PathLockRegistry
 from .chord_chordpro import format_chordpro
+from .chordpro_song import ChordProSongError, read_chordpro
 from .chord_markdown import download_track_slug, format_chord_markdown
 from .chord_sheet_pdf import ChordSheetPdfRenderer
 from .chordflask_config import (
@@ -444,6 +445,7 @@ class FlaskMP4App:
         self.app.add_url_rule('/reanalyze', 'reanalyze', self.reanalyze, methods=['POST'])
         self.app.add_url_rule('/video', 'serve_video', self.serve_video)
         self.app.add_url_rule('/stem/<stem_name>', 'serve_stem', self.serve_stem)
+        self.app.add_url_rule('/get_song_sheet', 'get_song_sheet', self.get_song_sheet)
         self.app.add_url_rule('/get_callback_output', 'get_callback_output', self.get_callback_output, methods=['GET'])
         self.app.add_url_rule('/set_position', 'set_position', self.set_position, methods=['POST'])
         self.app.add_url_rule('/update_semitones', 'update_semitones', self.update_semitones, methods=['POST'])
@@ -731,6 +733,8 @@ class FlaskMP4App:
             json_file = state.file_repr.get("json")
             stems = state.player.audio_stems_state(include_versions=self.__stem_cache)
 
+        song_view_available = self._song_sidecar(mp4_file) is not None
+
         return jsonify({
             'status': 'ready',
             'mp4_file': mp4_file,
@@ -739,6 +743,7 @@ class FlaskMP4App:
             'analysis_valid': analysis_valid,
             'title': f"ChordFlask - {filename}",
             'stems': stems,
+            'song_view_available': song_view_available,
             **player_state,
         })
 
@@ -1034,6 +1039,40 @@ class FlaskMP4App:
         else:
             logging.error("Media file not found")
             return "Media file not found.", 404
+
+    @staticmethod
+    def _song_sidecar(media_path):
+        """Return a safe same-directory Song sidecar, or None when unavailable."""
+        try:
+            media = Path(media_path).resolve(strict=True)
+            candidate = media.with_suffix(".cho")
+            resolved = candidate.resolve(strict=True)
+            if resolved.parent != media.parent or not resolved.is_file():
+                return None
+        except (OSError, RuntimeError):
+            return None
+        return resolved
+
+    def get_song_sheet(self):
+        """Return the active browser client's external Song sheet as safe JSON."""
+        if request.args:
+            return jsonify(error="Song sheet request does not accept parameters."), 400
+
+        state = self._client()
+        with state.lock:
+            file_repr = state.file_repr
+            media_path = file_repr.get() if file_repr is not None else None
+        if media_path is None:
+            return jsonify(error="No active media file."), 409
+
+        sidecar = self._song_sidecar(media_path)
+        if sidecar is None:
+            return jsonify(error="Song sheet is unavailable."), 404
+        try:
+            song = read_chordpro(sidecar)
+        except ChordProSongError as error:
+            return jsonify(error=str(error)), error.status_code
+        return jsonify(song)
 
     def serve_stem(self, stem_name):
         """Serve one FLAC stem of the currently loaded song's grouped set.

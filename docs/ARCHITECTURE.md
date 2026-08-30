@@ -39,6 +39,24 @@ interactive launch. The worker claims queued jobs and runs the built-in
 Chordino chord analysis and QM bar/beat analysis through the existing analyzer
 services. Completed Schema-v3 JSON is published beside the media.
 
+An optional external ChordPro Song sheet follows a separate read-only path:
+
+```text
+ready active media
+   -> resolved same-stem .cho beside that media
+   -> active-client /get_song_sheet route
+   -> bounded strict-UTF-8 parser
+   -> structured JSON
+   -> browser DOM nodes populated with textContent
+```
+
+`load_file` reports only whether the sidecar is available after successful
+media activation. A desktop browser lazily requests the sheet on first Song
+selection and caches it for that activation. The route accepts no path and
+revalidates that the resolved sidecar remains beside the resolved active media,
+including rejecting symlink escapes. Parsing and file I/O occur outside the
+per-client state lock and do not mutate player or analysis state.
+
 Optional heavy analyzers remain outside this core process path:
 
 ```text
@@ -65,6 +83,13 @@ Queueing and worker ownership live in `analysis_queue.py` and
 `audio_analyzer.py`. Playback, browser-client state, and chord presentation
 live in `mp4playerflask.py`, `playbackview.py`, `client_state.py`, and the chord
 utility modules.
+
+`chordpro_song.py` is the small pure parser and bounded reader for external,
+user-owned lyric ChordPro. It returns metadata and ordered text/chord runs; it
+does not use analyzer chord types. The browser renders those records with DOM
+creation and `textContent` inside the existing chord panel. This input path is
+separate from `chord_chordpro.py`, which formats analyzed beat grids as
+lyric-free ChordPro exports.
 
 The package also owns the browser template, PDF fonts, Markdown/PDF export
 code, and supported CLI helper modules. Resources are resolved relative to the
@@ -182,6 +207,7 @@ maintenance commands, and the standalone bundle.
 | Analysis queue and worker | `chordflask/analysis_queue.py`, `chordflask/analysis_worker.py` |
 | Chordino/QM analysis pipeline | `chordflask/chordanalyzer.py`, `chordflask/analysis_service.py`, `chordflask/audio_analyzer.py` |
 | Chord display and post-processing | `chordflask/chorddata.py`, `chordflask/chordutils.py`, `chordflask/metric_chords.py`, `chordflask/chord_postprocess.py` |
+| External ChordPro Song parsing/display | `chordflask/chordpro_song.py`, `chordflask/app.py`, `chordflask/templates/home.html` |
 | Storage model and schema | `chordflask_base/`, `chordflask/filerepr.py` |
 | Markdown/PDF and other exports | `chordflask/chord_markdown.py`, `chordflask/chord_sheet_pdf.py`, `chordflask/chord_exporter.py`, `chordflask/helpers/` |
 | BTC analyzer | `chordflask_btc/` |
@@ -208,6 +234,8 @@ maintenance commands, and the standalone bundle.
   home directory.
 - Chord, rhythm, edited, BTC, and Demucs data remain distinct tracks or audio
   sets under the shared Schema-v3 contract.
+- External same-stem Song sidecars remain user-owned, read-only display input;
+  they are never imported into analysis or transformed by Grid display state.
 - Templates and runtime assets remain package-owned and available in editable,
   installed, and frozen operation.
 - Existing routes, browser behavior, persistence formats, security assumptions,

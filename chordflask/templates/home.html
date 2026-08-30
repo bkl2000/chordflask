@@ -446,6 +446,159 @@
       tab-size: 4;
     }
 
+    .chord-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    #songViewSwitch {
+      display: inline-flex;
+      overflow: hidden;
+      border: 1px solid #69727d;
+      border-radius: 4px;
+      text-transform: none;
+    }
+
+    #songViewSwitch[hidden],
+    #songSheet[hidden] {
+      display: none;
+    }
+
+    #songViewSwitch button {
+      width: auto;
+      min-width: 42px;
+      height: 20px;
+      padding: 0 7px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--chord-muted);
+      font-size: 11px;
+      line-height: 20px;
+    }
+
+    #songViewSwitch button + button {
+      border-left: 1px solid #69727d;
+    }
+
+    #songViewSwitch button[aria-pressed="true"] {
+      background: #1767a8;
+      color: #fff;
+    }
+
+    #songViewSwitch button:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+
+    .chord-panel.song-view-active [data-grid-only] {
+      display: none !important;
+    }
+
+    #songSheet {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 12px 18px 28px;
+      color: #e8edf2;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: clamp(15px, 1.25vw, 20px);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      text-transform: none;
+    }
+
+    .song-sheet-title {
+      margin: 0 0 3px;
+      color: #fff;
+      font-size: 1.55em;
+      line-height: 1.15;
+    }
+
+    .song-sheet-artist,
+    .song-sheet-subtitle {
+      margin-bottom: 4px;
+      color: var(--chord-muted);
+    }
+
+    .song-sheet-meta {
+      display: flex;
+      gap: 14px;
+      margin: 10px 0 16px;
+      color: #cbd5df;
+      font-size: 0.82em;
+    }
+
+    .song-section-heading {
+      margin: 18px 0 7px;
+      color: #7fc4ff;
+      font-size: 0.82em;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .song-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      min-height: 1.5em;
+      margin-bottom: 3px;
+    }
+
+    .song-run {
+      display: inline-flex;
+      flex-direction: column;
+      min-width: 0.7em;
+      white-space: pre-wrap;
+    }
+
+    .song-chord {
+      min-height: 1.15em;
+      color: #7fc4ff;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.82em;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .song-lyric {
+      white-space: pre-wrap;
+    }
+
+    .song-blank {
+      height: 0.9em;
+    }
+
+    .song-comment {
+      margin: 8px 0;
+      color: #b9c4ce;
+      font-size: 0.88em;
+    }
+
+    .song-comment-italic {
+      font-style: italic;
+    }
+
+    .song-comment-box {
+      padding: 6px 8px;
+      border: 1px solid #69727d;
+      border-radius: 4px;
+    }
+
+    .song-sheet-message {
+      margin: 20px 0 10px;
+      color: var(--chord-muted);
+    }
+
+    .song-sheet-back {
+      width: auto;
+      height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
     .control-bar {
       background: rgba(247, 248, 250, 0.97);
       border-top: 1px solid var(--line);
@@ -1177,6 +1330,10 @@
     }
 
     @media (max-width: 800px) {
+      #songViewSwitch {
+        display: none;
+      }
+
       .workspace {
         grid-template-columns: 1fr;
         min-height: auto;
@@ -1528,11 +1685,17 @@
       <aside class="chord-panel">
         <div class="chord-header">
           <div class="chord-title-row">
-            <span>Chord Grid</span>
+            <span class="chord-title-group">
+              <span id="chordViewTitle">Grid</span>
+              <span id="songViewSwitch" role="group" aria-label="Chord panel view" hidden>
+                <button id="gridViewButton" type="button" aria-pressed="true">Grid</button>
+                <button id="songViewButton" type="button" aria-pressed="false">Song</button>
+              </span>
+            </span>
             <span id="fileStatus">No file loaded</span>
           </div>
           <div class="chord-tools-row">
-            <span class="track-selectors">
+            <span class="track-selectors" data-grid-only>
               <span class="track-field">
                 <span class="track-label" hidden>Chord</span>
                 <select id="chordTrackSelect" hidden onchange="switchTrack('chord')"
@@ -1544,7 +1707,7 @@
                         aria-label="Select rhythm analysis source"></select>
               </span>
             </span>
-            <span class="display-tools">
+            <span class="display-tools" data-grid-only>
               <span class="transpose-control">
                 <button type="button" onclick="stepSemitones(-1)" aria-label="Transpose down"
                         title="Transpose down one semitone">-</button>
@@ -1558,12 +1721,12 @@
                       title="Use flat chord names" aria-label="Use flat chord names">Flats ♭</button>
             </span>
             <span class="chord-actions">
-              <button id="editButton" type="button" title="Edit chords beat by beat"
+              <button id="editButton" data-grid-only type="button" title="Edit chords beat by beat"
                       aria-label="Edit chords" hidden disabled>Edit</button>
-              <button id="saveButton" type="button" title="Download current chords as Markdown, PDF, and ChordPro"
+              <button id="saveButton" data-grid-only type="button" title="Download current chords as Markdown, PDF, and ChordPro"
                       aria-label="Download chords as Markdown, PDF, and ChordPro" hidden disabled>Save</button>
               <span id="queueStatus"></span>
-              <button id="reanalyzeButton" type="button" title="Chordino/QM reanalysis of current file"
+              <button id="reanalyzeButton" data-grid-only type="button" title="Chordino/QM reanalysis of current file"
                       aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
               <button id="stemsButton" type="button" title="Toggle separated stem playback"
                       aria-label="Toggle separated stem playback" aria-pressed="false" hidden
@@ -1618,6 +1781,7 @@
         </div>
         <div id="callbackContainer">
           <pre id="callbackOutput"></pre>
+          <div id="songSheet" hidden></div>
           <div id="editGridContainer" hidden>
             <div id="editGrid"></div>
           </div>
@@ -1740,6 +1904,13 @@
     let semitonesInput = document.getElementById('semitones');
     let callbackOutput = document.getElementById('callbackOutput');
     let callbackContainer = document.getElementById('callbackContainer');
+    let chordPanel = document.querySelector('.chord-panel');
+    let chordViewTitle = document.getElementById('chordViewTitle');
+    let songViewSwitch = document.getElementById('songViewSwitch');
+    let gridViewButton = document.getElementById('gridViewButton');
+    let songViewButton = document.getElementById('songViewButton');
+    let songSheet = document.getElementById('songSheet');
+    let desktopSongView = window.matchMedia('(min-width: 801px)');
     let currentPositionLabel = document.getElementById('currentPosition');
     let storedDirsDropdown = document.getElementById('storedDirs');
     let fileTableBody = document.getElementById('fileTableBody');
@@ -1839,6 +2010,11 @@
     let reanalysisQueuedPath = null;
     let saveRequestInFlight = false;
     let trackRequestInFlight = false;
+    let songViewAvailable = false;
+    let songViewMode = 'grid';
+    let songSheetCache = null;
+    let songSheetRequestInFlight = false;
+    let songViewGeneration = 0;
 
     const STEM_NAMES = ['vocals', 'drums', 'bass', 'other'];
     const STEM_LABELS = {
@@ -1904,6 +2080,159 @@
         video.pause();
       }
       updatePlayPauseButton();
+    }
+
+    function updateSongViewControl() {
+      const usable = songViewAvailable && desktopSongView.matches;
+      songViewSwitch.hidden = !usable;
+      gridViewButton.setAttribute('aria-pressed', String(songViewMode === 'grid'));
+      songViewButton.setAttribute('aria-pressed', String(songViewMode === 'song'));
+      gridViewButton.disabled = editMode || editRequestInFlight;
+      songViewButton.disabled = editMode || editRequestInFlight || songSheetRequestInFlight;
+    }
+
+    function applySongViewMode() {
+      const showSong = songViewMode === 'song';
+      chordPanel.classList.toggle('song-view-active', showSong);
+      chordViewTitle.textContent = showSong ? 'Song' : 'Grid';
+      callbackOutput.hidden = showSong || editMode;
+      document.getElementById('editGridContainer').hidden = showSong || !editMode;
+      document.getElementById('editTools').hidden = showSong || !editMode;
+      songSheet.hidden = !showSong;
+      updateSongViewControl();
+    }
+
+    function resetSongView(available) {
+      songViewGeneration += 1;
+      songViewAvailable = available === true;
+      songViewMode = 'grid';
+      songSheetCache = null;
+      songSheetRequestInFlight = false;
+      songSheet.replaceChildren();
+      applySongViewMode();
+    }
+
+    function appendSongText(parent, className, text, tagName = 'div') {
+      const element = document.createElement(tagName);
+      element.className = className;
+      element.textContent = text;
+      parent.appendChild(element);
+      return element;
+    }
+
+    function renderSongSheet(song) {
+      const fragment = document.createDocumentFragment();
+      const metadata = song.metadata || {};
+      if (metadata.title) appendSongText(fragment, 'song-sheet-title', metadata.title);
+      if (metadata.artist) appendSongText(fragment, 'song-sheet-artist', metadata.artist);
+      if (metadata.subtitle) appendSongText(fragment, 'song-sheet-subtitle', metadata.subtitle);
+      if (metadata.key || metadata.capo) {
+        const meta = document.createElement('div');
+        meta.className = 'song-sheet-meta';
+        if (metadata.key) appendSongText(meta, 'song-sheet-key', `Key: ${metadata.key}`);
+        if (metadata.capo) appendSongText(meta, 'song-sheet-capo', `Capo: ${metadata.capo}`);
+        fragment.appendChild(meta);
+      }
+
+      (song.blocks || []).forEach(block => {
+        if (block.type === 'section_start') {
+          appendSongText(fragment, 'song-section-heading', block.heading || 'Section');
+          return;
+        }
+        if (block.type === 'section_end') return;
+        if (block.type === 'blank') {
+          appendSongText(fragment, 'song-blank', '');
+          return;
+        }
+        if (block.type === 'comment') {
+          appendSongText(
+            fragment,
+            `song-comment song-comment-${block.style || 'normal'}`,
+            block.text || ''
+          );
+          return;
+        }
+        if (block.type !== 'line') return;
+        const line = document.createElement('div');
+        line.className = 'song-line';
+        (block.runs || []).forEach(run => {
+          const runElement = document.createElement('span');
+          runElement.className = 'song-run';
+          appendSongText(runElement, 'song-chord', run.chord || '', 'span');
+          appendSongText(runElement, 'song-lyric', run.lyric || '', 'span');
+          line.appendChild(runElement);
+        });
+        fragment.appendChild(line);
+      });
+      songSheet.replaceChildren(fragment);
+    }
+
+    function renderSongError(message) {
+      songSheet.replaceChildren();
+      appendSongText(songSheet, 'song-sheet-message', message || 'Song sheet could not be read');
+      const backButton = document.createElement('button');
+      backButton.type = 'button';
+      backButton.className = 'song-sheet-back';
+      backButton.textContent = 'Back to Grid';
+      backButton.addEventListener('click', () => setSongViewMode('grid'));
+      songSheet.appendChild(backButton);
+    }
+
+    function loadSongSheet() {
+      if (songSheetCache) {
+        renderSongSheet(songSheetCache);
+        return;
+      }
+      if (songSheetRequestInFlight) return;
+      const generation = songViewGeneration;
+      songSheetRequestInFlight = true;
+      updateSongViewControl();
+      songSheet.replaceChildren();
+      appendSongText(songSheet, 'song-sheet-message', 'Loading Song sheet…');
+      fetch('/get_song_sheet', { headers: { 'Cache-Control': 'no-store' } })
+      .then(response => response.json().then(data => {
+        if (!response.ok) throw data;
+        return data;
+      }))
+      .then(data => {
+        if (generation !== songViewGeneration) return;
+        songSheetCache = data;
+        renderSongSheet(data);
+      })
+      .catch(error => {
+        if (generation !== songViewGeneration) return;
+        renderSongError(error.error || 'Song sheet could not be read');
+      })
+      .finally(() => {
+        if (generation !== songViewGeneration) return;
+        songSheetRequestInFlight = false;
+        updateSongViewControl();
+      });
+    }
+
+    function setSongViewMode(mode) {
+      if (mode === 'song') {
+        if (
+          !songViewAvailable || !desktopSongView.matches
+          || editMode || editRequestInFlight
+        ) return;
+        songViewMode = 'song';
+        applySongViewMode();
+        loadSongSheet();
+        return;
+      }
+      const returningToGrid = songViewMode === 'song';
+      songViewMode = 'grid';
+      applySongViewMode();
+      if (returningToGrid) syncPlaybackPosition(true);
+    }
+
+    function handleSongViewportChange() {
+      if (!desktopSongView.matches && songViewMode === 'song') {
+        setSongViewMode('grid');
+      } else {
+        updateSongViewControl();
+      }
     }
 
     function updateTrackSelectors(payload) {
@@ -3048,6 +3377,7 @@
         }
         exitEditMode();
         clearEditUndo();
+        resetSongView(data.song_view_available);
         semitonesInput.value = 0;
         localStorage.setItem(storageKeys.file, filename);
         callbackOutput.innerText = '';
@@ -3213,6 +3543,7 @@
         }
         exitEditMode();
         clearEditUndo();
+        resetSongView(data.song_view_available);
         loadedAnalysisValid = data.analysis_valid === true;
         semitonesInput.value = 0;
         updateTrackSelectors(data);
@@ -3246,6 +3577,7 @@
       undoEditButton.disabled = editRequestInFlight || !editUndoStack.length;
       resetEditButton.disabled = editRequestInFlight;
       updateSaveButton();
+      updateSongViewControl();
     }
 
     function updateSaveButton() {
@@ -3642,7 +3974,9 @@
         : fullOutput;
       if (callbackOutput.innerText !== displayOutput) {
         callbackOutput.innerText = displayOutput;
-        callbackContainer.scrollTop = 0;
+        if (songViewMode !== 'song') {
+          callbackContainer.scrollTop = 0;
+        }
       }
       if (editMode && dataDict.edit_grid) {
         renderEditGrid(dataDict.edit_grid);
@@ -3991,6 +4325,10 @@
       updateSortHeaders();
       setRepeatDisplay(repeatMode);
       setPreferFlats(preferFlats);
+      gridViewButton.addEventListener('click', () => setSongViewMode('grid'));
+      songViewButton.addEventListener('click', () => setSongViewMode('song'));
+      desktopSongView.addEventListener('change', handleSongViewportChange);
+      resetSongView(false);
       reanalyzeButton.addEventListener('click', reanalyzeCurrentFile);
       updateReanalyzeButton();
       editButton.addEventListener('click', toggleEditMode);

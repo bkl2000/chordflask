@@ -265,6 +265,35 @@ layout, and limitations.
    playing the file. Press **A** and **B** to mark a loop segment and **⟳** to
    repeat it.
 
+### Optional ChordPro Song view
+
+On desktop browsers, an analyzed media file can have a user-supplied,
+lyric-bearing ChordPro sidecar beside it. Give the sidecar the same stem and a
+lowercase `.cho` suffix:
+
+```text
+/music/Synthetic Song.mp3
+/music/Synthetic Song.cho
+```
+
+When the sidecar is present, the chord panel offers **Grid | Song**. **Grid**
+remains the default synchronized analyzed view. **Song** uses the same panel to
+show the external lyrics and chord markers as a manually scrollable sheet while
+the existing player and stem controls continue normally. Song view is available
+only in the desktop layout (browser width 801 px or greater); tablet and phone
+layouts stay in Grid.
+
+The `.cho` file belongs to the user. ChordFlask does not search for, download,
+or generate lyrics. Its Song content is separate from analyzed chord/rhythm
+tracks and is not changed by Grid transposition, track selection, accidental
+spelling, Unicode preference, or repeat-display mode. A missing, malformed,
+unreadable, or changed sidecar produces only a local Song error; normal Grid
+display and playback remain usable.
+
+This external Song sidecar is distinct from ChordFlask's generated ChordPro
+export, which is a lyric-free representation of an analyzed beat grid stored
+under `.chordflask` or included in a browser download.
+
 Responsive layouts for desktop, tablet and smartphone are included. Mobile
 support is functional but still undergoing broader real-device testing.
 

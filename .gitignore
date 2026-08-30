@@ -91,3 +91,7 @@ flask/vamp_plugins/**/*.tar.bz2
 # Personal/reference artifacts that stay local and are never published.
 demucs_audio/
 session.json
+
+# Local ChordPro song sidecars
+videos/**/*.cho
+videos/*.cho

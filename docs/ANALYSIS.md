@@ -207,6 +207,35 @@ differ:
 ~/.venvs/chordflask/bin/python scripts/metric_chords_diff.py path/to/chords.json
 ```
 
+## External ChordPro Song sheets
+
+A user may put an optional lyric-bearing ChordPro file beside ready media by
+replacing its final suffix with lowercase `.cho`:
+
+```text
+/music/Synthetic Song.mp4
+/music/Synthetic Song.cho
+```
+
+At browser widths of 801 px or greater, the chord panel then offers **Grid |
+Song** and starts in **Grid**. Song replaces the Grid content in that same
+scrollable panel; it has no lyric/beat synchronization and does not change the
+media player. ChordPro title, artist, subtitle, key, capo, common section
+directives, comments, lyrics, and inline chord markers are displayed as a
+readable text-only sheet.
+
+The sidecar is supplied and owned by the user. ChordFlask does not download or
+generate lyrics. It also does not import the sidecar into analysis: analyzed
+chord/rhythm track selection, Edited data, transpose, accidental spelling,
+Unicode preference, repeat-display mode, timing, and persistence remain
+independent. Invalid UTF-8, oversized, missing, malformed, or unreadable Song
+input fails locally without breaking Grid or playback.
+
+This input path differs from ChordFlask's existing ChordPro export. The export
+described below is generated from the analyzed beat grid, contains no lyrics,
+and is not imported back into analysis. An external same-stem Song sidecar is
+read only for desktop browser display.
+
 ## Saving a leadsheet
 
 The **Save** control downloads the exact active display as one ZIP containing

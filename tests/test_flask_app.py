@@ -16,6 +16,7 @@ from chordflask.analysis_queue import AnalysisQueue
 from chordflask.analysis_worker import AnalysisWorker
 from chordflask_base import ChordData
 from chordflask.app import CLIENT_COOKIE, FlaskMP4App
+from chordflask.chordpro_song import ChordProSongError, MAX_SONG_BYTES
 from chordflask.filerepr import FileRepr
 from chordflask.media_library import preferred_media_files
 
@@ -61,6 +62,22 @@ def activate_analyzed_media(app_wrapper, tmp_path, name="song.mp4"):
     chord_data.save_to_file(file_repr.get("json"))
     _state(app_wrapper).file_repr = file_repr
     return media
+
+
+def load_ready_media(client, tmp_path, name="song.mp4"):
+    media = tmp_path / name
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(
+        str(media), datapath=str(tmp_path / ".chordflask"), create=True
+    )
+    chord_data = ChordData()
+    chord_data.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+    chord_data.save_to_file(file_repr.get("json"))
+    response = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": name},
+    )
+    return media, response
 
 
 def test_index_route_renders():
@@ -1206,6 +1223,192 @@ def test_load_file_uses_existing_json_without_starting_analysis(tmp_path, monkey
     assert players[0][0].get() == str(media)
 
 
+def test_ready_media_without_song_sidecar_reports_unavailable(tmp_path):
+    _, client = make_client()
+
+    _, response = load_ready_media(client, tmp_path)
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "ready"
+    assert response.get_json()["song_view_available"] is False
+
+
+def test_song_sidecar_requires_lowercase_cho_regular_file(tmp_path):
+    _, client = make_client()
+    (tmp_path / "song.CHO").write_text("[C]Uppercase", encoding="utf-8")
+
+    _, response = load_ready_media(client, tmp_path)
+
+    assert response.get_json()["song_view_available"] is False
+
+
+def test_song_sidecar_is_derived_beside_resolved_media_target(tmp_path):
+    app_wrapper, client = make_client()
+    selected = tmp_path / "selected"
+    target = tmp_path / "target"
+    selected.mkdir()
+    target.mkdir()
+    media = target / "real.mp4"
+    media.write_bytes(b"not used")
+    (selected / "linked.mp4").symlink_to(media)
+    (selected / "linked.cho").write_text("Wrong location", encoding="utf-8")
+    (target / "real.cho").write_text("[C]Resolved", encoding="utf-8")
+    file_repr = FileRepr(
+        str(media), datapath=str(target / ".chordflask"), create=True
+    )
+    chord_data = ChordData()
+    chord_data.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+    chord_data.save_to_file(file_repr.get("json"))
+
+    response = client.post(
+        "/load_file",
+        json={"dirname": str(selected), "filename": "linked.mp4"},
+    )
+
+    assert response.get_json()["song_view_available"] is True
+    assert response.get_json()["mp4_file"] == str(media)
+    assert client.get("/get_song_sheet").get_json()["blocks"][0]["runs"] == [
+        {"chord": "C", "lyric": "Resolved"}
+    ]
+    assert _state(app_wrapper).file_repr.get() == str(media)
+
+
+@pytest.mark.parametrize("suffix", [".mp3", ".mp4", ".webm"])
+def test_ready_media_maps_supported_suffixes_to_same_stem_song(tmp_path, suffix):
+    _, client = make_client()
+    directory = tmp_path / suffix.removeprefix(".")
+    directory.mkdir()
+    sidecar = directory / "live.mix.cho"
+    sidecar.write_text("{title: Synthetic}\n[C]Hello", encoding="utf-8")
+
+    _, response = load_ready_media(client, directory, f"live.mix{suffix}")
+
+    assert response.status_code == 200
+    assert response.get_json()["song_view_available"] is True
+    song = client.get("/get_song_sheet")
+    assert song.status_code == 200
+    assert song.get_json()["metadata"]["title"] == "Synthetic"
+
+
+def test_song_sidecar_handles_spaces_unicode_and_multiple_dots(tmp_path):
+    _, client = make_client()
+    name = "Mý synthetic.song.v2.mp4"
+    (tmp_path / "Mý synthetic.song.v2.cho").write_text(
+        "[F♯]Héllo", encoding="utf-8"
+    )
+
+    _, response = load_ready_media(client, tmp_path, name)
+
+    assert response.get_json()["song_view_available"] is True
+    assert client.get("/get_song_sheet").get_json()["blocks"][0]["runs"] == [
+        {"chord": "F♯", "lyric": "Héllo"}
+    ]
+
+
+def test_song_endpoint_is_bound_to_active_media_and_revalidates_disappearance(tmp_path):
+    app_wrapper, client = make_client()
+    sidecar = tmp_path / "song.cho"
+    sidecar.write_text("[C]Safe", encoding="utf-8")
+    media, response = load_ready_media(client, tmp_path)
+    active_file_repr = _state(app_wrapper).file_repr
+    app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
+    queued = tmp_path / "queued.mp4"
+    queued.write_bytes(b"not used")
+
+    queued_response = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": queued.name},
+    )
+
+    assert response.get_json()["song_view_available"] is True
+    assert queued_response.get_json()["status"] == "queued"
+    assert _state(app_wrapper).file_repr is active_file_repr
+    assert _state(app_wrapper).file_repr.get() == str(media)
+    assert client.get("/get_song_sheet").status_code == 200
+    sidecar.unlink()
+    missing = client.get("/get_song_sheet")
+    assert missing.status_code == 404
+    assert missing.get_json() == {"error": "Song sheet is unavailable."}
+
+
+def test_song_endpoint_rejects_parameters_and_sidecar_symlink_escape(tmp_path):
+    _, client = make_client()
+    outside = tmp_path / "outside"
+    inside = tmp_path / "inside"
+    outside.mkdir()
+    inside.mkdir()
+    (outside / "secret.cho").write_text("Secret", encoding="utf-8")
+    (inside / "song.cho").symlink_to(outside / "secret.cho")
+
+    _, response = load_ready_media(client, inside)
+
+    assert response.get_json()["song_view_available"] is False
+    assert client.get("/get_song_sheet?path=../outside/secret.cho").status_code == 400
+    assert client.get("/get_song_sheet").status_code == 404
+
+
+def test_song_endpoint_requires_active_media():
+    _, client = make_client()
+
+    response = client.get("/get_song_sheet")
+
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "No active media file."}
+
+
+@pytest.mark.parametrize(
+    ("content", "status", "message"),
+    [
+        (b"", 422, "empty"),
+        (b"\xff", 422, "UTF-8"),
+        (b"x" * (MAX_SONG_BYTES + 1), 413, "too large"),
+    ],
+)
+def test_song_endpoint_returns_local_content_errors(tmp_path, content, status, message):
+    _, client = make_client()
+    (tmp_path / "song.cho").write_bytes(content)
+    _, response = load_ready_media(client, tmp_path)
+
+    assert response.get_json()["song_view_available"] is True
+    song = client.get("/get_song_sheet")
+    assert song.status_code == status
+    assert message in song.get_json()["error"]
+    assert str(tmp_path) not in song.get_data(as_text=True)
+
+
+def test_song_endpoint_read_failure_is_non_sensitive(tmp_path, monkeypatch):
+    _, client = make_client()
+    (tmp_path / "song.cho").write_text("Synthetic", encoding="utf-8")
+    load_ready_media(client, tmp_path)
+
+    def fail_read(path):
+        raise ChordProSongError("Song sheet could not be read")
+
+    monkeypatch.setattr(chordflask, "read_chordpro", fail_read)
+    response = client.get("/get_song_sheet")
+
+    assert response.status_code == 422
+    assert response.get_json() == {"error": "Song sheet could not be read"}
+
+
+def test_song_endpoint_returns_hostile_content_only_as_structured_text(tmp_path):
+    _, client = make_client()
+    hostile = "<script>alert(1)</script><img src=x onerror=alert(2)>"
+    (tmp_path / "song.cho").write_text(
+        f"{{title: {hostile}}}\n[{hostile}]{hostile}\n{{comment: {hostile}}}",
+        encoding="utf-8",
+    )
+    load_ready_media(client, tmp_path)
+
+    response = client.get("/get_song_sheet")
+    payload = response.get_json()
+
+    assert response.content_type == "application/json"
+    assert payload["metadata"]["title"] == hostile
+    assert payload["blocks"][0]["runs"] == [{"chord": hostile, "lyric": hostile}]
+    assert payload["blocks"][1]["text"] == hostile
+
+
 def test_load_file_reads_legacy_analysis_directory(tmp_path, monkeypatch):
     app_wrapper, client = make_client()
     media = tmp_path / "song.mp4"
@@ -2145,6 +2348,101 @@ def test_chord_grid_stays_plain_text_with_one_container_reference():
         if "callbackContainer" in line and "getElementById" in line
     ]
     assert len(declarations) == 1
+
+
+def test_song_view_uses_existing_chord_area_and_desktop_only_switch():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    callback = body[body.index('<div id="callbackContainer">'):body.index('</aside>')]
+    narrow_rule = body[
+        body.index("@media (max-width: 800px)"):
+        body.index("@media (max-width: 640px)")
+    ]
+
+    assert '<span id="songViewSwitch"' in body
+    assert '<button id="gridViewButton"' in body
+    assert '<button id="songViewButton"' in body
+    assert '<div id="songSheet" hidden></div>' in callback
+    assert body.index('<div id="songSheet" hidden></div>') < body.index('</aside>')
+    assert "#songViewSwitch" in narrow_rule
+    assert "display: none" in narrow_rule
+    assert "window.matchMedia('(min-width: 801px)')" in body
+    assert "if (!desktopSongView.matches && songViewMode === 'song')" in body
+    assert "setSongViewMode('grid')" in javascript_function(body, "handleSongViewportChange")
+    assert 'class="track-selectors" data-grid-only' in body
+    assert 'class="display-tools" data-grid-only' in body
+    assert 'id="editButton" data-grid-only' in body
+    assert 'id="saveButton" data-grid-only' in body
+    assert 'id="reanalyzeButton" data-grid-only' in body
+    assert 'id="stemsButton" data-grid-only' not in body
+
+
+def test_song_renderer_uses_text_only_dom_construction_for_untrusted_data():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    renderer = javascript_function(body, "renderSongSheet")
+    text_helper = javascript_function(body, "appendSongText")
+    error_renderer = javascript_function(body, "renderSongError")
+
+    assert "document.createElement" in renderer
+    assert ".textContent = text" in text_helper
+    assert "textContent = 'Back to Grid'" in error_renderer
+    for unsafe_api in ("innerHTML", "insertAdjacentHTML", "outerHTML"):
+        assert unsafe_api not in renderer
+        assert unsafe_api not in text_helper
+        assert unsafe_api not in error_renderer
+
+
+def test_song_mode_switch_isolated_from_player_and_grid_display_state():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    switcher = javascript_function(body, "setSongViewMode")
+    resetter = javascript_function(body, "resetSongView")
+
+    assert "editMode" in switcher
+    assert "editRequestInFlight" in switcher
+    assert "syncPlaybackPosition(true)" in switcher
+    assert "songViewMode = 'grid'" in resetter
+    assert "songSheetCache = null" in resetter
+    for forbidden in (
+        "video.currentTime", "video.pause", "video.load", "video.src",
+        "toggleStems", "switchTrack", "update_semitones",
+        "update_display_options", "update_analysis_tracks",
+    ):
+        assert forbidden not in switcher
+        assert forbidden not in resetter
+
+
+def test_position_updates_preserve_song_dom_and_scroll():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    renderer = javascript_function(body, "renderCallbackData")
+
+    assert "callbackOutput.innerText = displayOutput" in renderer
+    assert "if (songViewMode !== 'song')" in renderer
+    assert "callbackContainer.scrollTop = 0" in renderer
+    assert "songSheet" not in renderer
+
+
+def test_song_view_fetches_once_after_activation_and_keeps_failures_retryable():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    loader = javascript_function(body, "loadSongSheet")
+    activation = javascript_function(body, "processNextLoadIntent")
+
+    assert "if (songSheetCache)" in loader
+    assert "fetch('/get_song_sheet'" in loader
+    assert "songSheetCache = data" in loader
+    assert "songSheetCache = null" not in loader
+    assert "resetSongView(data.song_view_available)" in activation
+    assert activation.index("data.status === 'queued'") < activation.index(
+        "resetSongView(data.song_view_available)"
+    )
 
 
 def test_chord_grid_mode_is_viewport_selected_without_changing_mobile_reflow():
