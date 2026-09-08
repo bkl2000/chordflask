@@ -14,16 +14,16 @@ set -euo pipefail
 #   checkpoint: chordflask_btc/model/btc_model_large_voca.pt  (git-ignored, 12,229,576 B)
 #   pin:        chordflask_btc/model/checkpoint.sha256        (tracked expected SHA-256)
 #
-# PyTorch 2.6.0 (cu124) is installed to match an NVIDIA driver reporting
-# CUDA 12.4; inference falls back to CPU automatically when CUDA is unavailable.
+# PyTorch 2.10.0 (cu128) is shared across Python 3.12–3.14 runtimes;
+# inference falls back to CPU automatically when CUDA is unavailable.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BTC_DIR="${CHORDFLASK_BTC_DIR:-${ROOT_DIR}/chordflask_btc/model}"
 VENV_DIR="${CHORDFLASK_BTC_VENV:-${HOME}/.venvs/chordflask-btc}"
 PYTHON_BIN="${CHORDFLASK_BTC_PYTHON:-python3}"
 
-TORCH_VERSION="2.6.0"
-TORCH_INDEX_URL="https://download.pytorch.org/whl/cu124"
+TORCH_VERSION="2.10.0"
+TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
 CHECKPOINT_NAME="btc_model_large_voca.pt"
 CHECKPOINT_SIZE=12229576
 CHECKPOINT_URL="https://raw.githubusercontent.com/benasterisk/stemtube-desktop-app/main/external/BTC-ISMIR19/test/btc_model_large_voca.pt"
@@ -42,6 +42,18 @@ echo "  checkpoint: ${CHECKPOINT}"
 
 # ── 1. Python virtual environment ────────────────────────────────────
 
+# An existing venv retains its interpreter regardless of PYTHON_BIN.
+RUNTIME_PYTHON="$PYTHON_BIN"
+if [[ -x "${VENV_DIR}/bin/python" ]]; then
+    RUNTIME_PYTHON="${VENV_DIR}/bin/python"
+fi
+"$RUNTIME_PYTHON" - <<'PY' || fail "BTC Python preflight failed. Set CHORDFLASK_BTC_PYTHON to Python 3.12, 3.13, or 3.14; for an existing unsupported venv, select a new CHORDFLASK_BTC_VENV path."
+import sys
+
+if not (3, 12) <= sys.version_info[:2] <= (3, 14):
+    sys.exit("BTC requires Python 3.12, 3.13, or 3.14; found {}.{}.".format(*sys.version_info[:2]))
+PY
+
 if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
     info "Creating BTC virtual environment at ${VENV_DIR}"
     "$PYTHON_BIN" -m venv "$VENV_DIR" || \
@@ -50,13 +62,13 @@ else
     info "BTC venv already present"
 fi
 
-# ── 2. PyTorch 2.6.0 (cu124) ─────────────────────────────────────────
+# ── 2. PyTorch 2.10.0 (cu128) ─────────────────────────────────────────
 
 if "${VENV_DIR}/bin/python" -c "import torch" >/dev/null 2>&1 && \
     [[ "$("${VENV_DIR}/bin/python" -c "import torch; print(torch.__version__)" 2>/dev/null)" == "${TORCH_VERSION}"* ]]; then
     info "PyTorch ${TORCH_VERSION} already installed"
 else
-    info "Installing PyTorch ${TORCH_VERSION} (cu124)"
+    info "Installing PyTorch ${TORCH_VERSION} (cu128)"
     "${VENV_DIR}/bin/pip" install --quiet --upgrade pip
     "${VENV_DIR}/bin/pip" install --quiet "torch==${TORCH_VERSION}" --index-url "${TORCH_INDEX_URL}" || \
         fail "Could not install torch ${TORCH_VERSION} from ${TORCH_INDEX_URL}"

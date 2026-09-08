@@ -54,6 +54,40 @@ in `~/.cache/chordflask-demucs` (or `CHORDFLASK_DEMUCS_CACHE`) and are never
 part of the repository or a standalone bundle. The pinned `htdemucs` model is
 downloaded by Demucs on the first real processing run.
 
+## Runtime compatibility
+
+Setup uses one dependency set across the target Linux x86_64 systems:
+
+| Distribution | Python |
+| --- | --- |
+| Linux Mint 22.x | 3.12 |
+| Ubuntu 24.04 | 3.12 |
+| Debian 13 | 3.13 |
+| Ubuntu/Xubuntu 26.04 | 3.14 |
+
+The isolated runtime pins `demucs==4.0.1`, `torch==2.10.0`,
+`torchaudio==2.10.0`, and `torchcodec==0.10.0`. Torch and torchaudio use
+`https://download.pytorch.org/whl/cu128` by default. TorchCodec supplies the
+audio-saving backend required by torchaudio 2.10.
+
+Setup defaults to `python3`; set `CHORDFLASK_DEMUCS_PYTHON` to select another
+interpreter. Python 3.12, 3.13, and 3.14 are accepted; other versions fail
+before venv creation or package installation with override guidance. An
+existing venv is checked using its own Python. If that interpreter is outside
+the supported range, choose a new `CHORDFLASK_DEMUCS_VENV` path and a supported
+Python. Existing supported venvs with torch/torchaudio 2.6 upgrade in place
+when setup is rerun; no manual deletion is needed.
+
+The maintainer manually verified this dependency set on Xubuntu 26.04,
+Python 3.14.4, and an RTX 5070 Laptop: installation completed without dependency
+conflicts, torchaudio imported, the Demucs help command worked, and a real
+20-second `htdemucs` CUDA separation completed with TorchCodec installed.
+Warnings about `encoding` and `bits_per_sample` not being fully/directly
+supported by TorchCodec remained but did not prevent that run from completing.
+This does not establish end-to-end validation across every target system.
+CUDA requires a compatible GPU and driver; automatic CPU fallback and model
+download on first processing remain unchanged.
+
 ## Batch command
 
 The command accepts one file or one non-recursive directory:

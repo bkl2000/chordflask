@@ -191,7 +191,10 @@ scripts/chordflask-analyze --analyzer btc song.mp4
 
 Chordino and BTC are stored as separate tracks; switch between them with the
 track selector next to the chord grid. BTC never replaces Chordino and is not
-part of the portable bundle.
+part of the portable bundle. Its separate runtime supports Python 3.12–3.14
+and uses PyTorch 2.10.0 with CUDA 12.8 wheels (with automatic CPU fallback).
+See [BTC runtime compatibility](chordflask_btc/model/README.md#runtime-compatibility)
+for interpreter overrides and existing-venv upgrades.
 
 ### Optional Demucs stems / karaoke & practice
 

@@ -47,6 +47,24 @@ To add support for a new Python version:
 5. Optionally add a version-specific constraints file when the combination has
    been reviewed across a full clean setup.
 
+## Optional BTC Runtime
+
+BTC has a separate Python 3.12–3.14 policy and uses one PyTorch 2.10.0/cu128
+setup across Mint 22.x, Ubuntu 24.04, Debian 13, and Ubuntu/Xubuntu 26.04.
+Setup rejects unsupported Python versions before installing packages, including
+when reusing an existing venv. See the [BTC runtime matrix and validation
+record](../chordflask_btc/model/README.md#runtime-compatibility). This does not
+change the core Python validation policy above.
+
+## Optional Demucs Runtime
+
+Demucs uses the same separate Python 3.12–3.14 policy as BTC, with one setup
+across Mint 22.x, Ubuntu 24.04, Debian 13, and Ubuntu/Xubuntu 26.04. It pins
+Demucs 4.0.1, Torch and torchaudio 2.10.0 (cu128), and TorchCodec 0.10.0 for
+audio saving. See the [Demucs runtime matrix and validation
+record](DEMUCS.md#runtime-compatibility) for interpreter overrides, existing-venv
+upgrades, and remaining warnings. Core runtime dependencies are unchanged.
+
 ## System FFmpeg
 
 ChordFlask requires a system `ffmpeg` on `PATH`. At startup, `ffmpeg_runtime.py`
