@@ -2714,3 +2714,26 @@ def test_desktop_chord_light_theme_is_optional_and_panel_scoped():
     assert "readPreference(themeKey) === 'light' ? 'light' : 'dark'" in script
     assert "panel.classList.toggle('chord-light', desktop.matches && themeSelect.value === 'light')" in script
     assert 'savePreference(themeKey, themeSelect.value)' in script
+
+
+
+def test_desktop_outer_spacing_and_file_height_are_scoped():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    desktop = body.split("@media (min-width: 1024px) {")[1].split(
+        "@media (min-width: 801px) and (min-height: 600px)")[0]
+    assert "width: min(1800px, calc(100% - 48px))" in desktop
+    assert "padding: 16px 0 12px" in desktop
+    height_rule = body.split(
+        "@media (min-width: 1024px) and (min-height: 600px) {")[1].split(
+        "@media (min-width: 801px) and (max-height: 599px)")[0]
+    assert "grid-template-rows: minmax(0, 1fr) auto auto" in height_rule
+    assert "max-height: clamp(152px, 28vh, 360px)" in height_rule
+    assert "max-height: clamp(152px, 28dvh, 360px)" in height_rule
+    # Smaller screens retain their original spacing, file cap, and overrides.
+    assert "padding: 8px 0 0" in body
+    assert "width: min(1500px, calc(100vw - 32px))" in body
+    assert "max-height: clamp(152px, 22vh, 260px)" in body
+    tablet = body.split("@media (min-width: 801px) and (max-width: 1023px)")[1].split("@media")[0]
+    assert "minmax(0, 9fr) minmax(0, 11fr)" in tablet
+    assert "#callbackContainer {" in body and "overflow: auto" in body

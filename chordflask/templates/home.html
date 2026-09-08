@@ -1290,6 +1290,15 @@
 
     /* The 801–1023px tablet layout retains its existing ratio and controls. */
     @media (min-width: 1024px) {
+      .app,
+      .control-bar .controls {
+        width: min(1800px, calc(100% - 48px));
+      }
+
+      .app {
+        padding: 16px 0 12px;
+      }
+
       .workspace {
         grid-template-columns: minmax(0, var(--video-share, 55fr)) 14px minmax(0, var(--chord-share, 45fr));
         gap: 0;
@@ -1406,6 +1415,18 @@
 
       #callbackOutput {
         font-size: clamp(9px, min(2.75cqw, 3.9cqh), 21px);
+      }
+    }
+
+    @media (min-width: 1024px) and (min-height: 600px) {
+      /* Reserve more room for files; the workspace flexes into what remains. */
+      body {
+        grid-template-rows: minmax(0, 1fr) auto auto;
+      }
+
+      .file-table-wrap {
+        max-height: clamp(152px, 28vh, 360px);
+        max-height: clamp(152px, 28dvh, 360px);
       }
     }
 
