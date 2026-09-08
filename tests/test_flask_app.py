@@ -2665,3 +2665,52 @@ def test_transpose_control_has_single_plus_minus_pair():
     assert "#semitones::-webkit-inner-spin-button" in body
     assert "-moz-appearance: textfield" in body
     assert "appearance: textfield" in body
+
+
+def test_desktop_panel_split_preserves_default_and_small_screen_layouts():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    desktop = body[body.index('@media (min-width: 1024px)'):body.index(
+        '@media (min-width: 801px) and (min-height: 600px)')]
+    assert 'id="desktopSplitter" role="separator" tabindex="0"' in body
+    assert 'aria-valuemin="35" aria-valuemax="70" aria-valuenow="55"' in body
+    assert 'var(--video-share, 55fr)) 14px minmax(0, var(--chord-share, 45fr))' in desktop
+    assert 'gap: 0' in desktop
+    assert '#desktopSplitter,\n    #chordThemeSelect {\n      display: none;' in body
+    assert 'minmax(0, 9fr) minmax(0, 11fr)' in body
+    assert 'object-fit: contain' in body
+    script = body.split('<script id="desktopPanelPreferences">')[1].split('</script>')[0]
+    assert "matchMedia('(min-width: 1024px)')" in script
+    assert "!desktop.matches || event.pointerType !== 'mouse' || event.button !== 0" in script
+    assert 'setPointerCapture' in script
+    assert "'pointercancel', endDrag" in script
+    assert "'lostpointercapture', endDrag" in script
+    assert 'Number.isFinite(number) ? Math.min(70, Math.max(35, number)) : defaultSplit' in script
+    assert "value.trim() !== ''" in script
+    assert 'const defaultSplit = 55' in script
+    assert 'catch { return null; }' in script
+    assert 'savePreference(splitKey, split)' in script
+    for forbidden in ('fetch(', 'video.', 'videoPlayer.', 'syncPlaybackPosition(', 'renderCallbackData('):
+        assert forbidden not in script
+
+
+def test_desktop_chord_light_theme_is_optional_and_panel_scoped():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    panel = body.split('<aside class="chord-panel" id="desktopChordPanel">')[1].split('</aside>')[0]
+    assert '<option value="dark" selected>Dark</option>' in panel
+    for control in ('chordThemeSelect', 'chordTrackSelect', 'rhythmTrackSelect',
+                    'semitones', 'editButton', 'saveButton', 'repeatDisplayButton'):
+        assert f'id="{control}"' in panel
+    desktop = body[body.index('@media (min-width: 1024px)'):body.index(
+        '@media (min-width: 801px) and (min-height: 600px)')]
+    assert '.chord-panel.chord-light:not(.song-view-active)' in desktop
+    assert '--chord-bg: #fff' in desktop
+    assert '--chord-text: #20242a' in desktop
+    assert '.edit-cell.active' in desktop
+    assert '.edit-cell.repeat' in desktop
+    assert 'filter:' not in desktop
+    script = body.split('<script id="desktopPanelPreferences">')[1].split('</script>')[0]
+    assert "readPreference(themeKey) === 'light' ? 'light' : 'dark'" in script
+    assert "panel.classList.toggle('chord-light', desktop.matches && themeSelect.value === 'light')" in script
+    assert 'savePreference(themeKey, themeSelect.value)' in script

@@ -1283,6 +1283,96 @@
       padding: 0 10px;
     }
 
+    #desktopSplitter,
+    #chordThemeSelect {
+      display: none;
+    }
+
+    /* The 801–1023px tablet layout retains its existing ratio and controls. */
+    @media (min-width: 1024px) {
+      .workspace {
+        grid-template-columns: minmax(0, var(--video-share, 55fr)) 14px minmax(0, var(--chord-share, 45fr));
+        gap: 0;
+      }
+
+      #desktopSplitter {
+        display: block;
+        cursor: col-resize;
+        border-radius: 4px;
+        background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat;
+      }
+
+      #desktopSplitter:hover,
+      #desktopSplitter:focus-visible,
+      .workspace.split-dragging #desktopSplitter {
+        background-color: #1767a822;
+        outline: 1px solid var(--accent);
+      }
+
+      .workspace.split-dragging {
+        user-select: none;
+        cursor: col-resize;
+      }
+
+      #chordThemeSelect {
+        display: inline-block;
+        flex: 0 0 auto;
+        width: auto;
+        height: 22px;
+        padding: 0 3px;
+        border: 1px solid #69727d;
+        border-radius: 3px;
+        background: var(--chord-bg);
+        color: var(--chord-muted);
+        font-size: 12px;
+      }
+
+      .chord-panel.chord-light:not(.song-view-active) {
+        --chord-bg: #fff;
+        --chord-text: #20242a;
+        --chord-muted: #52606d;
+        color-scheme: light;
+        border-color: #cfd6de;
+      }
+
+      .chord-light:not(.song-view-active) .chord-header,
+      .chord-light:not(.song-view-active) #editTools {
+        border-color: #cfd6de;
+      }
+
+      .chord-light:not(.song-view-active) #queueStatus {
+        color: #805900;
+      }
+
+      .chord-light:not(.song-view-active) .track-selectors select,
+      .chord-light:not(.song-view-active) #semitones,
+      .chord-light:not(.song-view-active) .edit-cell {
+        background: #f0f3f6;
+        color: #20242a;
+        border-color: #a5b1bd;
+      }
+
+      .chord-light:not(.song-view-active) .edit-cell:hover {
+        background: #dceefb;
+        border-color: #1767a8;
+      }
+
+      .chord-light:not(.song-view-active) .edit-cell.repeat {
+        color: #52606d;
+      }
+
+      .chord-light:not(.song-view-active) .edit-cell.active {
+        background: #1767a8;
+        border-color: #0f4f82;
+        color: #fff;
+      }
+
+      .chord-light:not(.song-view-active) .edit-cell.empty {
+        background: transparent;
+        border-color: transparent;
+      }
+    }
+
     @media (min-width: 801px) and (min-height: 600px) {
       body {
         height: 100vh;
@@ -1669,7 +1759,7 @@
     </header>
 
     <section class="workspace">
-      <div class="video-panel">
+      <div class="video-panel" id="desktopVideoPanel">
         <video id="videoPlayer" controls>
           Your browser does not support the video tag.
         </video>
@@ -1682,7 +1772,11 @@
         </div>
       </div>
 
-      <aside class="chord-panel">
+      <div id="desktopSplitter" role="separator" tabindex="0"
+           aria-label="Resize video and chord panels" aria-orientation="vertical"
+           aria-controls="desktopVideoPanel desktopChordPanel"
+           aria-valuemin="35" aria-valuemax="70" aria-valuenow="55"></div>
+      <aside class="chord-panel" id="desktopChordPanel">
         <div class="chord-header">
           <div class="chord-title-row">
             <span class="chord-title-group">
@@ -1692,6 +1786,10 @@
                 <button id="songViewButton" type="button" aria-pressed="false">Song</button>
               </span>
             </span>
+            <select id="chordThemeSelect" aria-label="Chord panel theme" data-grid-only>
+              <option value="dark" selected>Dark</option>
+              <option value="light">Light</option>
+            </select>
             <span id="fileStatus">No file loaded</span>
           </div>
           <div class="chord-tools-row">
@@ -1893,6 +1991,95 @@
       <button id="editApplyButton" type="button">Apply</button>
     </div>
   </dialog>
+
+  <script id="desktopPanelPreferences">
+    (() => {
+      const desktop = window.matchMedia('(min-width: 1024px)');
+      const workspace = document.querySelector('.workspace');
+      const splitter = document.getElementById('desktopSplitter');
+      const panel = document.getElementById('desktopChordPanel');
+      const themeSelect = document.getElementById('chordThemeSelect');
+      const splitKey = 'chordflask.desktopSplit';
+      const themeKey = 'chordflask.chordTheme';
+      const defaultSplit = 55;
+      let dragPointer = null;
+      let dragOffset = 0;
+
+      function readPreference(key) {
+        try { return localStorage.getItem(key); } catch { return null; }
+      }
+
+      function savePreference(key, value) {
+        try { localStorage.setItem(key, String(value)); } catch { /* Optional preference. */ }
+      }
+
+      function clampSplit(value) {
+        const number = typeof value === 'string' && value.trim() !== ''
+          ? Number(value) : typeof value === 'number' ? value : NaN;
+        return Number.isFinite(number) ? Math.min(70, Math.max(35, number)) : defaultSplit;
+      }
+
+      let split = clampSplit(readPreference(splitKey));
+      themeSelect.value = readPreference(themeKey) === 'light' ? 'light' : 'dark';
+
+      function applyPreferences() {
+        // Only CSS layout and panel colors change; player/grid state is untouched.
+        workspace.style.setProperty('--video-share', `${split}fr`);
+        workspace.style.setProperty('--chord-share', `${100 - split}fr`);
+        splitter.setAttribute('aria-valuenow', String(Math.round(split)));
+        panel.classList.toggle('chord-light', desktop.matches && themeSelect.value === 'light');
+      }
+
+      function endDrag() {
+        if (dragPointer === null) return;
+        const pointer = dragPointer;
+        dragPointer = null;
+        workspace.classList.remove('split-dragging');
+        if (splitter.hasPointerCapture(pointer)) splitter.releasePointerCapture(pointer);
+        savePreference(splitKey, split);
+      }
+
+      splitter.addEventListener('pointerdown', event => {
+        if (!desktop.matches || event.pointerType !== 'mouse' || event.button !== 0) return;
+        event.preventDefault();
+        dragOffset = event.clientX - splitter.getBoundingClientRect().left;
+        dragPointer = event.pointerId;
+        splitter.setPointerCapture(dragPointer);
+        workspace.classList.add('split-dragging');
+      });
+      splitter.addEventListener('pointermove', event => {
+        if (!desktop.matches || event.pointerId !== dragPointer) return;
+        const bounds = workspace.getBoundingClientRect();
+        const available = bounds.width - splitter.getBoundingClientRect().width;
+        if (available <= 0) return;
+        split = clampSplit(100 * (event.clientX - bounds.left - dragOffset) / available);
+        applyPreferences();
+      });
+      splitter.addEventListener('pointerup', endDrag);
+      splitter.addEventListener('pointercancel', endDrag);
+      splitter.addEventListener('lostpointercapture', endDrag);
+      window.addEventListener('blur', endDrag);
+      splitter.addEventListener('keydown', event => {
+        if (!desktop.matches) return;
+        const values = { ArrowLeft: split - 2, ArrowRight: split + 2, Home: 35, End: 70 };
+        if (!(event.key in values)) return;
+        event.preventDefault();
+        split = clampSplit(values[event.key]);
+        applyPreferences();
+        savePreference(splitKey, split);
+      });
+      desktop.addEventListener('change', () => {
+        endDrag();
+        applyPreferences();
+      });
+      themeSelect.addEventListener('change', () => {
+        if (!desktop.matches) return;
+        applyPreferences();
+        savePreference(themeKey, themeSelect.value);
+      });
+      applyPreferences();
+    })();
+  </script>
 
   <script>
     let dirnameInput = document.getElementById('dirname');

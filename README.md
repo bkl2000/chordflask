@@ -294,6 +294,11 @@ This external Song sidecar is distinct from ChordFlask's generated ChordPro
 export, which is a lyric-free representation of an analyzed beat grid stored
 under `.chordflask` or included in a browser download.
 
+On desktops (1024 px and wider), drag the divider between video and chords
+to resize the panels, or focus it and use the arrow keys. Choose Dark or Light
+in the chord-grid header to change only that panel’s theme. Both preferences
+are remembered in this browser; tablet and phone layouts remain unchanged.
+
 Responsive layouts for desktop, tablet and smartphone are included. Mobile
 support is functional but still undergoing broader real-device testing.
 
