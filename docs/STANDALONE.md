@@ -49,7 +49,7 @@ cd chordflask-debian13-x86_64-py3.12-vX.Y.Z
 
 Open <http://localhost:5000>. Stop ChordFlask with `Ctrl+C`.
 
-The standalone includes the same persistent worker and **Queue next** batch
+The standalone includes the same persistent worker and **Analyze** batch
 control as the source run. Its default batch size is 50 (configurable from 1 to
 500), and interrupted queue work is retried after the launcher restarts.
 
@@ -74,7 +74,7 @@ The bundle contains only the small, dependency-free `chordflask_demucs`
 producer — no Torch, torchaudio, torchcodec, third-party `demucs`, or model
 weights. If the external Demucs runtime (`~/.venvs/chordflask-demucs`, created
 with `make setup-demucs` from a source checkout) exists and is usable, the
-desktop player (1024 px and wider) shows a compact **PREPARE** control for the
+desktop player (1024 px and wider) shows a compact **Prepare** control for the
 loaded song. CUDA is used when available and CPU otherwise, exactly like the
 CLI. Preparation runs in the background without interrupting playback. Without
 that external runtime

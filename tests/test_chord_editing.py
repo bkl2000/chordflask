@@ -1248,7 +1248,7 @@ def test_index_contains_chord_editing_controls():
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="editButton"' in body
-    assert 'aria-label="Edit chords"' in body
+    assert 'aria-label="Edit detected chords"' in body
     assert 'id="editGridContainer" hidden' in body
     assert 'id="editGrid"' in body
     assert 'id="editTools" hidden' in body

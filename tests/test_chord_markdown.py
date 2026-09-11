@@ -689,7 +689,7 @@ def test_index_contains_save_control_and_download_contract():
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="saveButton"' in body
-    assert 'aria-label="Download chords as Markdown, PDF, and ChordPro"' in body
+    assert 'aria-label="Download the current chord sheet (Markdown, PDF, ChordPro)"' in body
     assert "'chords.zip'" in body
     assert "#saveButton" in body
     assert "fetch('/download_chords'" in body

@@ -56,7 +56,7 @@ make plugins
 scripts/chordflask
 ```
 
-Open <http://localhost:5000> and use **Browse** to select a directory with
+Open <http://localhost:5000> and use **Roots** to select a directory with
 MP3, MP4, or WebM files. Stop ChordFlask with `Ctrl+C` in the terminal.
 
 The Make targets use `~/.venvs/chordflask` automatically; you do not need to
@@ -239,7 +239,7 @@ another device over the LAN.
 
 Demucs preparation is **not** run automatically by the player. You can either
 run the preparation command once for a music directory, or — on desktop
-(1024 px and wider) only — use the compact **PREPARE** control in the STEMS area
+(1024 px and wider) only — use the compact **Prepare** control in the STEMS area
 when the external runtime is usable and the current song has no stem set. The
 generated FLAC stems stay beside that collection under `.chordflask/` and are
 registered as one
@@ -259,14 +259,14 @@ layout, and limitations.
 
 ### First use
 
-1. Select **Browse** and navigate to a directory containing MP3, MP4, or WebM
+1. Select **Roots** and navigate to a directory containing MP3, MP4, or WebM
    files. You can still enter an absolute path directly.
 2. Select a file from the list. MP3 files use the compact audio player; videos
    use the video player.
 3. ChordFlask queues missing analysis automatically. The status above the chord
    grid shows whether analysis is running, waiting, or failed.
 4. To prepare several files, set **Next** to the desired batch size (50 by
-   default) and select **Queue next**. Each click adds that many new,
+   default) and select **Analyze**. Each click adds that many new,
    unanalysed files from the currently filtered and sorted list; files already
    analysed or queued do not consume the limit.
 5. Use **Previous**, **Next**, **Repeat**, **Auto**, and **Transpose** while

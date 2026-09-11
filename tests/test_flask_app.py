@@ -427,8 +427,8 @@ def test_index_contains_small_accessible_reanalysis_control():
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="reanalyzeButton"' in body
-    assert 'title="Chordino/QM reanalysis of current file"' in body
-    assert 'aria-label="Reanalyze with Chordino and QM"' in body
+    assert 'title="Refresh the automatic Chordino/QM analysis for this file"' in body
+    assert 'aria-label="Refresh the Chordino/QM analysis"' in body
     assert "hidden disabled>↻</button>" in body
     assert "#reanalyzeButton" in body
     assert "width: 22px" in body
@@ -540,13 +540,13 @@ def test_index_contains_four_stem_toggles_initialized_on():
         assert f'class="stem-chip stem-on" id="stem{name}Chip"' in body
         assert f'id="stem{name}Button"' in body
         assert f'onclick="toggleStem(\'{stem}\')"' in body
-        assert f'aria-label="Mute/unmute {stem}"' in body
-        assert f'title="Mute/unmute {stem}"' in body
+        assert f'aria-label="Mute or unmute {stem}"' in body
+        assert f'title="Mute or unmute {stem}"' in body
         assert f'>{short_labels[stem]}</button>' in body
         assert f'id="stem{name}Level"' in body
         assert f'onclick="openStemMixer(\'{stem}\')"' in body
-        assert f'aria-label="Set {stem} volume"' in body
-        assert f'title="Set {stem} volume"' in body
+        assert f'aria-label="Adjust {stem} volume"' in body
+        assert f'title="Adjust {stem} volume"' in body
 
 
 def test_index_contains_first_use_labels_and_tooltips():
@@ -555,7 +555,7 @@ def test_index_contains_first_use_labels_and_tooltips():
     body = client.get("/").get_data(as_text=True)
 
     # File drawer controls.
-    assert 'title="Show configured media roots"' in body
+    assert 'title="Choose a configured media root"' in body
     assert '>Roots</button>' in body
     assert 'title="Load the directory entered above"' in body
     assert '>Load</button>' in body
@@ -580,9 +580,9 @@ def test_index_contains_first_use_labels_and_tooltips():
     assert 'title="Transpose up one semitone"' in body
     assert 'aria-label="Toggle A-B loop" aria-pressed="false"' in body
 
-    # STEMS control uses the separated-playback wording.
-    assert 'title="Toggle separated stem playback"' in body
-    assert 'aria-label="Toggle separated stem playback"' in body
+    # STEMS control uses the enable/disable wording.
+    assert 'title="Enable or disable stem playback"' in body
+    assert 'aria-label="Enable or disable stem playback"' in body
 
 
 def test_index_updates_dynamic_state_labels():

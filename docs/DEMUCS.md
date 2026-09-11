@@ -171,14 +171,14 @@ in the chord header. For ordinary songs the control is hidden.
 - STEMS OFF/ON on the same song keeps the per-stem levels; loading a different
   song resets all four to 100%. Levels are session state only — nothing is
   persisted.
-- On desktop (1024 px and wider), a compact **PREPARE** control appears in the
+- On desktop (1024 px and wider), a compact **Prepare** control appears in the
   STEMS area when the song has no usable stem set and the external Demucs
   runtime is usable. It runs one background preparation for the current media
   without pausing, seeking, restarting, or switching playback; CUDA is used when
   available and CPU otherwise. When it finishes, the normal **STEMS** control
   appears; stems are not activated automatically. A failed attempt leaves
   playback and any existing data untouched and can be retried. Tablet and mobile
-  layouts never offer PREPARE.
+  layouts never offer Prepare.
 
 Individual stem OFF intentionally uses an effectively silent nonzero gain
 instead of browser mute or exact-zero volume. Real Chromium playback timing
@@ -218,7 +218,7 @@ mute/synchronization fix does not address it.
 - Browser playback uses bounded synchronization, not sample-accurate DAW
   playback. Audible sync should be checked on real devices.
 - Demucs quality depends on the source and the music.
-- Demucs never runs automatically; the desktop **PREPARE** control is the only
+- Demucs never runs automatically; the desktop **Prepare** control is the only
   on-demand trigger.
 - The standalone bundles only the lightweight `chordflask_demucs` producer and
   uses the external `~/.venvs/chordflask-demucs` runtime. It contains no Torch,

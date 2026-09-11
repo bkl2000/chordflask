@@ -620,8 +620,8 @@ def test_prepare_button_and_js_contract():
 
     assert 'id="prepareStemsButton"' in body
     assert 'onclick="prepareStems()"' in body
-    assert ">PREPARE</button>" in body
-    assert 'aria-label="Prepare separated stems"' in body
+    assert ">Prepare</button>" in body
+    assert 'aria-label="Prepare vocal and instrument stems"' in body
     for name in (
         "function prepareStems()",
         "function refreshStemPreparationState()",

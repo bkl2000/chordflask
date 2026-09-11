@@ -6,10 +6,11 @@ copy. Selecting an unanalyzed file adds it to a local queue. The managed worker
 processes one file at a time and the browser reports whether the file is
 running, waiting, failed, or ready.
 
-Use **Browse** to start at the local user's home directory. When allowed media
-roots are configured, Browse shows only those roots and does not offer parent
-navigation outside them. The path field and stored-directory selector remain
-available for direct access. Browser file uploads are deliberately not used.
+Use **Roots** to open the directory browser at the local user's home directory.
+When allowed media roots are configured, the browser shows only those roots and
+does not offer parent navigation outside them. The path field and
+stored-directory selector remain available for direct access. Browser file
+uploads are deliberately not used.
 
 If files with the same base name have different supported extensions, only one
 appears because they would share an analysis sidecar. The deterministic order
@@ -93,7 +94,7 @@ timeline; per-stem mute and a single shared volume slider are provided. See
 
 ## Batch queue
 
-**Queue next** adds up to N new analyses from the current visible file list.
+**Analyze** adds up to N new analyses from the current visible file list.
 N defaults to 50, accepts 1–500, and is remembered by the browser. The current
 filter and Name/Size/Modified ordering determine which files are next. Valid
 analyses and jobs already pending or processing are skipped without consuming

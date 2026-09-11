@@ -767,6 +767,11 @@
       width: 66px;
     }
 
+    #queueNextButton:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
     .file-table-wrap {
       max-height: clamp(152px, 22vh, 260px);
       overflow: auto;
@@ -1123,6 +1128,12 @@
     #prepareStemsButton:disabled {
       opacity: 0.65;
       cursor: default;
+    }
+
+    /* Prepare is an action; STEMS is a playback/mixing toggle. */
+    #prepareStemsButton {
+      border-color: #7fc4ff;
+      background: #1767a822;
     }
 
     #stemsButton.stem-on {
@@ -1842,64 +1853,64 @@
               <button id="accidentalButton" type="button" onclick="toggleAccidentals()"
                       title="Use flat chord names" aria-label="Use flat chord names">Flats ♭</button>
             </span>
-            <select id="chordThemeSelect" aria-label="Chord panel theme" data-grid-only>
+            <select id="chordThemeSelect" aria-label="Chord panel theme" title="Chord panel theme" data-grid-only>
               <option value="dark" selected>Dark</option>
               <option value="light">Light</option>
             </select>
             <span class="chord-actions">
-              <button id="editButton" data-grid-only type="button" title="Edit chords beat by beat"
-                      aria-label="Edit chords" hidden disabled>Edit</button>
-              <button id="saveButton" data-grid-only type="button" title="Download current chords as Markdown, PDF, and ChordPro"
-                      aria-label="Download chords as Markdown, PDF, and ChordPro" hidden disabled>Save</button>
+              <button id="editButton" data-grid-only type="button" title="Edit detected chords beat by beat"
+                      aria-label="Edit detected chords" hidden disabled>Edit</button>
+              <button id="saveButton" data-grid-only type="button" title="Download the current chord sheet (Markdown, PDF, ChordPro)"
+                      aria-label="Download the current chord sheet (Markdown, PDF, ChordPro)" hidden disabled>Save</button>
               <span id="queueStatus"></span>
-              <button id="reanalyzeButton" data-grid-only type="button" title="Chordino/QM reanalysis of current file"
-                      aria-label="Reanalyze with Chordino and QM" hidden disabled>↻</button>
-              <button id="stemsButton" type="button" title="Toggle separated stem playback"
-                      aria-label="Toggle separated stem playback" aria-pressed="false" hidden
+              <button id="reanalyzeButton" data-grid-only type="button" title="Refresh the automatic Chordino/QM analysis for this file"
+                      aria-label="Refresh the Chordino/QM analysis" hidden disabled>↻</button>
+              <button id="stemsButton" type="button" title="Enable or disable stem playback"
+                      aria-label="Enable or disable stem playback" aria-pressed="false" hidden
                       onclick="toggleStems()">STEMS</button>
               <button id="prepareStemsButton" type="button"
-                      title="Prepare separated FLAC stems with the external Demucs runtime"
-                      aria-label="Prepare separated stems" hidden
-                      onclick="prepareStems()">PREPARE</button>
+                      title="Prepare vocal and instrument stems in the background"
+                      aria-label="Prepare vocal and instrument stems" hidden
+                      onclick="prepareStems()">Prepare</button>
             </span>
           </div>
           <div class="stem-toggles" id="stemTogglesRow" hidden>
             <span class="stem-label">Stems</span>
             <span class="stem-chip stem-on" id="stemVocalsChip">
               <button id="stemVocalsButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('vocals')" aria-pressed="true" aria-label="Mute/unmute vocals"
-                      title="Mute/unmute vocals">Voc</button>
+                      onclick="toggleStem('vocals')" aria-pressed="true" aria-label="Mute or unmute vocals"
+                      title="Mute or unmute vocals">Voc</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemVocalsLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('vocals')" aria-label="Set vocals volume"
-                      title="Set vocals volume">100</button>
+                      onclick="openStemMixer('vocals')" aria-label="Adjust vocals volume"
+                      title="Adjust vocals volume">100</button>
             </span>
             <span class="stem-chip stem-on" id="stemDrumsChip">
               <button id="stemDrumsButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('drums')" aria-pressed="true" aria-label="Mute/unmute drums"
-                      title="Mute/unmute drums">Drm</button>
+                      onclick="toggleStem('drums')" aria-pressed="true" aria-label="Mute or unmute drums"
+                      title="Mute or unmute drums">Drm</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemDrumsLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('drums')" aria-label="Set drums volume"
-                      title="Set drums volume">100</button>
+                      onclick="openStemMixer('drums')" aria-label="Adjust drums volume"
+                      title="Adjust drums volume">100</button>
             </span>
             <span class="stem-chip stem-on" id="stemBassChip">
               <button id="stemBassButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('bass')" aria-pressed="true" aria-label="Mute/unmute bass"
-                      title="Mute/unmute bass">Bass</button>
+                      onclick="toggleStem('bass')" aria-pressed="true" aria-label="Mute or unmute bass"
+                      title="Mute or unmute bass">Bass</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemBassLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('bass')" aria-label="Set bass volume"
-                      title="Set bass volume">100</button>
+                      onclick="openStemMixer('bass')" aria-label="Adjust bass volume"
+                      title="Adjust bass volume">100</button>
             </span>
             <span class="stem-chip stem-on" id="stemOtherChip">
               <button id="stemOtherButton" class="stem-toggle" type="button"
-                      onclick="toggleStem('other')" aria-pressed="true" aria-label="Mute/unmute other"
-                      title="Mute/unmute other">Oth</button>
+                      onclick="toggleStem('other')" aria-pressed="true" aria-label="Mute or unmute other"
+                      title="Mute or unmute other">Oth</button>
               <span class="stem-chip-sep">|</span>
               <button id="stemOtherLevel" class="stem-level" type="button"
-                      onclick="openStemMixer('other')" aria-label="Set other volume"
-                      title="Set other volume">100</button>
+                      onclick="openStemMixer('other')" aria-label="Adjust other volume"
+                      title="Adjust other volume">100</button>
             </span>
             <div class="stem-mixer" id="stemMixer" hidden>
               <span class="stem-mixer-label" id="stemMixerLabel">Voc</span>
@@ -1966,7 +1977,7 @@
             <option value="">Select a directory</option>
           </select>
           <button class="browse-button" type="button" onclick="browseDirectories()"
-                  title="Show configured media roots" aria-label="Show configured media roots">Roots</button>
+                  title="Choose a configured media root" aria-label="Choose a configured media root">Roots</button>
           <button class="load-button" type="button" onclick="loadFiles({ autoload: false })"
                   title="Load the directory entered above" aria-label="Load the directory entered above">Load</button>
         </div>
@@ -1980,7 +1991,9 @@
             <label for="batchLimit">Next</label>
             <input id="batchLimit" type="number" min="1" max="500" step="1" value="50"
                    aria-label="Number of new analyses to queue" />
-            <button id="queueNextButton" type="button" disabled>Queue next</button>
+            <button id="queueNextButton" type="button"
+                    title="Analyze the next N unanalysed files"
+                    aria-label="Analyze the next N unanalysed files" disabled>Analyze</button>
           </div>
         </div>
         <div class="file-table-wrap">
@@ -3279,7 +3292,7 @@
         && !stemsAvailable && stemPrepareAvailable && !stemsActive;
       prepareStemsButton.hidden = !visible;
       const running = stemPrepareState === 'running';
-      prepareStemsButton.textContent = running ? 'PREPARING…' : 'PREPARE';
+      prepareStemsButton.textContent = running ? 'Preparing…' : 'Prepare';
       prepareStemsButton.disabled = running || stemPrepareRequestInFlight;
     }
 
@@ -4684,7 +4697,7 @@
       navigationInPlaybackBar.addEventListener('change', placePlaybackNavigation);
       mobilePlaybackControls.addEventListener('change', placePlaybackNavigation);
       desktopStemPrepare.addEventListener('change', () => {
-        // Entering desktop may reveal PREPARE; leaving it must cancel polling.
+        // Entering desktop may reveal Prepare; leaving it must cancel polling.
         refreshStemPreparationState();
       });
       const savedDirname = localStorage.getItem(storageKeys.dirname) || '';
