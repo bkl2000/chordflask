@@ -23,17 +23,23 @@ that the setup script never invokes `sudo`, `apt`, or `apt-get`.
 
 ## Python Version Policy
 
-CPython 3.12 and 3.13 are supported and tested. CPython 3.13.5 was validated on
-a fresh LMDE 7 system with successful `make all` and `make standalone` runs.
-Python 3.14 remains a future validation target: the setup script warns but
-permits an installation attempt, which does not make that version supported.
-Python 3.15 and later are rejected with a clear message.
+CPython 3.12, 3.13, and 3.14 are supported and validated for the core
+application. The setup script and package metadata additionally accept Python
+3.10 and 3.11; those install without a warning but are not validated and are not
+claimed as supported.
+
+CPython 3.13.5 was validated on a fresh LMDE 7 system with successful `make all`
+and `make standalone` runs. CPython 3.14 is accepted by the setup script with a
+caution that a scientific package may fail to build, and it was validated on
+Ubuntu 26.04: the v0.9.11 standalone was built through `make standalone` (which
+runs the full project check) and passed the release HTTP/UI smoke test. Python
+3.15 and later are rejected with a clear message.
 
 Only CPython 3.12 currently uses the optional reviewed constraint set
-(`constraints-python312.txt`). CPython 3.13 uses the compatible-version ranges
-from the requirements files without a separate pinned constraints file.
-Constraints improve repeatability for a reviewed dependency combination; they
-are not a prerequisite for a Python version to be supported.
+(`constraints-python312.txt`). CPython 3.13 and 3.14 use the
+compatible-version ranges from the requirements files without a separate pinned
+constraints file. Constraints improve repeatability for a reviewed dependency
+combination; they are not a prerequisite for a Python version to be supported.
 
 To add support for a new Python version:
 

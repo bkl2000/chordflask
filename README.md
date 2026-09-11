@@ -15,7 +15,7 @@ compared, and exported as Markdown or PDF. Everything runs locally; media and
 analysis data are never uploaded.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
-13+ (CPython 3.12 and 3.13). Native Windows is not supported; Windows users can run
+13+ (CPython 3.12–3.14). Native Windows is not supported; Windows users can run
 ChordFlask under WSL2 (tested) and open the local web interface from the
 Windows browser at localhost.
 
@@ -238,10 +238,11 @@ Firefox may be less reliable, especially when ChordFlask is accessed from
 another device over the LAN.
 
 Demucs preparation is **not** run automatically by the player. You can either
-run the preparation command once for a music directory, or — on desktop only —
-use the compact **PREPARE** control in the STEMS area when the external runtime
-is usable and the current song has no stem set. The generated FLAC stems stay
-beside that collection under `.chordflask/` and are registered as one
+run the preparation command once for a music directory, or — on desktop
+(1024 px and wider) only — use the compact **PREPARE** control in the STEMS area
+when the external runtime is usable and the current song has no stem set. The
+generated FLAC stems stay beside that collection under `.chordflask/` and are
+registered as one
 `audio_tracks["demucs:htdemucs"]` (`htdemucs`) set with the four stems `bass`,
 `drums`, `other`, and `vocals`; the player just finds and uses them. Re-running
 the command reports `CURRENT` for songs that are already prepared instead of
@@ -287,8 +288,7 @@ When the sidecar is present, the chord panel offers **Grid | Song**. **Grid**
 remains the default synchronized analyzed view. **Song** uses the same panel to
 show the external lyrics and chord markers as a manually scrollable sheet while
 the existing player and stem controls continue normally. Song view is available
-only in the desktop layout (browser width 801 px or greater); tablet and phone
-layouts stay in Grid.
+only at browser width 801 px or greater; narrower layouts stay in Grid.
 
 The `.cho` file belongs to the user. ChordFlask does not search for, download,
 or generate lyrics. Its Song content is separate from analyzed chord/rhythm
