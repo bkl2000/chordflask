@@ -204,8 +204,9 @@ def test_build_script_excludes_batch_helper_but_keeps_shared_formatter():
         in content
     )
     assert "--exclude-module=chordflask_btc" in content
-    assert "--exclude-module=chordflask_demucs" in content
-    assert "excluded optional heavy runtime" in content
+    assert "--exclude-module=chordflask_demucs" not in content
+    assert "check_standalone_runtime.py" in content
+    assert "prohibited heavy optional runtime" in content
     assert 'LIBERATION-FONTS-LICENSE.txt' in content
     for pattern in ("Beat | Time (s) | Chord",):
         assert pattern not in (REPO_ROOT / "chordflask" / "chord_markdown.py").read_text()

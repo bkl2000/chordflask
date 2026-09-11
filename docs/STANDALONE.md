@@ -68,6 +68,17 @@ The target machine must belong to the supported Linux family. A binary built on
 a newer Linux distribution can require a newer glibc than an older target has;
 build on the oldest target family when portability matters.
 
+## Optional on-demand stem preparation
+
+The bundle contains only the small, dependency-free `chordflask_demucs`
+producer — no Torch, torchaudio, torchcodec, third-party `demucs`, or model
+weights. If the external Demucs runtime (`~/.venvs/chordflask-demucs`, created
+with `make setup-demucs` from a source checkout) exists and is usable, the
+desktop player shows a compact **PREPARE** control for the loaded song. CUDA is
+used when available and CPU otherwise, exactly like the CLI. Preparation runs
+in the background without interrupting playback. Without that external runtime
+the control is simply not offered. Tablet/mobile layouts never show it.
+
 ## Files in the archive
 
 - `chordflask` — application executable

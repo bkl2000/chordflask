@@ -1099,7 +1099,8 @@
       min-width: 0;
     }
 
-    #stemsButton {
+    #stemsButton,
+    #prepareStemsButton {
       width: auto;
       min-width: 22px;
       height: 20px;
@@ -1112,10 +1113,16 @@
       text-transform: none;
     }
 
-    #stemsButton:hover:not(:disabled) {
+    #stemsButton:hover:not(:disabled),
+    #prepareStemsButton:hover:not(:disabled) {
       border-color: #9eabb8;
       background: #313944;
       color: #fff;
+    }
+
+    #prepareStemsButton:disabled {
+      opacity: 0.65;
+      cursor: default;
     }
 
     #stemsButton.stem-on {
@@ -1807,10 +1814,6 @@
                 <button id="songViewButton" type="button" aria-pressed="false">Song</button>
               </span>
             </span>
-            <select id="chordThemeSelect" aria-label="Chord panel theme" data-grid-only>
-              <option value="dark" selected>Dark</option>
-              <option value="light">Light</option>
-            </select>
             <span id="fileStatus">No file loaded</span>
           </div>
           <div class="chord-tools-row">
@@ -1839,6 +1842,10 @@
               <button id="accidentalButton" type="button" onclick="toggleAccidentals()"
                       title="Use flat chord names" aria-label="Use flat chord names">Flats ♭</button>
             </span>
+            <select id="chordThemeSelect" aria-label="Chord panel theme" data-grid-only>
+              <option value="dark" selected>Dark</option>
+              <option value="light">Light</option>
+            </select>
             <span class="chord-actions">
               <button id="editButton" data-grid-only type="button" title="Edit chords beat by beat"
                       aria-label="Edit chords" hidden disabled>Edit</button>
@@ -1850,6 +1857,10 @@
               <button id="stemsButton" type="button" title="Toggle separated stem playback"
                       aria-label="Toggle separated stem playback" aria-pressed="false" hidden
                       onclick="toggleStems()">STEMS</button>
+              <button id="prepareStemsButton" type="button"
+                      title="Prepare separated FLAC stems with the external Demucs runtime"
+                      aria-label="Prepare separated stems" hidden
+                      onclick="prepareStems()">PREPARE</button>
             </span>
           </div>
           <div class="stem-toggles" id="stemTogglesRow" hidden>
@@ -2138,6 +2149,9 @@
       '(max-width: 640px), (min-width: 1024px)'
     );
     let mobilePlaybackControls = window.matchMedia('(max-width: 640px)');
+    // On-demand stem preparation is offered in the desktop layout only; the
+    // tablet/mobile layouts keep the existing prepared-stem playback controls.
+    let desktopStemPrepare = window.matchMedia('(min-width: 1024px)');
     let loopStartButton = document.getElementById('loopStartButton');
     let loopEndButton = document.getElementById('loopEndButton');
     let loopToggleButton = document.getElementById('loopToggleButton');
@@ -2159,6 +2173,7 @@
     let stemMixerLabel = document.getElementById('stemMixerLabel');
     let stemMixerValue = document.getElementById('stemMixerValue');
     let stemMixerSlider = document.getElementById('stemMixerSlider');
+    let prepareStemsButton = document.getElementById('prepareStemsButton');
 
     let isRepeating = false;
     let isContinuing = false;
@@ -2252,6 +2267,10 @@
     let stemWasMasterMuted = false;
     let stemsActivationToken = 0;
     let stemMixerStem = null;
+    let stemPrepareAvailable = false;
+    let stemPrepareState = 'idle';
+    let stemPreparePollTimer = null;
+    let stemPrepareRequestInFlight = false;
 
     function updateCurrentPath() {
       const value = (dirnameInput.value || '').trim();
@@ -3161,6 +3180,7 @@
         level.textContent = String(stemPercent(name));
       }
       updateStemMixer();
+      updatePrepareStemsButton();
     }
 
     function updateStemMixer() {
@@ -3231,6 +3251,12 @@
       teardownStems();
       resetStemVolumes();
       stemsAvailable = false;
+      stemPrepareAvailable = false;
+      stemPrepareState = 'idle';
+      if (stemPreparePollTimer) {
+        clearTimeout(stemPreparePollTimer);
+        stemPreparePollTimer = null;
+      }
       updateStemsUI();
     }
 
@@ -3240,7 +3266,154 @@
       stemsAvailable = Boolean(
         payload && Array.isArray(payload.stems) && payload.stems.length === STEM_NAMES.length
       );
+      if (stemsAvailable && stemPreparePollTimer) {
+        clearTimeout(stemPreparePollTimer);
+        stemPreparePollTimer = null;
+      }
       updateStemsUI();
+    }
+
+    function updatePrepareStemsButton() {
+      const visible = desktopStemPrepare.matches
+        && Boolean(loadedMediaPath) && loadedAnalysisValid
+        && !stemsAvailable && stemPrepareAvailable && !stemsActive;
+      prepareStemsButton.hidden = !visible;
+      const running = stemPrepareState === 'running';
+      prepareStemsButton.textContent = running ? 'PREPARING…' : 'PREPARE';
+      prepareStemsButton.disabled = running || stemPrepareRequestInFlight;
+    }
+
+    function scheduleStemPreparationPoll() {
+      if (stemPreparePollTimer) {
+        clearTimeout(stemPreparePollTimer);
+      }
+      stemPreparePollTimer = setTimeout(refreshStemPreparationState, 1500);
+    }
+
+    function refreshStemPreparationState() {
+      if (!desktopStemPrepare.matches) {
+        // Tablet/mobile must not poll capability or start preparation.
+        stemPrepareAvailable = false;
+        stemPrepareState = 'idle';
+        if (stemPreparePollTimer) {
+          clearTimeout(stemPreparePollTimer);
+          stemPreparePollTimer = null;
+        }
+        updatePrepareStemsButton();
+        return;
+      }
+      if (!loadedMediaPath || !loadedAnalysisValid || stemsAvailable) {
+        stemPrepareAvailable = false;
+        stemPrepareState = 'idle';
+        updatePrepareStemsButton();
+        return;
+      }
+      fetch('/stem_preparation_status', {
+        headers: { 'Cache-Control': 'no-store' }
+      })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!data) {
+          updatePrepareStemsButton();
+          return;
+        }
+        stemPrepareAvailable = data.available === true;
+        stemPrepareState = data.state || 'idle';
+        if (stemsAvailable) {
+          updatePrepareStemsButton();
+          return;
+        }
+        if (stemPrepareState === 'running') {
+          updatePrepareStemsButton();
+          scheduleStemPreparationPoll();
+          return;
+        }
+        if (stemPrepareState === 'ready') {
+          finishStemPreparation();
+          return;
+        }
+        if (stemPrepareState === 'error' && data.message) {
+          fileStatus.innerText = data.message;
+        }
+        updatePrepareStemsButton();
+      })
+      .catch(error => {
+        console.error('Error checking stem preparation:', error);
+        updatePrepareStemsButton();
+      });
+    }
+
+    function prepareStems() {
+      if (!desktopStemPrepare.matches) return;
+      if (!loadedMediaPath || stemPrepareRequestInFlight) return;
+      stemPrepareRequestInFlight = true;
+      updatePrepareStemsButton();
+      fetch('/prepare_stems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+      })
+      .then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          fileStatus.innerText = data.error || 'Stem preparation unavailable';
+          stemPrepareState = 'idle';
+          return;
+        }
+        if (data.status === 'ready') {
+          finishStemPreparation();
+          return;
+        }
+        if (data.status === 'accepted' || data.status === 'already_running') {
+          stemPrepareState = 'running';
+          updatePrepareStemsButton();
+          scheduleStemPreparationPoll();
+          return;
+        }
+        fileStatus.innerText = 'Another song is being prepared';
+      })
+      .catch(error => {
+        console.error('Error preparing stems:', error);
+        fileStatus.innerText = 'Stem preparation failed';
+        stemPrepareState = 'idle';
+      })
+      .finally(() => {
+        stemPrepareRequestInFlight = false;
+        updatePrepareStemsButton();
+      });
+    }
+
+    function finishStemPreparation() {
+      if (stemPreparePollTimer) {
+        clearTimeout(stemPreparePollTimer);
+        stemPreparePollTimer = null;
+      }
+      fetch('/refresh_stems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(error => { throw error; });
+        }
+        return response.json();
+      })
+      .then(data => {
+        updateStemsAvailability(data.stems);
+        stemPrepareState = 'idle';
+        fileStatus.innerText = stemsAvailable
+          ? (loadedFileName || 'Stems ready')
+          : 'Stem preparation did not produce a usable set';
+      })
+      .catch(error => {
+        console.error('Error refreshing stems:', error);
+        stemPrepareState = 'idle';
+        fileStatus.innerText = 'Stem preparation failed';
+      })
+      .finally(() => {
+        updatePrepareStemsButton();
+      });
     }
 
     function stemCanPlay(el) {
@@ -3603,6 +3776,7 @@
         updateReanalyzeButton();
         updateTrackSelectors(data);
         updateStemsAvailability(data.stems);
+        refreshStemPreparationState();
         if (autoplay) {
           video.play().catch(error => {
             console.error('Autoplay failed:', error);
@@ -3756,6 +3930,7 @@
         semitonesInput.value = 0;
         updateTrackSelectors(data);
         updateStemsAvailability(data.stems);
+        refreshStemPreparationState();
         updateReanalyzeButton();
         syncPlaybackPosition(true);
       })
@@ -4508,6 +4683,10 @@
       placePlaybackNavigation();
       navigationInPlaybackBar.addEventListener('change', placePlaybackNavigation);
       mobilePlaybackControls.addEventListener('change', placePlaybackNavigation);
+      desktopStemPrepare.addEventListener('change', () => {
+        // Entering desktop may reveal PREPARE; leaving it must cancel polling.
+        refreshStemPreparationState();
+      });
       const savedDirname = localStorage.getItem(storageKeys.dirname) || '';
       const savedFilter = localStorage.getItem(storageKeys.filter) || '';
       const savedFile = localStorage.getItem(storageKeys.file) || '';

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,6 +44,33 @@ def venv_python() -> Path:
     return venv_dir() / "bin" / "python"
 
 
+def clean_environment() -> dict[str, str]:
+    """Return an environment safe for the external runtime interpreter.
+
+    A frozen (PyInstaller) process puts its extraction directory on
+    ``LD_LIBRARY_PATH`` and may set ``PYTHONHOME``/``PYTHONPATH``. Passing those
+    to the isolated runtime can make it load the bundle's libraries or modules
+    instead of its own, so strip them only when frozen. Normal CLI runs are
+    unchanged.
+    """
+    env = os.environ.copy()
+    if not getattr(sys, "frozen", False):
+        return env
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env.pop("_MEIPASS", None)
+    env.pop("_MEIPASS2", None)
+    meipass = getattr(sys, "_MEIPASS", None)
+    ld_path = env.get("LD_LIBRARY_PATH")
+    if meipass and ld_path:
+        kept = [part for part in ld_path.split(os.pathsep) if part and part != meipass]
+        if kept:
+            env["LD_LIBRARY_PATH"] = os.pathsep.join(kept)
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
+    return env
+
+
 def _probe_script() -> str:
     return (
         "import json, sys; "
@@ -65,6 +93,7 @@ def _probe_runtime(timeout: int = 30) -> RuntimeInfo:
             text=True,
             check=False,
             timeout=timeout,
+            env=clean_environment(),
         )
     except OSError as error:
         raise DemucsRuntimeError(f"Could not execute Demucs runtime: {error}") from error
@@ -99,7 +128,7 @@ def environment() -> dict[str, str]:
     """Return an isolated subprocess environment with an external model cache."""
     model_cache = cache_dir()
     model_cache.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
+    env = clean_environment()
     env["TORCH_HOME"] = str(model_cache)
     env["XDG_CACHE_HOME"] = str(model_cache)
     return env
@@ -132,6 +161,7 @@ __all__ = [
     "DemucsRuntimeError",
     "RuntimeInfo",
     "cache_dir",
+    "clean_environment",
     "describe",
     "environment",
     "require_runtime",

@@ -200,7 +200,9 @@ for interpreter overrides and existing-venv upgrades.
 
 Demucs is an optional, separate runtime that splits a song into four parts —
 **Vocals**, **Drums**, **Bass**, and **Other**. ChordFlask works normally
-without it, and the normal app and portable bundle stay Demucs/Torch-free.
+without it, and the normal app and portable bundle keep the heavy
+Demucs/Torch stack external; only the small, dependency-free producer is
+bundled.
 
 **Quick start**
 
@@ -235,13 +237,15 @@ multi-stream synchronization behavior is tested primarily with Chromium;
 Firefox may be less reliable, especially when ChordFlask is accessed from
 another device over the LAN.
 
-Demucs preparation is **not** run automatically by the player — you normally
-run the preparation command once for a music directory. The generated FLAC
-stems stay beside that collection under `.chordflask/` and are registered as
-one `audio_tracks["demucs:htdemucs"]` (`htdemucs`) set with the four stems
-`bass`, `drums`, `other`, and `vocals`; the player just finds and uses them.
-Re-running the command reports `CURRENT` for songs that are already prepared
-instead of separating them again.
+Demucs preparation is **not** run automatically by the player. You can either
+run the preparation command once for a music directory, or — on desktop only —
+use the compact **PREPARE** control in the STEMS area when the external runtime
+is usable and the current song has no stem set. The generated FLAC stems stay
+beside that collection under `.chordflask/` and are registered as one
+`audio_tracks["demucs:htdemucs"]` (`htdemucs`) set with the four stems `bass`,
+`drums`, `other`, and `vocals`; the player just finds and uses them. Re-running
+the command reports `CURRENT` for songs that are already prepared instead of
+separating them again.
 
 ```bash
 scripts/chordflask-demucs --dry-run ~/Music   # preview without processing

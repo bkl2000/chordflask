@@ -68,12 +68,12 @@ pyinstaller \
     --hidden-import=numba.core \
     --hidden-import=numba.core.types \
     --hidden-import=llvmlite \
+    --hidden-import=chordflask_demucs.cli \
     --copy-metadata=imageio \
     --copy-metadata=moviepy \
     --additional-hooks-dir="${SCRIPT_DIR}/pyinstaller_hooks" \
     --exclude-module=imageio_ffmpeg.binaries \
     --exclude-module=chordflask_btc \
-    --exclude-module=chordflask_demucs \
     --exclude-module=chordflask.helpers.chordleadsheet_batch \
     --add-data "${PROJECT_ROOT}/chordflask/templates:chordflask/templates" \
     --add-data "${PROJECT_ROOT}/chordflask/assets:chordflask/assets" \
@@ -84,8 +84,10 @@ if grep -Eiq "imageio_ffmpeg/binaries/[^']*ffmpeg|vamp_plugins/[^']*\.so|vendor/
     echo "Standalone archive contains a prohibited FFmpeg or Vamp executable." >&2
     exit 1
 fi
-if grep -Eiq "chordflask_(btc|demucs)" <<<"$archive_listing"; then
-    echo "Standalone archive contains an excluded optional heavy runtime." >&2
+# The lightweight chordflask_demucs producer is intentionally bundled; the
+# heavy third-party runtime, model weights, and model cache must stay external.
+if ! python3 "${PROJECT_ROOT}/scripts/check_standalone_runtime.py" "${SCRIPT_DIR}/dist/chordflask"; then
+    echo "Standalone archive contains a prohibited heavy optional runtime or model." >&2
     exit 1
 fi
 

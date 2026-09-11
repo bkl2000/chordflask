@@ -7,13 +7,63 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# The lightweight chordflask_demucs producer is intentionally importable from
+# the application (and bundled in the standalone); the heavy third-party
+# runtime must never be imported by the Flask process.
+HEAVY_RUNTIME_TOKENS = (
+    "import torch",
+    "import torchaudio",
+    "import torchcodec",
+    "import demucs",
+    "from demucs",
+    "demucs.separate",
+)
 
-def test_flask_python_sources_have_no_demucs_runtime_import():
+
+def test_flask_python_sources_do_not_import_heavy_runtime():
     offenders = []
     for path in (REPO_ROOT / "chordflask").rglob("*.py"):
-        if "chordflask_demucs" in path.read_text(encoding="utf-8"):
-            offenders.append(str(path.relative_to(REPO_ROOT)))
+        text = path.read_text(encoding="utf-8")
+        for token in HEAVY_RUNTIME_TOKENS:
+            if token in text:
+                offenders.append(f"{path.relative_to(REPO_ROOT)}: {token}")
     assert offenders == []
+
+
+def test_flask_app_import_is_producer_lazy():
+    script = textwrap.dedent(
+        """
+        import importlib.abc
+        import sys
+
+        class BlockHeavy(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname in {"torch", "demucs"} or fullname.startswith(("torch.", "demucs.")):
+                    raise ModuleNotFoundError("blocked heavy runtime")
+                return None
+
+        sys.meta_path.insert(0, BlockHeavy())
+        from chordflask.app import FlaskMP4App
+
+        leaked = [
+            name for name in ("torch", "demucs", "chordflask_demucs")
+            if name in sys.modules
+        ]
+        assert leaked == [], leaked
+        assert FlaskMP4App is not None
+        """
+    )
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(REPO_ROOT)
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=REPO_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_flask_loads_plain_and_audio_track_v3_json_without_demucs_import(tmp_path):

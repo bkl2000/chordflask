@@ -102,7 +102,11 @@ def test_demucs_is_not_a_normal_runtime_dependency():
     for path in REPO_ROOT.glob("requirements*.txt"):
         assert "demucs" not in path.read_text(encoding="utf-8").lower()
     builder = (REPO_ROOT / "flask/build_standalone.sh").read_text(encoding="utf-8")
-    assert "--exclude-module=chordflask_demucs" in builder
+    # The lightweight producer is intentionally bundled; the heavy runtime is
+    # rejected by the dedicated archive check instead of a PyInstaller exclude.
+    assert "--exclude-module=chordflask_demucs" not in builder
+    assert "check_standalone_runtime.py" in builder
+    assert (REPO_ROOT / "scripts/check_standalone_runtime.py").is_file()
 
 
 def test_make_setup_is_full_setup():

@@ -38,6 +38,7 @@ from .media_library import preferred_media_files
 
 from .mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4PlayerFlask class
 from .playbackview import GRID_MODES
+from .stem_preparation import StemPreparationManager
 
 from chordflask_base import DEMUCS_STEM_NAMES
 
@@ -165,6 +166,7 @@ class FlaskMP4App:
         self.max_lines = 23  # Limit to the last 23 lines of callback output
         self.analysis_queue = AnalysisQueue()
         self.worker_supervisor = None
+        self.stem_preparation = StemPreparationManager()
         self.allowed_roots = self._parse_allowed_roots(roots)
         self._resolve_ffmpeg()
         self.plugins_available = True
@@ -445,6 +447,9 @@ class FlaskMP4App:
         self.app.add_url_rule('/reanalyze', 'reanalyze', self.reanalyze, methods=['POST'])
         self.app.add_url_rule('/video', 'serve_video', self.serve_video)
         self.app.add_url_rule('/stem/<stem_name>', 'serve_stem', self.serve_stem)
+        self.app.add_url_rule('/prepare_stems', 'prepare_stems', self.prepare_stems, methods=['POST'])
+        self.app.add_url_rule('/stem_preparation_status', 'stem_preparation_status', self.stem_preparation_status, methods=['GET'])
+        self.app.add_url_rule('/refresh_stems', 'refresh_stems', self.refresh_stems, methods=['POST'])
         self.app.add_url_rule('/get_song_sheet', 'get_song_sheet', self.get_song_sheet)
         self.app.add_url_rule('/get_callback_output', 'get_callback_output', self.get_callback_output, methods=['GET'])
         self.app.add_url_rule('/set_position', 'set_position', self.set_position, methods=['POST'])
@@ -1118,6 +1123,84 @@ class FlaskMP4App:
             'private, max-age=86400' if self.__stem_cache else 'no-store'
         )
         return response
+
+
+    def prepare_stems(self):
+        """Start background Demucs stem preparation for the active media.
+
+        The capability probe and producer run outside the client lock and
+        outside this request, so playback is never blocked. The request only
+        starts the job and returns immediately.
+        """
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        state = self._client()
+        with state.lock:
+            player = state.player
+            file_repr = state.file_repr
+            if player is None or file_repr is None:
+                return jsonify(error="No active media file."), 409
+            active_media = Path(file_repr.get()).resolve()
+            stems_ready = bool(player.audio_stems_state())
+
+        try:
+            media = self._existing_media_file(data.get('dirname'), data.get('filename'))
+        except (ValueError, FileNotFoundError, PermissionError) as error:
+            return self._path_error(error)
+        if media != active_media:
+            return jsonify(error="Requested media is not the active file."), 409
+        if stems_ready:
+            return jsonify(status="ready")
+        if self._media_is_queued(media):
+            return jsonify(error="The active file has queued analysis work."), 409
+
+        result = self.stem_preparation.start(media)
+        if result["status"] == "accepted":
+            return jsonify(result), 202
+        if result["status"] == "unavailable":
+            return jsonify(status="unavailable", error=result.get("error", "")), 409
+        return jsonify(result)
+
+    def stem_preparation_status(self):
+        """Return the preparation state for the active client's media."""
+        state = self._client()
+        with state.lock:
+            player = state.player
+            file_repr = state.file_repr
+            if player is None or file_repr is None:
+                return jsonify(state="idle", available=False, cuda=False, message="")
+            media = Path(file_repr.get())
+        return jsonify(self.stem_preparation.status(media))
+
+    def refresh_stems(self):
+        """Reload the active analysis from disk so newly prepared stems appear.
+
+        Only the available stem metadata changes. The active tracks, transpose,
+        and playback position are preserved, and no playback is started.
+        """
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        state = self._client()
+        with state.lock:
+            media_or_error = self._active_editing_media(state, data)
+            if not isinstance(media_or_error, Path):
+                return media_or_error
+            track_state = state.player.analysis_track_state()
+            try:
+                state.player.reload_chord_data(
+                    chord_track_id=track_state["active_chord_track_id"],
+                    rhythm_track_id=track_state["active_rhythm_track_id"],
+                    soft_fallback=True,
+                )
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                return jsonify(error=f"Could not reload stem data: {error}"), 500
+            state.json_mtime_ns = self._json_mtime_ns(state.file_repr.get("json"))
+            state.old_current_position = None
+            state.old_grid_mode = None
+            stems = state.player.audio_stems_state(include_versions=self.__stem_cache)
+        return jsonify({"success": True, "stems": stems})
 
 
     def get_callback_output(self):
