@@ -25,7 +25,7 @@ Windows browser at localhost.
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-ubuntu26-x86_64-py3.14-v0.9.11.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.11/chordflask-ubuntu26-x86_64-py3.14-v0.9.11.tar.gz)**
+**[Download chordflask-ubuntu26-x86_64-py3.14-v0.9.12.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.12/chordflask-ubuntu26-x86_64-py3.14-v0.9.12.tar.gz)**
 
 Built from the same ChordFlask release source as the public release. FFmpeg and
 Vamp plugin binaries are not bundled; see the portable bundle guide for
