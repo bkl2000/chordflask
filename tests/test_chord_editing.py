@@ -1312,3 +1312,66 @@ def test_index_edit_and_version_guard_duplicate_requests():
 
     assert "function submitEdit(beatIndex, chord, recordUndo = true, onSuccess = null)" in body
     assert "if (editRequestInFlight || !currentEditCell)" in body
+
+
+def test_edit_tools_hidden_rule_overrides_flex_display():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # The author rule `#editTools { display: flex; }` overrides the HTML hidden
+    # attribute in every browser, so the editor tools stayed visible outside
+    # Edit mode. The explicit [hidden] rule restores the intended hiding.
+    assert "#editTools {\n      display: flex;" in body
+    assert "#editTools[hidden] {\n      display: none;\n    }" in body
+    assert 'id="editTools" hidden' in body
+
+
+def test_edit_tools_visible_only_in_active_grid_edit_mode():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Song view and leaving Edit mode both keep the tools hidden.
+    assert "document.getElementById('editTools').hidden = showSong || !editMode;" in body
+    assert "document.getElementById('editTools').hidden = true;" in body
+
+    editing_state = body[body.index("function applyChordEditingState(data)"):]
+    editing_state = editing_state[: editing_state.index("function startChordEditing()")]
+    assert "if (editMode) {" in editing_state
+    assert "document.getElementById('editTools').hidden = false;" in editing_state
+
+
+def test_reset_requires_existing_edited_version_and_session_change():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    # Reset uses the authoritative has_edited flag plus the session delta. The
+    # untouched Edited copy created when Edit mode opens must not enable it.
+    assert "let editSessionHadEdited = false;" in body
+    assert "let editSessionDirty = false;" in body
+    assert (
+        "const canReset = hasEditedChords && (editSessionHadEdited || editSessionDirty);"
+        in body
+    )
+    assert "resetEditButton.disabled = editRequestInFlight || !canReset;" in body
+
+    # Entering Edit mode captures the pre-session state and clears the delta.
+    assert (
+        "function startChordEditing() {\n"
+        "      editSessionHadEdited = hasEditedChords;\n"
+        "      editSessionDirty = false;" in body
+    )
+
+    # An accepted edit marks the session as changed for Reset availability.
+    assert (
+        "editUndoStack.push({ beat_index: beatIndex, chord: previous });\n"
+        "          editSessionDirty = true;" in body
+    )
+
+    # Leaving Edit mode clears the session flags.
+    assert (
+        "editSessionHadEdited = false;\n"
+        "      editSessionDirty = false;" in body
+    )

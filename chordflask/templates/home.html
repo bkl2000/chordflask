@@ -290,6 +290,10 @@
       border-top: 1px solid #2a3038;
     }
 
+    #editTools[hidden] {
+      display: none;
+    }
+
     #editTools button {
       width: auto;
       min-width: 22px;
@@ -2241,6 +2245,8 @@
     let editGridData = null;
     let editBeatCount = 0;
     let editUndoStack = [];
+    let editSessionHadEdited = false;
+    let editSessionDirty = false;
     let currentEditCell = null;
     let editRequestInFlight = false;
     let reanalysisQueuedPath = null;
@@ -3970,8 +3976,12 @@
       editButton.disabled = editRequestInFlight || !canEdit;
       editButton.textContent = editMode ? 'Done' : 'Edit';
 
+      // Reset is only meaningful when an Edited version exists and this session
+      // either started with one or produced an accepted edit. Entering Edit mode
+      // alone creates an untouched Edited copy, which must not enable Reset.
+      const canReset = hasEditedChords && (editSessionHadEdited || editSessionDirty);
       undoEditButton.disabled = editRequestInFlight || !editUndoStack.length;
-      resetEditButton.disabled = editRequestInFlight;
+      resetEditButton.disabled = editRequestInFlight || !canReset;
       updateSaveButton();
       updateSongViewControl();
     }
@@ -4047,6 +4057,8 @@
       }
       editMode = false;
       editGridData = null;
+      editSessionHadEdited = false;
+      editSessionDirty = false;
       document.getElementById('editGridContainer').hidden = true;
       document.getElementById('editTools').hidden = true;
       callbackOutput.hidden = false;
@@ -4073,6 +4085,8 @@
     }
 
     function startChordEditing() {
+      editSessionHadEdited = hasEditedChords;
+      editSessionDirty = false;
       editRequestInFlight = true;
       updateEditControls();
       fetch('/start_chord_editing', {
@@ -4224,6 +4238,7 @@
       .then(data => {
         if (recordUndo) {
           editUndoStack.push({ beat_index: beatIndex, chord: previous });
+          editSessionDirty = true;
         }
         applyChordEditingState(data);
         if (onSuccess) {
