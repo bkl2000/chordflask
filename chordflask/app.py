@@ -48,12 +48,27 @@ from chordflask_base import DEMUCS_STEM_NAMES
 CLIENT_COOKIE = "chordflask_client"
 
 
+def _embedded_build_version():
+    """Return the build identity compiled into a frozen executable, if present.
+
+    The standalone build generates ``chordflask_build_info`` and bundles it into
+    the PyInstaller executable. A sibling ``VERSION`` file is deliberately never
+    consulted here, so one binary always reports one deterministic version no
+    matter what mutable files sit beside it.
+    """
+    try:
+        from chordflask_build_info import BUILD_VERSION
+    except ImportError:
+        return None
+    return BUILD_VERSION or None
+
+
 def _load_version():
     """Read the frozen, source-checkout, or installed package version."""
     if getattr(sys, "frozen", False):
-        frozen_version = os.path.join(os.path.dirname(sys.executable), "VERSION")
-        if os.path.isfile(frozen_version):
-            return open(frozen_version).read().strip()
+        embedded = _embedded_build_version()
+        if embedded:
+            return embedded
         try:
             return metadata.version("chordflask")
         except metadata.PackageNotFoundError:

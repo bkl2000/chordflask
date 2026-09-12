@@ -53,6 +53,13 @@ if [[ "$PRINT_RELEASE_NAME" == true ]]; then
     exit 0
 fi
 
+# One deterministic build identity is embedded into the executable and also
+# written as the human-readable release VERSION file. The executable must never
+# read that sibling file at runtime.
+BUILD_TIMESTAMP="$(date -u +'%Y-%m-%d %H:%M')"
+BUILD_COMMIT="$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD)"
+BUILD_VERSION="${semver} ${BUILD_TIMESTAMP} ${BUILD_COMMIT}"
+
 cd "$SCRIPT_DIR"
 
 if ! command -v pyinstaller >/dev/null 2>&1; then
@@ -60,10 +67,23 @@ if ! command -v pyinstaller >/dev/null 2>&1; then
     exit 1
 fi
 
+# Generate the build-identity module in a temporary directory so the source
+# tree stays untouched. PyInstaller bundles it into the frozen executable; the
+# EXIT trap removes it after the build (success or failure).
+BUILD_INFO_DIR="$(mktemp -d)"
+trap 'rm -rf "${BUILD_INFO_DIR}"' EXIT
+cat > "${BUILD_INFO_DIR}/chordflask_build_info.py" <<EOF
+"""Generated at build time; embedded in the frozen executable."""
+
+BUILD_VERSION = "${BUILD_VERSION}"
+EOF
+
 pyinstaller \
     --name chordflask \
     --onefile \
     --paths "${PROJECT_ROOT}" \
+    --paths "${BUILD_INFO_DIR}" \
+    --hidden-import=chordflask_build_info \
     --hidden-import=numba \
     --hidden-import=numba.core \
     --hidden-import=numba.core.types \
@@ -108,8 +128,7 @@ cp "${SCRIPT_DIR}/install_vamp.sh" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/docs/STANDALONE.md" "${RELEASE_DIR}/README.md"
 cp "${PROJECT_ROOT}/THIRD_PARTY_NOTICES.md" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/chordflask/assets/fonts/LICENSE.txt" "${RELEASE_DIR}/LIBERATION-FONTS-LICENSE.txt"
-printf '%s %s %s\n' "$semver" "$(date -u +'%Y-%m-%d %H:%M')" "$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD)" \
-    > "${RELEASE_DIR}/VERSION"
+printf '%s\n' "$BUILD_VERSION" > "${RELEASE_DIR}/VERSION"
 chmod +x "${RELEASE_DIR}/chordflask" "${RELEASE_DIR}/chordflask.sh" "${RELEASE_DIR}/install_vamp.sh"
 tar -C "${SCRIPT_DIR}/dist" -czf "${RELEASE_ARCHIVE}" "${RELEASE_NAME}"
 printf '%s\n' "$RELEASE_NAME" > "${SCRIPT_DIR}/dist/.latest-release"
