@@ -13,6 +13,8 @@ QM_SHA256="53f9e0e24d938507c01cb368e098cb321346b91594695aa877e7f67f17841ffa"
 
 NNLS_PRIMARY_URL="https://code.soundsoftware.ac.uk/attachments/download/1693/${NNLS_ARCHIVE}"
 QM_PRIMARY_URL="https://code.soundsoftware.ac.uk/attachments/download/2625/${QM_ARCHIVE}"
+NNLS_MIRROR_URL="https://github.com/bkl2000/chordflask/releases/download/vamp-deps-1/${NNLS_ARCHIVE}"
+QM_MIRROR_URL="https://github.com/bkl2000/chordflask/releases/download/vamp-deps-1/${QM_ARCHIVE}"
 NNLS_ARCHIVE_URL="https://web.archive.org/web/20160219212458id_/${NNLS_PRIMARY_URL}"
 QM_ARCHIVE_URL="https://web.archive.org/web/20241229060448id_/${QM_PRIMARY_URL}"
 
@@ -28,8 +30,9 @@ No root access is needed.
 
 Methods (tried in order):
   1. --from DIR  : Copy plugin .so/.cat/.n3 files from a local directory.
-  2. Download pinned upstream archives, with verified Internet Archive
-     snapshots as fallback, and enforce SHA-256 plus published MD5.
+  2. Download pinned upstream archives, with a checksum-matched GitHub
+     release mirror and Internet Archive snapshots as fallbacks, and
+     enforce SHA-256 plus published MD5.
 
 Options:
   --dest DIR    Install plugins into DIR (default: ~/.vamp).
@@ -221,9 +224,12 @@ if ! download_to_file "$NNLS_URL" "${TEMPDIR}/${NNLS_ARCHIVE}" 2>/dev/null; then
     if [[ -n "${NNLS_URL+x}" && "$NNLS_URL" != "$NNLS_PRIMARY_URL" ]]; then
         fail "NNLS download failed for the explicit NNLS_URL."
     fi
-    warn "Primary NNLS download failed; trying the checksum-matched archived upstream file."
-    download_to_file "$NNLS_ARCHIVE_URL" "${TEMPDIR}/${NNLS_ARCHIVE}" 2>/dev/null \
-        || fail "NNLS download failed from both primary and archived upstream URLs."
+    warn "Primary NNLS download failed; trying the checksum-matched GitHub mirror."
+    if ! download_to_file "$NNLS_MIRROR_URL" "${TEMPDIR}/${NNLS_ARCHIVE}" 2>/dev/null; then
+        warn "GitHub NNLS mirror failed; trying the checksum-matched archived upstream file."
+        download_to_file "$NNLS_ARCHIVE_URL" "${TEMPDIR}/${NNLS_ARCHIVE}" 2>/dev/null \
+            || fail "NNLS download failed from primary, GitHub mirror, and archived upstream URLs."
+    fi
 fi
 verify_archive "${TEMPDIR}/${NNLS_ARCHIVE}" "$NNLS_SHA256" "$NNLS_MD5"
 
@@ -231,9 +237,12 @@ if ! download_to_file "$QM_URL" "${TEMPDIR}/${QM_ARCHIVE}" 2>/dev/null; then
     if [[ -n "${QM_URL+x}" && "$QM_URL" != "$QM_PRIMARY_URL" ]]; then
         fail "QM download failed for the explicit QM_URL."
     fi
-    warn "Primary QM download failed; trying the checksum-matched archived upstream file."
-    download_to_file "$QM_ARCHIVE_URL" "${TEMPDIR}/${QM_ARCHIVE}" 2>/dev/null \
-        || fail "QM download failed from both primary and archived upstream URLs."
+    warn "Primary QM download failed; trying the checksum-matched GitHub mirror."
+    if ! download_to_file "$QM_MIRROR_URL" "${TEMPDIR}/${QM_ARCHIVE}" 2>/dev/null; then
+        warn "GitHub QM mirror failed; trying the checksum-matched archived upstream file."
+        download_to_file "$QM_ARCHIVE_URL" "${TEMPDIR}/${QM_ARCHIVE}" 2>/dev/null \
+            || fail "QM download failed from primary, GitHub mirror, and archived upstream URLs."
+    fi
 fi
 verify_archive "${TEMPDIR}/${QM_ARCHIVE}" "$QM_SHA256" "$QM_MD5"
 
