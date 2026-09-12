@@ -27,6 +27,8 @@ build ChordFlask themselves:
 
 **[Download chordflask-mint22-x86_64-py3.12-v0.9.13.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.13/chordflask-mint22-x86_64-py3.12-v0.9.13.tar.gz)**
 
+The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is based on Ubuntu 24.04.
+
 Built from the same ChordFlask release source as the public release. FFmpeg and
 Vamp plugin binaries are not bundled; see the portable bundle guide for
 requirements.
