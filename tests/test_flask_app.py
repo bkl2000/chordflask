@@ -1770,7 +1770,8 @@ def test_run_prints_security_warning_for_lan_bind(monkeypatch, capsys, tmp_path)
     app_wrapper.run(listen="0.0.0.0")
 
     output = capsys.readouterr().out
-    assert "http://0.0.0.0:5000" in output
+    assert "Local:      http://127.0.0.1:5000" in output
+    assert "Listen:     0.0.0.0:5000" in output
     assert "SECURITY:" in output
     assert "No authentication" in output
 
@@ -2712,7 +2713,7 @@ def test_desktop_chord_light_theme_is_optional_and_panel_scoped():
     assert 'filter:' not in desktop
     script = body.split('<script id="desktopPanelPreferences">')[1].split('</script>')[0]
     assert "readPreference(themeKey) === 'light' ? 'light' : 'dark'" in script
-    assert "panel.classList.toggle('chord-light', desktop.matches && themeSelect.value === 'light')" in script
+    assert "panel.classList.toggle('chord-light', themeActive() && themeSelect.value === 'light')" in script
     assert 'savePreference(themeKey, themeSelect.value)' in script
 
 

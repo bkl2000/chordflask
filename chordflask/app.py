@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import secrets
+import socket
 import sys
 import time
 from datetime import datetime
@@ -349,17 +350,40 @@ class FlaskMP4App:
         return getattr(sys, "frozen", False)
 
     def print_startup_message(self, host, port):
-        print(f"ChordFlask {self.__version__}  http://{host}:{port}")
+        print()
+        print(f"ChordFlask {self.__version__}")
+
+        if host in {"0.0.0.0", "::"}:
+            print(f"Local:      http://127.0.0.1:{port}")
+
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                    probe.connect(("1.1.1.1", 80))
+                    lan_ip = probe.getsockname()[0]
+            except OSError:
+                lan_ip = None
+
+            if lan_ip and not lan_ip.startswith("127."):
+                print(f"LAN:        http://{lan_ip}:{port}")
+
+            print(f"Listen:     {host}:{port}")
+        else:
+            print(f"Open:       http://{host}:{port}")
+
         if host not in {"127.0.0.1", "localhost", "::1"}:
-            print("SECURITY: No authentication, TLS, or CSRF. LAN only on trusted networks.")
+            print("SECURITY:   No authentication, TLS, or CSRF. LAN only on trusted networks.")
+
         if self.allowed_roots:
             print("Media roots:")
             for root in self.allowed_roots:
                 print(f"  {root}")
+
         if self.__stem_cache:
             print("STEM cache: enabled")
+
         if self.__quiet:
             return
+
         try:
             require_system_ffmpeg()
         except RuntimeError:

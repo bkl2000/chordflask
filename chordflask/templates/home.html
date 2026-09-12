@@ -1345,6 +1345,10 @@
         cursor: col-resize;
       }
 
+    }
+
+    /* The chord theme selector and light theme apply on desktop and phone. */
+    @media (min-width: 1024px), (max-width: 640px) {
       #chordThemeSelect {
         display: inline-block;
         flex: 0 0 auto;
@@ -1730,6 +1734,10 @@
         display: none;
       }
 
+      #repeatDisplayButton {
+        display: none;
+      }
+
       .control-bar {
         flex: 0 0 auto;
       }
@@ -2044,6 +2052,7 @@
   <script id="desktopPanelPreferences">
     (() => {
       const desktop = window.matchMedia('(min-width: 1024px)');
+      const phone = window.matchMedia('(max-width: 640px)');
       const workspace = document.querySelector('.workspace');
       const splitter = document.getElementById('desktopSplitter');
       const panel = document.getElementById('desktopChordPanel');
@@ -2071,12 +2080,16 @@
       let split = clampSplit(readPreference(splitKey));
       themeSelect.value = readPreference(themeKey) === 'light' ? 'light' : 'dark';
 
+      function themeActive() {
+        return desktop.matches || phone.matches;
+      }
+
       function applyPreferences() {
         // Only CSS layout and panel colors change; player/grid state is untouched.
         workspace.style.setProperty('--video-share', `${split}fr`);
         workspace.style.setProperty('--chord-share', `${100 - split}fr`);
         splitter.setAttribute('aria-valuenow', String(Math.round(split)));
-        panel.classList.toggle('chord-light', desktop.matches && themeSelect.value === 'light');
+        panel.classList.toggle('chord-light', themeActive() && themeSelect.value === 'light');
       }
 
       function endDrag() {
@@ -2122,10 +2135,11 @@
         applyPreferences();
       });
       themeSelect.addEventListener('change', () => {
-        if (!desktop.matches) return;
+        if (!themeActive()) return;
         applyPreferences();
         savePreference(themeKey, themeSelect.value);
       });
+      phone.addEventListener('change', applyPreferences);
       applyPreferences();
     })();
   </script>

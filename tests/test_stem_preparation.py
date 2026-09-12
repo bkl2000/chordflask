@@ -590,14 +590,17 @@ def test_theme_selector_moved_to_second_row():
     assert tools_row.index('id="chordThemeSelect"') < tools_row.index('class="chord-actions"')
 
 
-def test_theme_selector_is_desktop_only_css():
+def test_theme_selector_is_available_on_desktop_and_phone_css():
     _, client = make_client()
     body = _index_body(client)
 
-    # Base layout hides the selector; the desktop media query shows it.
+    # Base layout hides the selector; desktop and phone media queries show it.
     assert "#desktopSplitter,\n    #chordThemeSelect {\n      display: none;\n    }" in body
-    assert "@media (min-width: 1024px)" in body
+    assert "@media (min-width: 1024px), (max-width: 640px)" in body
     assert "#chordThemeSelect {\n        display: inline-block;" in body
+    # The phone layout hides Changes so the theme selector takes its place.
+    phone = body[body.index("@media (max-width: 640px) {"):]
+    assert "#repeatDisplayButton {\n        display: none;\n      }" in phone
 
 
 def test_theme_selector_behavior_unchanged():
@@ -606,7 +609,9 @@ def test_theme_selector_behavior_unchanged():
 
     assert "const themeKey = 'chordflask.chordTheme';" in body
     assert "themeSelect.value = readPreference(themeKey) === 'light' ? 'light' : 'dark';" in body
-    assert "panel.classList.toggle('chord-light', desktop.matches && themeSelect.value === 'light');" in body
+    assert "panel.classList.toggle('chord-light', themeActive() && themeSelect.value === 'light');" in body
+    assert "function themeActive() {" in body
+    assert "return desktop.matches || phone.matches;" in body
     assert "savePreference(themeKey, themeSelect.value);" in body
     theme_select = body[body.index('id="chordThemeSelect"'):]
     theme_select = theme_select[: theme_select.index("</select>")]
