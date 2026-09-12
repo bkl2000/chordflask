@@ -2717,6 +2717,23 @@ def test_desktop_chord_light_theme_is_optional_and_panel_scoped():
     assert 'savePreference(themeKey, themeSelect.value)' in script
 
 
+def test_phone_light_theme_bolds_only_the_chord_output():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+
+    # Phone light theme bolds the chord grid output only.
+    phone = body[body.index("@media (max-width: 640px) {"):]
+    assert (
+        ".chord-panel.chord-light:not(.song-view-active) #callbackOutput {\n"
+        "        font-weight: 700;\n"
+        "      }"
+    ) in phone
+
+    # The desktop light theme is unchanged: it never bolds #callbackOutput.
+    desktop = body.split("@media (min-width: 1024px), (max-width: 640px) {")[1].split(
+        "@media (min-width: 801px) and (min-height: 600px)")[0]
+    assert "#callbackOutput" not in desktop
+
 
 def test_desktop_outer_spacing_and_file_height_are_scoped():
     _, client = make_client()
