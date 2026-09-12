@@ -118,6 +118,9 @@ printf '\n'
 printf 'Standalone: %s\n' "${RELEASE_DIR}/chordflask"
 printf 'Archive:    %s\n' "${RELEASE_ARCHIVE}"
 printf 'Start:      %s\n' "${RELEASE_DIR}/chordflask.sh"
+printf '\nCopy to ~/bin:\n'
+printf 'cp "%s"/* ~/bin\n' "${RELEASE_DIR}"
+printf 'cp "%s"/scripts/chordflask-* ~/bin\n' "${PROJECT_ROOT}"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
     printf 'MISSING: ffmpeg — sudo apt install ffmpeg\n'
