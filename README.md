@@ -43,6 +43,7 @@ There are two ways to run ChordFlask:
   installer and launcher. See the
   [standalone bundle guide](docs/STANDALONE.md) for the complete workflow.
 - **From source.** Use a Git checkout to run ChordFlask from source, or to
+  **BTC analysis and Demucs stem separation are optional add-ons. Install them only if needed; on a CUDA-capable GPU they run significantly faster, while the normal ChordFlask workflow does not require them.**
   install and use the command-line tools.
 
 ### Run from source
