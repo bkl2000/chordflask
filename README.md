@@ -38,13 +38,10 @@ requirements.
 
 There are two ways to run ChordFlask:
 
-- **Prebuilt standalone bundle (simplest).** Download the prebuilt Linux x86_64
-  standalone bundle from [Download](#download), unpack it, and run the bundled
-  installer and launcher. See the
-  [standalone bundle guide](docs/STANDALONE.md) for the complete workflow.
-- **From source.** Use a Git checkout to run ChordFlask from source, or to
-  **BTC analysis and Demucs stem separation are optional add-ons. Install them only if needed; on a CUDA-capable GPU they run significantly faster, while the normal ChordFlask workflow does not require them.**
-  install and use the command-line tools.
+- **Prebuilt standalone bundle (simplest).** Download the prebuilt Linux x86_64 standalone bundle from [Download](#download), unpack it, and run the bundled installer and launcher. See the [standalone bundle guide](docs/STANDALONE.md) for the complete workflow.
+- **From source.** Use a Git checkout to run ChordFlask from source, or to install and use the command-line tools.
+
+BTC chord analysis and Demucs stem separation are optional. Install them only if needed; both benefit substantially from a CUDA-capable GPU. The standard ChordFlask workflow does not require either.
 
 ### Run from source
 
