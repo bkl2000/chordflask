@@ -38,10 +38,12 @@ requirements.
 
 There are two ways to run ChordFlask:
 
-- **Prebuilt standalone bundle (simplest).** Download the prebuilt Linux x86_64 standalone bundle from [Download](#download), unpack it, and run the bundled installer and launcher. See the [standalone bundle guide](docs/STANDALONE.md) for the complete workflow.
-- **From source.** Use a Git checkout to run ChordFlask from source, or to install and use the command-line tools.
-
-BTC chord analysis and Demucs stem separation are optional. Install them only if needed; both benefit substantially from a CUDA-capable GPU. The standard ChordFlask workflow does not require either.
+- **Prebuilt standalone bundle (simplest).** Download the prebuilt Linux x86_64
+  standalone bundle from [Download](#download), unpack it, and run the bundled
+  installer and launcher. See the
+  [standalone bundle guide](docs/STANDALONE.md) for the complete workflow.
+- **From source.** Clone the repository, install the runtime dependencies,
+  install the Vamp plugins, and start ChordFlask as shown below.
 
 ### Run from source
 
@@ -55,7 +57,7 @@ sudo apt install --no-install-recommends \
   build-essential libasound2-dev libcairo2-dev
 ```
 
-Then download ChordFlask, create its private Python environment, install the two
+Then clone ChordFlask, create its private Python environment, install the two
 required audio-analysis plugins, and start it:
 
 ```bash
@@ -72,6 +74,10 @@ MP3, MP4, or WebM files. Stop ChordFlask with `Ctrl+C` in the terminal.
 The Make targets use `~/.venvs/chordflask` automatically; you do not need to
 activate that environment. If a command fails, see
 [Troubleshooting](#troubleshooting).
+
+BTC chord analysis and Demucs stem separation are optional. Install them only
+if needed; both benefit substantially from a CUDA-capable GPU. The standard
+ChordFlask workflow does not require either.
 
 ## Why ChordFlask
 
