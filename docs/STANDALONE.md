@@ -1,9 +1,9 @@
-# Portable Linux bundle
+# Standalone bundle
 
-ChordFlask's portable bundle is useful when you want to build once and copy the
-application to another compatible Linux x86_64 machine. A prebuilt Linux x86_64
-bundle may be attached to a GitHub release, but you can also build it yourself
-with the steps below.
+ChordFlask's standalone bundle is useful when you want to build once and copy
+the application to another compatible Linux x86_64 machine. A prebuilt
+standalone bundle may be attached to a GitHub release, but you can also build it
+yourself with the steps below.
 
 The bundle contains ChordFlask and its Python runtime. It deliberately does not
 contain FFmpeg or Vamp plugin binaries, so the target machine must provide
@@ -49,6 +49,10 @@ cd chordflask-debian13-x86_64-py3.12-vX.Y.Z
 
 Open <http://localhost:5000>. Stop ChordFlask with `Ctrl+C`.
 
+`./chordflask --version` reports the build identity embedded in the executable.
+The `VERSION` file is the human-readable copy of that identity for reference;
+the executable does not read it at runtime.
+
 The standalone includes the same persistent worker and **Analyze** batch
 control as the source run. Its default batch size is 50 (configurable from 1 to
 500), and interrupted queue work is retried after the launcher restarts.
@@ -85,6 +89,6 @@ the control is simply not offered. Tablet/mobile layouts never show it.
 - `chordflask` — application executable
 - `chordflask.sh` — recommended launcher
 - `install_vamp.sh` — verified plugin installer
-- `VERSION` — application version and build identity
+- `VERSION` — human-readable copy of the embedded build identity (version, build time, commit)
 - `README.md` — this guide
 - `THIRD_PARTY_NOTICES.md` — dependency licences and provenance

@@ -36,9 +36,19 @@ requirements.
 
 ## Quick start
 
-This is the recommended installation method. On a fresh Debian 13 or WSL2
-system the Python interpreter, compiler toolchain, and download tools are not
-preinstalled, so install the system packages first:
+There are two ways to run ChordFlask:
+
+- **Prebuilt standalone bundle (simplest).** Download the prebuilt Linux x86_64
+  standalone bundle from [Download](#download), unpack it, and run the bundled
+  installer and launcher. See the
+  [standalone bundle guide](docs/STANDALONE.md) for the complete workflow.
+- **From source.** Use a Git checkout to run ChordFlask from source, or to
+  install and use the command-line tools.
+
+### Run from source
+
+On a fresh Debian 13 or WSL2 system the Python interpreter, compiler toolchain,
+and download tools are not preinstalled, so install the system packages first:
 
 ```bash
 sudo apt update
@@ -47,7 +57,7 @@ sudo apt install --no-install-recommends \
   build-essential libasound2-dev libcairo2-dev
 ```
 
-Download ChordFlask, create its private Python environment, install the two
+Then download ChordFlask, create its private Python environment, install the two
 required audio-analysis plugins, and start it:
 
 ```bash
@@ -193,7 +203,7 @@ scripts/chordflask-analyze --analyzer btc song.mp4
 
 Chordino and BTC are stored as separate tracks; switch between them with the
 track selector next to the chord grid. BTC never replaces Chordino and is not
-part of the portable bundle. Its separate runtime supports Python 3.12–3.14
+part of the standalone bundle. Its separate runtime supports Python 3.12–3.14
 and uses PyTorch 2.10.0 with CUDA 12.8 wheels (with automatic CPU fallback).
 See [BTC runtime compatibility](chordflask_btc/model/README.md#runtime-compatibility)
 for interpreter overrides and existing-venv upgrades.
@@ -202,7 +212,7 @@ for interpreter overrides and existing-venv upgrades.
 
 Demucs is an optional, separate runtime that splits a song into four parts —
 **Vocals**, **Drums**, **Bass**, and **Other**. ChordFlask works normally
-without it, and the normal app and portable bundle keep the heavy
+without it, and the normal app and standalone bundle keep the heavy
 Demucs/Torch stack external; only the small, dependency-free producer is
 bundled.
 
@@ -395,11 +405,11 @@ Cleanup can also remove orphaned temporary work and corrupt-analysis backups
 user-edited chords are never deleted. See [docs/ANALYSIS.md](docs/ANALYSIS.md)
 for the complete storage description.
 
-## Build a portable Linux bundle
+## Build a standalone bundle
 
-A prebuilt bundle is available from [Download](#download) above. This advanced
-workflow builds ChordFlask on your machine for use on a compatible Linux x86_64
-machine. It is not required for normal use.
+A prebuilt standalone bundle is available from [Download](#download) above. This
+advanced workflow builds ChordFlask on your machine for use on a compatible
+Linux x86_64 machine. It is not required for normal use.
 
 ```bash
 make setup
@@ -420,9 +430,19 @@ guide is included as `README.md` inside the archive.
 
 ## Troubleshooting
 
+- **General diagnosis:** run `chordflask-maintain doctor` (or
+  `scripts/chordflask-maintain doctor` in a source checkout) to check the
+  installation and environment without changing anything.
+- **A standalone bundle fails to start with a `GLIBC_*` error:** the bundle was
+  built against a newer glibc than the target provides. Use a bundle built on
+  the oldest target family, or build one on a system matching the target.
+- **`install_vamp.sh` fails:** it reports either that all download sources
+  (primary, GitHub mirror, Internet Archive) were exhausted or that a checksum
+  did not match. Check the network and rerun; a checksum mismatch means the file
+  is not the pinned archive and must not be installed.
 - **`ffmpeg` was not found:** run `sudo apt install ffmpeg` and restart.
 - **Vamp plugins are missing:** run `make plugins` from the source directory and
-  restart. In an unpacked portable bundle, run `./install_vamp.sh` instead.
+  restart. In an unpacked standalone bundle, run `./install_vamp.sh` instead.
 - **No files appear:** load an existing directory and check that its files end
   in `.mp3`, `.mp4`, or `.webm`.
 - **Analysis cannot write files:** give your user write permission for the media
@@ -470,7 +490,7 @@ the whole filesystem is not automatically exposed.
 - [Maintenance commands](docs/MAINTENANCE.md)
 - [Supported command-line helpers](docs/HELPERS.md)
 - [Vamp plugin installation and verification](docs/VAMP.md)
-- [Portable bundle guide](docs/STANDALONE.md)
+- [Standalone bundle guide](docs/STANDALONE.md)
 - [Platform and Python compatibility](docs/COMPATIBILITY.md)
 - [Optional Demucs stems and playback](docs/DEMUCS.md)
 - [Development and tests](CONTRIBUTING.md)

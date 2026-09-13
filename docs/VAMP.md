@@ -60,9 +60,16 @@ Upstream project pages:
 - NNLS Chroma/Chordino: https://isophonics.net/nnls-chroma.html
 - QM Vamp Plugins: https://code.soundsoftware.ac.uk/projects/qm-vamp-plugins/files
 
-The installer tries upstream downloads first and checksum-matched Internet
-Archive captures if an old upstream host is unavailable. Explicit URL overrides
-are supported:
+The installer tries download sources in this order:
+
+1. the primary upstream archive;
+2. the checksum-matched GitHub release mirror (`vamp-deps-1`);
+3. the checksum-matched Internet Archive capture.
+
+The GitHub mirror is only an additional transport source. It is not trusted for
+integrity: whichever source succeeds, the archive is installed only after its
+pinned SHA-256 and published MD5 values match. Explicit URL overrides are
+supported:
 
 ```bash
 NNLS_URL=https://example.invalid/nnls.tar.bz2 \
