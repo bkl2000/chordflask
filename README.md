@@ -289,6 +289,8 @@ layout, and limitations.
    playing the file. Press **A** and **B** to mark a loop segment and **⟳** to
    repeat it.
 
+![ChordFlask file browser and analysis view](docs/example-screenshot-2.png)
+
 ### Optional ChordPro Song view
 
 On desktop browsers, an analyzed media file can have a user-supplied,
