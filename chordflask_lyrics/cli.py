@@ -37,8 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chordflask-genlyrics",
         description=(
-            "Fetch synchronized lyrics from LRCLIB and generate a same-stem "
-            "ChordPro file using existing ChordFlask analysis."
+            "Fetch synchronized lyrics from LRCLIB and generate a .cho sidecar "
+            "beside the media file using existing ChordFlask analysis."
         ),
     )
     parser.add_argument("--dry-run", action="store_true", help="match and render without writing")
