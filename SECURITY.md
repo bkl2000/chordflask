@@ -43,6 +43,12 @@ Do not open a public issue.
 - The queue persists to the user's home directory (`~/.chordflask/`) with file
   locking and atomic writes.
 - No credentials, secrets, or authentication tokens are stored or transmitted.
+- `chordflask-genlyrics` is an explicitly invoked source-installation CLI that
+  makes HTTPS requests to LRCLIB, sending the song lookup metadata or search
+  terms required for matching. It does not upload media files or ChordFlask
+  analysis data. Normal playback and analysis do not use LRCLIB, and the
+  standalone contains no LRCLIB client or generator and performs no lyrics
+  network lookup.
 
 ## Third-party components
 

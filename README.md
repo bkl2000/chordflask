@@ -11,8 +11,9 @@ ChordFlask is a free, self-hosted Linux chord analysis tool for local audio and 
 collections. It analyzes chords and beats in MP3, MP4, and WebM files, supports
 fast on-demand and batch analysis, and shows the results in sync while you play
 the media in the browser. The displayed chords can be transposed, corrected,
-compared, and exported as Markdown or PDF. Everything runs locally; media and
-analysis data are never uploaded.
+compared, and exported as Markdown or PDF. Playback and analysis run locally;
+media and analysis data are never uploaded. The optional `chordflask-genlyrics`
+command performs an explicit on-demand lyrics lookup via LRCLIB.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+ (CPython 3.12–3.14). Native Windows is not supported; Windows users can run
@@ -402,9 +403,10 @@ scripts/chordflask-export ~/Music --format markdown
 scripts/chordflask-export ~/Music --format pdf
 ```
 
-The browser **Save** button downloads one ZIP containing the matching `.md` and
-`.pdf` for the single file currently displayed. Full format and option details
-are in [docs/ANALYSIS.md](docs/ANALYSIS.md).
+The browser **Save** button downloads one ZIP containing matching `.md`, `.pdf`,
+and lyric-free ChordPro `.cho` leadsheets for the single file currently
+displayed. MIDI is not included. Full format and option details are in
+[docs/ANALYSIS.md](docs/ANALYSIS.md).
 
 ### On-demand synchronized lyrics
 

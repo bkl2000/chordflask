@@ -286,15 +286,15 @@ read only for desktop browser display.
 ## Saving a leadsheet
 
 The **Save** control downloads the exact active display as one ZIP containing
-matching playable Markdown and print-ready A4 PDF leadsheets; the server
-creates no export file. The Markdown document contains the media title, one
-compact metadata line (`**120 BPM · 4/4 · Edited · Flats · Transpose 0**`), the
-chord/rhythm track source line, and a `text` code block without tables,
-barlines, or measure labels. Each row contains two complete measures: eight
-aligned beat fields in 4/4 or six in 3/4. Beat fields are at least ten
-characters wide, expand together for longer symbols, and the space between the
-two measures is wider. Blank lines separate rows, with extra space after each
-eight-measure group.
+matching playable Markdown, print-ready A4 PDF, and lyric-free ChordPro `.cho`
+leadsheets; MIDI is not included, and the server creates no export file. The
+Markdown document contains the media title, one compact metadata line
+(`**120 BPM · 4/4 · Edited · Flats · Transpose 0**`), the chord/rhythm track
+source line, and a `text` code block without tables, barlines, or measure
+labels. Each row contains two complete measures: eight aligned beat fields in
+4/4 or six in 3/4. Beat fields are at least ten characters wide, expand
+together for longer symbols, and the space between the two measures is wider.
+Blank lines separate rows, with extra space after each eight-measure group.
 
 The export always reflects the accepted screen state: the selected
 Original/Edited or named chord track, the active rhythm track, transpose,
