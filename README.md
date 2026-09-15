@@ -452,6 +452,14 @@ the generated file. `--track` selects `auto` (the default), `chordino`, `btc`,
 the `.cho`, which is not dynamically rewritten by later track changes.
 `--dry-run` performs lookup, alignment, and rendering but writes nothing.
 
+> **Version matching:** ChordFlask matches LRCLIB lyrics by song metadata and
+> duration, but does not audio-fingerprint the recording. Live, acoustic,
+> remastered, extended, or rearranged versions may therefore match the correct
+> song while still having incompatible lyric timing. Try `--tag` for a more
+> specific match; if LRCLIB has no synchronized version for that recording,
+> Lyrics view cannot synchronize it correctly.
+
+
 Generated `.cho` files are local user data. ChordFlask does not ship a lyrics
 database; song lyrics may be copyrighted. The standalone can read and display
 existing `.cho` files in its Lyrics view, but it does not include the generator,
