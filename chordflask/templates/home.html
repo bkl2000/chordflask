@@ -505,7 +505,7 @@
       max-width: 900px;
       margin: 0 auto;
       padding: 12px 18px 28px;
-      color: #e8edf2;
+      color: var(--chord-text);
       font-family: Arial, Helvetica, sans-serif;
       font-size: clamp(15px, 1.25vw, 20px);
       line-height: 1.35;
@@ -565,6 +565,13 @@
       font-size: 0.82em;
       font-weight: 700;
       line-height: 1.1;
+    }
+
+    .song-chord.song-chord-active {
+      /* Strong inverse of the dark theme: light plate, near-black text. */
+      background: #f4f7fa;
+      color: #101418;
+      border-radius: 3px;
     }
 
     .song-lyric {
@@ -1362,7 +1369,7 @@
         font-size: 12px;
       }
 
-      .chord-panel.chord-light:not(.song-view-active) {
+      .chord-panel.chord-light {
         --chord-bg: #fff;
         --chord-text: #20242a;
         --chord-muted: #52606d;
@@ -1370,9 +1377,33 @@
         border-color: #cfd6de;
       }
 
-      .chord-light:not(.song-view-active) .chord-header,
+      .chord-light .chord-header,
       .chord-light:not(.song-view-active) #editTools {
         border-color: #cfd6de;
+      }
+
+      .chord-light .song-sheet-title {
+        color: var(--chord-text);
+      }
+
+      .chord-light .song-sheet-meta,
+      .chord-light .song-comment {
+        color: var(--chord-muted);
+      }
+
+      .chord-light .song-section-heading,
+      .chord-light .song-chord {
+        color: var(--accent);
+      }
+
+      .chord-light .song-chord.song-chord-active {
+        /* Strong inverse of the light theme: dark plate, white text. */
+        background: #1b1f24;
+        color: #ffffff;
+      }
+
+      .chord-light .song-comment-box {
+        border-color: #a5b1bd;
       }
 
       .chord-light:not(.song-view-active) #queueStatus {
@@ -1838,7 +1869,7 @@
               <span id="chordViewTitle">Grid</span>
               <span id="songViewSwitch" role="group" aria-label="Chord panel view" hidden>
                 <button id="gridViewButton" type="button" aria-pressed="true">Grid</button>
-                <button id="songViewButton" type="button" aria-pressed="false">Song</button>
+                <button id="songViewButton" type="button" aria-pressed="false">Lyrics</button>
               </span>
             </span>
             <span id="fileStatus">No file loaded</span>
@@ -2275,6 +2306,9 @@
     let songSheetCache = null;
     let songSheetRequestInFlight = false;
     let songViewGeneration = 0;
+    let lyricChordMarkers = [];
+    let activeLyricMarkerIndex = -1;
+    let activeLyricBeatIndex = null;
 
     const STEM_NAMES = ['vocals', 'drums', 'bass', 'other'];
     const STEM_LABELS = {
@@ -2358,7 +2392,7 @@
     function applySongViewMode() {
       const showSong = songViewMode === 'song';
       chordPanel.classList.toggle('song-view-active', showSong);
-      chordViewTitle.textContent = showSong ? 'Song' : 'Grid';
+      chordViewTitle.textContent = showSong ? 'Lyrics' : 'Grid';
       callbackOutput.hidden = showSong || editMode;
       document.getElementById('editGridContainer').hidden = showSong || !editMode;
       document.getElementById('editTools').hidden = showSong || !editMode;
@@ -2373,6 +2407,9 @@
       songSheetCache = null;
       songSheetRequestInFlight = false;
       songSheet.replaceChildren();
+      lyricChordMarkers = [];
+      activeLyricMarkerIndex = -1;
+      activeLyricBeatIndex = null;
       applySongViewMode();
     }
 
@@ -2386,6 +2423,8 @@
 
     function renderSongSheet(song) {
       const fragment = document.createDocumentFragment();
+      lyricChordMarkers = [];
+      activeLyricMarkerIndex = -1;
       const metadata = song.metadata || {};
       if (metadata.title) appendSongText(fragment, 'song-sheet-title', metadata.title);
       if (metadata.artist) appendSongText(fragment, 'song-sheet-artist', metadata.artist);
@@ -2422,13 +2461,29 @@
         (block.runs || []).forEach(run => {
           const runElement = document.createElement('span');
           runElement.className = 'song-run';
-          appendSongText(runElement, 'song-chord', run.chord || '', 'span');
+          const chordElement = appendSongText(runElement, 'song-chord', run.chord || '', 'span');
           appendSongText(runElement, 'song-lyric', run.lyric || '', 'span');
+          if (
+            run.chord
+            && Number.isInteger(run.start_beat)
+            && Number.isInteger(run.end_beat)
+            && run.start_beat >= 0
+            && run.end_beat > run.start_beat
+          ) {
+            lyricChordMarkers.push({
+              element: chordElement,
+              line,
+              startBeat: run.start_beat,
+              endBeat: run.end_beat,
+            });
+          }
           line.appendChild(runElement);
         });
         fragment.appendChild(line);
       });
+      lyricChordMarkers.sort((a, b) => a.startBeat - b.startBeat);
       songSheet.replaceChildren(fragment);
+      updateLyricsHighlight(activeLyricBeatIndex);
     }
 
     function renderSongError(message) {
@@ -2452,7 +2507,7 @@
       songSheetRequestInFlight = true;
       updateSongViewControl();
       songSheet.replaceChildren();
-      appendSongText(songSheet, 'song-sheet-message', 'Loading Song sheet…');
+      appendSongText(songSheet, 'song-sheet-message', 'Loading Lyrics sheet…');
       fetch('/get_song_sheet', { headers: { 'Cache-Control': 'no-store' } })
       .then(response => response.json().then(data => {
         if (!response.ok) throw data;
@@ -2483,12 +2538,66 @@
         songViewMode = 'song';
         applySongViewMode();
         loadSongSheet();
+        // Reuse the existing Grid synchronization request so an already-running
+        // playback immediately highlights the current chord without a restart.
+        syncPlaybackPosition(true);
         return;
       }
       const returningToGrid = songViewMode === 'song';
       songViewMode = 'grid';
       applySongViewMode();
       if (returningToGrid) syncPlaybackPosition(true);
+    }
+
+    function updateLyricsHighlight(beatIndex) {
+      if (typeof beatIndex === 'number' && Number.isFinite(beatIndex)) {
+        activeLyricBeatIndex = beatIndex;
+      }
+      if (
+        songViewMode !== 'song'
+        || activeLyricBeatIndex === null
+        || !lyricChordMarkers.length
+      ) return;
+      // Musical position, not chord text, identifies the active marker: the
+      // marker's mapped beat range must contain the active analyzed beat. If
+      // the position falls in an unmapped instrumental gap no range matches and
+      // the highlight is cleared, then resumes at the next mapped line.
+      let found = -1;
+      for (let index = 0; index < lyricChordMarkers.length; index += 1) {
+        const marker = lyricChordMarkers[index];
+        if (marker.startBeat > activeLyricBeatIndex) break;
+        if (activeLyricBeatIndex < marker.endBeat) {
+          found = index;
+          break;
+        }
+      }
+      if (found === activeLyricMarkerIndex) return;
+      if (activeLyricMarkerIndex >= 0) {
+        lyricChordMarkers[activeLyricMarkerIndex].element.classList.remove('song-chord-active');
+      }
+      activeLyricMarkerIndex = found;
+      if (found < 0) return;
+      const marker = lyricChordMarkers[found];
+      marker.element.classList.add('song-chord-active');
+      keepLyricMarkerVisible(marker);
+    }
+
+    function keepLyricMarkerVisible(marker) {
+      const container = callbackContainer;
+      const line = marker.line;
+      if (!line || !container.clientHeight) return;
+      const containerRect = container.getBoundingClientRect();
+      const lineRect = line.getBoundingClientRect();
+      const relativeTop = lineRect.top - containerRect.top + container.scrollTop;
+      const relativeBottom = lineRect.bottom - containerRect.top + container.scrollTop;
+      const margin = container.clientHeight * 0.15;
+      if (
+        relativeTop >= container.scrollTop + margin
+        && relativeBottom <= container.scrollTop + container.clientHeight - margin
+      ) return;
+      // Deterministic: place the row about one third from the top, only when
+      // it left the comfortable band. No animation and no per-beat scrolling.
+      container.scrollTop = Math.max(0, relativeTop - container.clientHeight * 0.3);
     }
 
     function handleSongViewportChange() {
@@ -4410,6 +4519,7 @@
       if (editMode && dataDict.edit_grid) {
         renderEditGrid(dataDict.edit_grid);
       }
+      updateLyricsHighlight(dataDict.active_index);
     }
 
     function syncPlaybackPosition(force = false) {

@@ -273,3 +273,24 @@ def test_desktop_track_switch_keeps_grid_position_and_mode(tmp_path):
     assert next(index for index, line in enumerate(before["output"].splitlines()[1:], 1) if "[" in line) == 3
     assert next(index for index, line in enumerate(after["output"].splitlines()[1:], 1) if "[" in line) == 3
     assert "G120" in after["output"]
+
+
+def test_callback_payload_exposes_active_beat_index_for_lyrics_sync(tmp_path):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
+    data = ChordData()
+    data.set_base_chords(
+        [{"timestamp": 0.0, "chord": "C"}, {"timestamp": 1.0, "chord": "G"}],
+        beat_times=[0.0, 1.0, 2.0],
+    )
+    data.save_to_file(file_repr.get("json"))
+
+    player = MP4PlayerFlask(file_repr)
+    player.update_position(1.1)
+    payload = player.get_callback_output()
+
+    # The same analyzed beat index that drives the Grid now drives Lyrics.
+    assert payload["active_index"] == 1
+    assert payload["position"] == 1.1
+    assert player.playback_view.render(1.1)["index"] == payload["active_index"]

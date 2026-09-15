@@ -287,6 +287,9 @@ PY
         "the installed chordflask-export command could not be verified" \
         "${VENV_DIR}/bin/chordflask-export" --help
     run_setup_command \
+        "the installed chordflask-genlyrics command could not be verified" \
+        "${VENV_DIR}/bin/chordflask-genlyrics" --help
+    run_setup_command \
         "the installed chordflask-maintain command could not be verified" \
         "${VENV_DIR}/bin/chordflask-maintain" --help
     run_setup_command \

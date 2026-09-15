@@ -219,18 +219,64 @@ replacing its final suffix with lowercase `.cho`:
 ```
 
 At browser widths of 801 px or greater, the chord panel then offers **Grid |
-Song** and starts in **Grid**. Song replaces the Grid content in that same
-scrollable panel; it has no lyric/beat synchronization and does not change the
-media player. ChordPro title, artist, subtitle, key, capo, common section
-directives, comments, lyrics, and inline chord markers are displayed as a
-readable text-only sheet.
+Lyrics** and starts in **Grid**. Lyrics replaces the Grid content in that same
+scrollable panel and does not change the media player. ChordPro title, artist,
+subtitle, key, capo, common section directives, comments, lyrics, and inline
+chord markers are displayed as a readable text-only sheet.
 
-The sidecar is supplied and owned by the user. ChordFlask does not download or
-generate lyrics. It also does not import the sidecar into analysis: analyzed
+While playback runs, the Lyrics view follows the same analyzed timeline as the
+Grid: the current player position maps to the current analyzed beat/chord, and
+the corresponding lyric chord marker is highlighted. Marker identity is the
+analyzed beat position, not the chord text, so repeated chord names stay
+distinct events. The row containing the active marker is kept in a comfortable
+viewport band; scrolling only happens when the row leaves that band. Seek and
+Grid/Lyrics switching reuse the existing position sync and update immediately.
+
+Generated `chordflask-genlyrics` sheets keep every chord marker an ordinary
+ChordPro name and carry the mapping in small custom, non-display directives:
+
+```text
+{x_chordflask_track: btc}
+{x_chordflask_beats: 17,23}
+{x_chordflask_end: 40}
+[G]some lyric [Am]more lyric
+```
+
+`x_chordflask_track` records the actual chord-track snapshot embedded by the
+generator. `--track auto` (the default) prefers a valid `user_edited` track,
+then uses the analysis active/default track, and finally `chordino` when
+necessary. An explicit unavailable track fails for that file without fallback.
+Changing the active analysis track later does not rewrite an existing `.cho`.
+`x_chordflask_beats` lists the analyzed beat index of each chord marker in the
+immediately following line, in order. `x_chordflask_end` closes the final
+marker's exclusive mapped beat range. No range crosses a genuine unmapped
+instrumental gap, so playback there clears the highlight instead of leaving the
+last lyric chord active indefinitely. Other ChordPro readers ignore the
+directives as unknown metadata. If a hand-edited file no longer has exactly one
+beat per chord marker, the mismatch disables precise sync for that line only
+and the line renders statically; it is never rejected.
+
+Within mapped Lyrics coverage, generated markers include every analyzed chord
+change that Changes mode would show while suppressing unchanged repeated beats.
+
+Hand-written `.cho` files without the directives still parse, display, and open
+in Lyrics view; they simply do not receive chord-follow highlighting. The
+metadata never appears as visible lyric text and `.cho` is never an alternative
+source of chord truth: the analysis JSON always wins.
+
+The sidecar is supplied by the user or generated explicitly by
+`chordflask-genlyrics`; displaying or synchronizing it performs no network
+access. It also does not import the sidecar into analysis: analyzed
 chord/rhythm track selection, Edited data, transpose, accidental spelling,
 Unicode preference, repeat-display mode, timing, and persistence remain
 independent. Invalid UTF-8, oversized, missing, malformed, or unreadable Song
 input fails locally without breaking Grid or playback.
+
+The generator runs in the normal source-installation environment, requires an
+existing analysis, and fetches synchronized lyrics from the external LRCLIB
+service on demand without an API key for normal lookup. Generated `.cho` files
+remain local user data; ChordFlask ships no lyrics database, and song lyrics may
+be copyrighted.
 
 This input path differs from ChordFlask's existing ChordPro export. The export
 described below is generated from the analyzed beat grid, contains no lyrics,

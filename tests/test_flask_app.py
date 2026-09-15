@@ -2360,17 +2360,26 @@ def test_song_view_uses_existing_chord_area_and_desktop_only_switch():
         body.index("@media (max-width: 800px)"):
         body.index("@media (max-width: 640px)")
     ]
+    controller = javascript_function(body, "updateSongViewControl")
 
     assert '<span id="songViewSwitch"' in body
     assert '<button id="gridViewButton"' in body
     assert '<button id="songViewButton"' in body
+    assert '<button id="songViewButton" type="button" aria-pressed="false">Lyrics</button>' in body
+    assert "chordViewTitle.textContent = showSong ? 'Lyrics' : 'Grid'" in body
     assert '<div id="songSheet" hidden></div>' in callback
     assert body.index('<div id="songSheet" hidden></div>') < body.index('</aside>')
-    assert "#songViewSwitch" in narrow_rule
-    assert "display: none" in narrow_rule
+    assert re.search(r"#songViewSwitch\s*\{\s*display: none;\s*\}", narrow_rule)
     assert "window.matchMedia('(min-width: 801px)')" in body
+    assert "const usable = songViewAvailable && desktopSongView.matches" in controller
+    assert "songViewSwitch.hidden = !usable" in controller
     assert "if (!desktopSongView.matches && songViewMode === 'song')" in body
     assert "setSongViewMode('grid')" in javascript_function(body, "handleSongViewportChange")
+    # The existing smartphone controls remain present; Lyrics is hidden by the
+    # established <=800px responsive rule rather than a new mobile mechanism.
+    assert 'id="mobileMenuButton"' in body
+    assert 'id="mobileMenuClose"' in body
+    assert "let mobilePlaybackControls = window.matchMedia('(max-width: 640px)')" in body
     assert 'class="track-selectors" data-grid-only' in body
     assert 'class="display-tools" data-grid-only' in body
     assert 'id="editButton" data-grid-only' in body
@@ -2444,6 +2453,98 @@ def test_song_view_fetches_once_after_activation_and_keeps_failures_retryable():
     assert activation.index("data.status === 'queued'") < activation.index(
         "resetSongView(data.song_view_available)"
     )
+
+
+def test_lyrics_view_reuses_grid_sync_state_for_chord_highlight():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    renderer = javascript_function(body, "renderSongSheet")
+    render = javascript_function(body, "renderCallbackData")
+    highlighter = javascript_function(body, "updateLyricsHighlight")
+    switcher = javascript_function(body, "setSongViewMode")
+
+    # The Lyrics view consumes the same active analyzed beat as the Grid.
+    assert "updateLyricsHighlight(dataDict.active_index)" in render
+    assert "syncPlaybackPosition(true)" in switcher
+    # Identity is the mapped analyzed beat range, not chord text: only runs and
+    # lines carrying a complete parser-validated map participate, so repeated
+    # chord names stay distinct events.
+    assert (
+        "Number.isInteger(run.start_beat)" in renderer
+    )
+    assert "Number.isInteger(run.end_beat)" in renderer
+    assert "lyricChordMarkers.push" in renderer
+    assert "endBeat" in renderer
+    assert "marker.startBeat > activeLyricBeatIndex" in highlighter
+    assert "activeLyricBeatIndex < marker.endBeat" in highlighter
+    assert "classList.add('song-chord-active')" in highlighter
+    assert "classList.remove('song-chord-active')" in highlighter
+
+
+def test_lyrics_highlight_clears_in_unmapped_instrumental_gap():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    highlighter = javascript_function(body, "updateLyricsHighlight")
+
+    # No mapped range contains the active beat in a gap, so found stays -1 and
+    # the previous lyric chord is un-highlighted instead of staying active.
+    assert "let found = -1;" in highlighter
+    assert "activeLyricBeatIndex < marker.endBeat" in highlighter
+    assert (
+        highlighter.index("classList.remove('song-chord-active')")
+        < highlighter.index("if (found < 0) return;")
+    )
+
+
+def test_lyrics_highlight_and_scroll_are_desktop_song_mode_only():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    highlighter = javascript_function(body, "updateLyricsHighlight")
+    scroller = javascript_function(body, "keepLyricMarkerVisible")
+
+    # The existing desktop-only switch forces songViewMode back to 'grid' below
+    # 801px, and the highlighter refuses to run outside song mode.
+    assert "songViewMode !== 'song'" in highlighter
+    # Deterministic band-limited scroll; no animation and no per-beat reset.
+    assert "container.scrollTop" in scroller
+    assert "container.clientHeight * 0.15" in scroller
+    assert "requestAnimationFrame" not in scroller
+    assert "smooth" not in scroller
+
+
+def test_lyrics_active_chord_uses_strong_inverse_for_both_themes():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    light_block = body[
+        body.index('@media (min-width: 1024px)'):
+        body.index('@media (min-width: 801px) and (min-height: 600px)')
+    ]
+    dark_match = re.search(
+        r"\.song-chord\.song-chord-active \{(?P<rule>[^}]*)\}", body
+    )
+    light_match = re.search(
+        r"\.chord-light \.song-chord\.song-chord-active \{(?P<rule>[^}]*)\}",
+        light_block,
+    )
+    assert dark_match and light_match
+    dark_rule = dark_match.group("rule")
+    light_rule = light_match.group("rule")
+
+    # Dark theme inverts to a light plate with near-black text.
+    assert "background: #f4f7fa;" in dark_rule
+    assert "color: #101418;" in dark_rule
+    # Light theme inverts to a dark plate with white text.
+    assert "background: #1b1f24;" in light_rule
+    assert "color: #ffffff;" in light_rule
+    # The active state always sets both a plate and text, and the two themes do
+    # not reuse the same pair, so the highlight cannot collapse into either
+    # background.
+    assert "background: #f4f7fa;" not in light_rule
+    assert "background: #1b1f24;" not in dark_rule
 
 
 def test_chord_grid_mode_is_viewport_selected_without_changing_mobile_reflow():
@@ -2705,9 +2806,15 @@ def test_desktop_chord_light_theme_is_optional_and_panel_scoped():
         assert f'id="{control}"' in panel
     desktop = body[body.index('@media (min-width: 1024px)'):body.index(
         '@media (min-width: 801px) and (min-height: 600px)')]
-    assert '.chord-panel.chord-light:not(.song-view-active)' in desktop
+    assert '.chord-panel.chord-light {' in desktop
+    assert '.chord-panel.chord-light:not(.song-view-active)' not in desktop
     assert '--chord-bg: #fff' in desktop
     assert '--chord-text: #20242a' in desktop
+    assert '#songSheet {' in body
+    assert 'color: var(--chord-text)' in body[body.index('#songSheet {'):body.index('.song-sheet-title')]
+    assert '.chord-light .song-sheet-title {' in desktop
+    assert '.chord-light .song-chord {' in desktop
+    assert 'color: var(--accent)' in desktop
     assert '.edit-cell.active' in desktop
     assert '.edit-cell.repeat' in desktop
     assert 'filter:' not in desktop

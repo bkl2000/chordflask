@@ -258,6 +258,7 @@ def _write_mock_commands(bin_dir, call_log):
         "chordflask",
         "chordflask-analyze",
         "chordflask-export",
+        "chordflask-genlyrics",
         "chordflask-maintain",
         "chordflask-demucs",
     ):
@@ -328,6 +329,7 @@ def test_healthy_venv_is_reused_and_verifies_available_runtime(tmp_path):
     assert "chordflask --help" in calls
     assert "chordflask-analyze --help" in calls
     assert "chordflask-export --help" in calls
+    assert "chordflask-genlyrics --help" in calls
     assert "chordflask-maintain --help" in calls
     assert "chordflask-demucs --help" in calls
     assert ("vamp.list_plugins" in calls) is VENDORED_PLUGINS_AVAILABLE

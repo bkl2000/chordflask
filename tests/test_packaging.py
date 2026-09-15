@@ -10,6 +10,7 @@ ENTRY_POINTS = {
     "chordflask": "chordflask.app:main",
     "chordflask-analyze": "chordflask.helpers.analyze_cli:main",
     "chordflask-export": "chordflask.helpers.export_cli:main",
+    "chordflask-genlyrics": "chordflask_lyrics.cli:main",
     "chordflask-maintain": "chordflask_maintain.cli:main",
     "chordflask-demucs": "chordflask_demucs.cli:main",
 }

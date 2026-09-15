@@ -39,23 +39,49 @@ interactive launch. The worker claims queued jobs and runs the built-in
 Chordino chord analysis and QM bar/beat analysis through the existing analyzer
 services. Completed Schema-v3 JSON is published beside the media.
 
-An optional external ChordPro Song sheet follows a separate read-only path:
+An optional external ChordPro Lyrics sheet has a generation-time path:
+
+```text
+existing analysis + LRCLIB synchronized lyrics
+   -> chordflask-genlyrics
+   -> same-stem .cho with presentation and local sync metadata
+```
+
+The source-installation generator selects one chord-track snapshot and contacts
+LRCLIB only on explicit invocation. Analysis JSON remains authoritative for
+musical chords and timing; the `.cho` holds song-sheet presentation plus local
+mapping metadata. The resulting sidecar then follows a separate read-only path:
 
 ```text
 ready active media
    -> resolved same-stem .cho beside that media
    -> active-client /get_song_sheet route
    -> bounded strict-UTF-8 parser
-   -> structured JSON
+   -> structured JSON (custom x_chordflask range/track metadata)
    -> browser DOM nodes populated with textContent
 ```
 
 `load_file` reports only whether the sidecar is available after successful
-media activation. A desktop browser lazily requests the sheet on first Song
+media activation. A desktop browser lazily requests the sheet on first Lyrics
 selection and caches it for that activation. The route accepts no path and
 revalidates that the resolved sidecar remains beside the resolved active media,
 including rejecting symlink escapes. Parsing and file I/O occur outside the
 per-client state lock and do not mutate player or analysis state.
+
+The existing Grid synchronization remains the single playback authority:
+
+```text
+player -> PlaybackView.active_index -> Grid -> Lyrics active chord
+```
+
+The same `/set_position` payload carries the active analyzed beat index, so the
+Lyrics view highlights the marker whose parser-validated mapped beat range
+contains that index. Generated markers represent analyzed chord changes inside
+mapped Lyrics coverage; repeated unchanged beats remain suppressed. An
+instrumental gap has no matching range, so the highlight clears until the next
+mapped passage. Lyrics adds no second timer, clock, or timeline and never uses
+LRCLIB timestamps at runtime; an older sidecar without the custom metadata
+simply renders without chord-follow highlighting.
 
 Optional heavy analyzers remain outside this core process path:
 
@@ -146,8 +172,8 @@ publication safety, and standalone behavior.
 normally `~/.venvs/chordflask`, install dependencies through the existing
 requirements workflow, and install the current checkout editable. The venv
 therefore owns normal package imports and the `chordflask`,
-`chordflask-analyze`, `chordflask-export`, `chordflask-maintain`, and
-`chordflask-demucs` console entry points.
+`chordflask-analyze`, `chordflask-export`, `chordflask-genlyrics`,
+`chordflask-maintain`, and `chordflask-demucs` console entry points.
 
 User-facing scripts select that venv automatically. They preserve
 `CHORDFLASK_VENV`, the legacy `CHORDIFIER_VENV` alias, default and legacy venv
@@ -157,6 +183,13 @@ selected venv, preserves the caller's working directory, and does not construct
 `PYTHONPATH` or locate application source files. Setup still writes
 `.chordflask-root` inside the venv for compatibility and diagnostics; normal
 imports and startup do not depend on it.
+
+`chordflask_lyrics/` is an optional source-installation package in this normal
+environment. It performs explicit generation-time LRCLIB requests and writes
+external `.cho` song-sheet data without changing the analysis schema or
+importing into the web application. It has no separate virtual environment and
+is excluded from the standalone, which retains only the core ChordPro reader
+and Lyrics view.
 
 BTC and Demucs use separate optional venvs so their model and compute
 dependencies are not installed or imported in the core runtime. The standalone

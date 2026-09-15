@@ -43,7 +43,7 @@ def test_readme_documents_launcher_refresh_for_0_9_upgrades():
     readme = (REPO_ROOT / "README.md").read_text()
     copy_command = (
         "cp scripts/chordflask \\\n"
-        "   scripts/chordflask-{analyze,demucs,export,maintain} \\\n"
+        "   scripts/chordflask-{analyze,demucs,export,genlyrics,maintain} \\\n"
         "   ~/bin/"
     )
 

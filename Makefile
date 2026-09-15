@@ -102,13 +102,15 @@ test:
 check: test lint
 	@"$(VENV_PYTHON)" -m compileall -q "$(ROOT_DIR)/chordflask" "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" \
 		"$(ROOT_DIR)/tests" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" $(EXTRA_SRC_DIRS)
+		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
+		"$(ROOT_DIR)/chordflask_lyrics" $(EXTRA_SRC_DIRS)
 	@git -C "$(ROOT_DIR)" diff --check
 
 lint:
 	@"$(VENV_PYTHON)" -m ruff check "$(ROOT_DIR)/chordflask" "$(ROOT_DIR)/flask" "$(ROOT_DIR)/tests" \
 		"$(ROOT_DIR)/scripts" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
-		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
+		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
+		"$(ROOT_DIR)/chordflask_lyrics" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
 
 run:
 	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask.sh"

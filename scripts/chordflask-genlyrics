@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run the optional lyrics generator from the normal ChordFlask environment.
+DEFAULT_VENV_DIR="${HOME}/.venvs/chordflask"
+LEGACY_VENV_DIR="${HOME}/.venvs/chordifier"
+VENV_DIR="${CHORDFLASK_VENV:-${CHORDIFIER_VENV:-${DEFAULT_VENV_DIR}}}"
+if [[ -z "${CHORDFLASK_VENV:-}${CHORDIFIER_VENV:-}" \
+    && ! -d "$VENV_DIR" && -d "$LEGACY_VENV_DIR" ]]; then
+    VENV_DIR="$LEGACY_VENV_DIR"
+fi
+CHORDFLASK_BIN="${VENV_DIR}/bin/chordflask-genlyrics"
+
+if [[ -n "${CHORDFLASK_PYTHON:-}" ]]; then
+    if [[ ! -x "$CHORDFLASK_PYTHON" ]]; then
+        echo "Configured ChordFlask Python interpreter not found: ${CHORDFLASK_PYTHON}" >&2
+        exit 1
+    fi
+    exec "${CHORDFLASK_PYTHON}" -m chordflask_lyrics.cli "$@"
+fi
+
+if [[ ! -x "$CHORDFLASK_BIN" ]]; then
+    echo "Installed ChordFlask command not found: ${CHORDFLASK_BIN}" >&2
+    echo "Rerun 'make setup' in the ChordFlask repository." >&2
+    exit 1
+fi
+
+exec "${CHORDFLASK_BIN}" "$@"

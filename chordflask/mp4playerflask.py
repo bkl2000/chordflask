@@ -525,4 +525,5 @@ class MP4PlayerFlask:
             "callback_output": list(self.callback_output),
             "bpm": self.chord_data.bpm,
             "position": self.last_rendered_position,
+            "active_index": getattr(self, "last_index", None),
         }

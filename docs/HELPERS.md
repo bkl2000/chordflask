@@ -36,6 +36,32 @@ These are kept as usable command-line tools and have smoke-test coverage.
   scripts/chordflask-export /path/to/collection
   ```
 
+- `chordflask_lyrics/` - the source-installation-only
+  `chordflask-genlyrics` command. It uses standard-library HTTP calls to fetch
+  synchronized lyrics from LRCLIB on demand, requires existing ChordFlask
+  analysis, and writes a same-stem `.cho` beside each media file. Directory
+  discovery uses the application's non-recursive preferred-media rules. The
+  `--tag SEARCH_TEXT` lookup hint is accepted only for a single file. `--track
+  TRACK_ID` selects the chord-track snapshot (`auto` by default: valid
+  `user_edited`, then the analysis active/default track, then `chordino`). An
+  explicit missing track fails for that file without fallback. `--force`
+  permits replacement of an existing `.cho`; `--dry-run` performs lookup,
+  alignment, and rendering without writing. Directory failures do not stop
+  later files. Wrapper: `scripts/chordflask-genlyrics`. This package is
+  explicitly excluded from the standalone and uses the normal ChordFlask
+  environment rather than a separate LRCLIB environment. Normal LRCLIB lookup
+  needs no API key, and generated lyrics remain local user data.
+
+  ```bash
+  scripts/chordflask-genlyrics song.mp3
+  scripts/chordflask-genlyrics /music/album
+  scripts/chordflask-genlyrics --tag "Artist Song Title" song.mp3
+  scripts/chordflask-genlyrics --track auto song.mp3
+  scripts/chordflask-genlyrics --track btc song.mp3
+  scripts/chordflask-genlyrics --force --track user_edited song.mp3
+  scripts/chordflask-genlyrics --dry-run /music/album
+  ```
+
 - `batch_core.py` - shared non-recursive media discovery (MP4/WebM/MP3 with the
   active same-stem priority) used by `analyze_cli.py`, `export_cli.py`, and
   `chordleadsheet_batch.py`; backed by `chordflask/media_library.py`.

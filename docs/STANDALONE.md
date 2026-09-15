@@ -92,3 +92,10 @@ the control is simply not offered. Tablet/mobile layouts never show it.
 - `VERSION` — human-readable copy of the embedded build identity (version, build time, commit)
 - `README.md` — this guide
 - `THIRD_PARTY_NOTICES.md` — dependency licences and provenance
+
+The standalone reads and displays same-stem lowercase `.cho` song sheets in
+the Lyrics view, including chord-follow synchronization when the `.cho` already
+contains ChordFlask range metadata. It does not include
+`chordflask-genlyrics`, the `chordflask_lyrics` package, an LRCLIB client, or
+lyrics network access. Generate `.cho` files with a normal source/virtualenv
+installation and keep them beside the media when using the standalone.

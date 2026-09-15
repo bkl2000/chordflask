@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject heavy optional runtimes and model weights from a standalone bundle.
+"""Reject excluded optional packages and model weights from a standalone bundle.
 
 The lightweight ChordFlask Demucs producer (``chordflask_demucs`` and its
 submodules) is intentionally bundled. The third-party ``demucs`` package,
@@ -24,6 +24,7 @@ import sys
 HEAVY_PACKAGE = re.compile(r"^(?:torch|torchaudio|torchcodec|demucs)(?:[./-]|$)")
 MODEL_WEIGHT = re.compile(r"\.(?:pt|pth|th|onnx|safetensors|ckpt)$")
 MODEL_CACHE = re.compile(r"(?:^|/)(?:htdemucs|htdemucs_ft|mdx_extra)(?:[./-]|$)")
+SOURCE_ONLY_PACKAGE = re.compile(r"^chordflask_lyrics(?:[./-]|$)")
 
 
 def _recursive_listing(archive: str) -> str:
@@ -48,7 +49,12 @@ def find_offenders(listing: str) -> list[str]:
         name = match.group(1)
         if name == "chordflask_demucs" or name.startswith("chordflask_demucs."):
             continue  # allowed lightweight producer/orchestration
-        if HEAVY_PACKAGE.match(name) or MODEL_WEIGHT.search(name) or MODEL_CACHE.search(name):
+        if (
+            HEAVY_PACKAGE.match(name)
+            or MODEL_WEIGHT.search(name)
+            or MODEL_CACHE.search(name)
+            or SOURCE_ONLY_PACKAGE.match(name)
+        ):
             offenders.append(name)
     return offenders
 

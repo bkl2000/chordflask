@@ -58,6 +58,11 @@ def test_heavy_packages_are_rejected():
         assert name in offenders
 
 
+def test_source_only_lyrics_generator_is_rejected():
+    names = ("chordflask_lyrics", "chordflask_lyrics.cli", "chordflask_lyrics/lrclib.py")
+    assert module.find_offenders(_listing(*names)) == list(names)
+
+
 def test_model_weights_and_cache_are_rejected():
     for name in (
         "weights.pt",

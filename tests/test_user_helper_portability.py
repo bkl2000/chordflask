@@ -2,7 +2,7 @@
 
 ``scripts/chordflask``, ``scripts/chordflask-analyze``,
 ``scripts/chordflask-demucs``, ``scripts/chordflask-export``, and
-``scripts/chordflask-maintain`` must work when copied or symlinked to an
+``scripts/chordflask-maintain`` and ``scripts/chordflask-genlyrics`` must work when copied or symlinked to an
 arbitrary location and invoked from any current working directory. They resolve
 the configured/default project venv and execute the command installed there,
 never inferring the repository root from their own filesystem location.
@@ -25,6 +25,7 @@ HELPERS = {
     "chordflask": "ChordFlask chord analyzer web app",
     "chordflask-analyze": "chordflask-analyze",
     "chordflask-export": "chordflask-export",
+    "chordflask-genlyrics": "chordflask-genlyrics",
     "chordflask-maintain": "chordflask-maintain",
     "chordflask-demucs": "chordflask-demucs",
 }
@@ -33,6 +34,7 @@ COMMAND_MODULES = {
     "chordflask": "chordflask",
     "chordflask-analyze": "chordflask.helpers.analyze_cli",
     "chordflask-export": "chordflask.helpers.export_cli",
+    "chordflask-genlyrics": "chordflask_lyrics.cli",
     "chordflask-maintain": "chordflask_maintain.cli",
     "chordflask-demucs": "chordflask_demucs.cli",
 }
