@@ -300,7 +300,9 @@ layout, and limitations.
 
 ![ChordFlask file browser and analysis view](docs/example-screenshot-2.png)
 
-### Optional ChordPro Lyrics view
+### Experimental ChordPro Lyrics view
+
+> **Experimental:** The synchronized Lyrics view is under active development and may still have alignment or display issues.
 
 On desktop browsers, an analyzed media file can have a user-supplied,
 lyric-bearing ChordPro sidecar beside it. Give the sidecar the same stem and a
