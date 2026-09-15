@@ -41,7 +41,7 @@ from .mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4
 from .playbackview import GRID_MODES
 from .stem_preparation import StemPreparationManager
 
-from chordflask_base import DEMUCS_STEM_NAMES
+from chordflask_base import DEMUCS_STEM_NAMES, transpose_chord_pitches
 
 # Opaque cookie that identifies one browser cookie jar. The cookie carries only
 # a random client id; the actual playback state stays server-side in memory.
@@ -1106,6 +1106,8 @@ class FlaskMP4App:
         with state.lock:
             file_repr = state.file_repr
             media_path = file_repr.get() if file_repr is not None else None
+            semitones = state.semitones
+            prefer_flats = state.prefer_flats
         if media_path is None:
             return jsonify(error="No active media file."), 409
 
@@ -1116,6 +1118,13 @@ class FlaskMP4App:
             song = read_chordpro(sidecar)
         except ChordProSongError as error:
             return jsonify(error=str(error)), error.status_code
+        for block in song["blocks"]:
+            for run in block.get("runs", ()):
+                chord = run.get("chord")
+                if chord is not None:
+                    run["chord"] = transpose_chord_pitches(
+                        chord, semitones, prefer_flats
+                    )
         return jsonify(song)
 
     def serve_stem(self, stem_name):

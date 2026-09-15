@@ -1305,6 +1305,65 @@ def test_song_sidecar_handles_spaces_unicode_and_multiple_dots(tmp_path):
     ]
 
 
+@pytest.mark.parametrize(
+    ("label", "semitones", "prefer_flats", "expected"),
+    [
+        ("C", 2, False, "D"),
+        ("Am", 2, False, "Bm"),
+        ("E/G#", 1, True, "F/A"),
+        ("C#", 0, True, "Db"),
+        ("Db", 0, False, "C#"),
+        ("N", 2, False, "N"),
+        ("X", 2, False, "X"),
+        ("Qcustom", 2, False, "Qcustom"),
+    ],
+)
+def test_song_endpoint_uses_grid_chord_display_settings(
+    tmp_path, label, semitones, prefer_flats, expected
+):
+    _, client = make_client()
+    (tmp_path / "song.cho").write_text(f"[{label}]Lyric", encoding="utf-8")
+    load_ready_media(client, tmp_path)
+    assert client.post(
+        "/update_semitones", json={"semitones": semitones}
+    ).status_code == 200
+    assert client.post(
+        "/update_display_options",
+        json={"prefer_flats": prefer_flats, "repeat_mode": "changes"},
+    ).status_code == 200
+
+    runs = client.get("/get_song_sheet").get_json()["blocks"][0]["runs"]
+
+    assert runs == [{"chord": expected, "lyric": "Lyric"}]
+
+
+def test_song_display_transposition_preserves_source_and_sync_ranges(tmp_path):
+    _, client = make_client()
+    sidecar = tmp_path / "song.cho"
+    source = (
+        "{x_chordflask_beats: 20,24}\n"
+        "{x_chordflask_end: 28}\n"
+        "[C]First [Am]second"
+    )
+    sidecar.write_text(source, encoding="utf-8")
+    load_ready_media(client, tmp_path)
+    assert client.post(
+        "/update_semitones", json={"semitones": 2}
+    ).status_code == 200
+    assert client.post(
+        "/update_display_options",
+        json={"prefer_flats": False, "repeat_mode": "changes"},
+    ).status_code == 200
+
+    runs = client.get("/get_song_sheet").get_json()["blocks"][0]["runs"]
+
+    assert runs == [
+        {"chord": "D", "lyric": "First ", "start_beat": 20, "end_beat": 24},
+        {"chord": "Bm", "lyric": "second", "start_beat": 24, "end_beat": 28},
+    ]
+    assert sidecar.read_text(encoding="utf-8") == source
+
+
 def test_song_endpoint_is_bound_to_active_media_and_revalidates_disappearance(tmp_path):
     app_wrapper, client = make_client()
     sidecar = tmp_path / "song.cho"
@@ -2381,7 +2440,8 @@ def test_song_view_uses_existing_chord_area_and_desktop_only_switch():
     assert 'id="mobileMenuClose"' in body
     assert "let mobilePlaybackControls = window.matchMedia('(max-width: 640px)')" in body
     assert 'class="track-selectors" data-grid-only' in body
-    assert 'class="display-tools" data-grid-only' in body
+    assert 'class="display-tools"' in body
+    assert 'id="repeatDisplayButton" data-grid-only' in body
     assert 'id="editButton" data-grid-only' in body
     assert 'id="saveButton" data-grid-only' in body
     assert 'id="reanalyzeButton" data-grid-only' in body
@@ -2453,6 +2513,35 @@ def test_song_view_fetches_once_after_activation_and_keeps_failures_retryable():
     assert activation.index("data.status === 'queued'") < activation.index(
         "resetSongView(data.song_view_available)"
     )
+
+
+def test_lyrics_display_controls_refresh_server_formatted_labels():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    refresh = javascript_function(body, "refreshSongSheetLabels")
+    transpose = javascript_function(body, "updateSemitones")
+    spelling = javascript_function(body, "setPreferFlats")
+    sender = javascript_function(body, "sendDisplayOptions")
+    switcher = javascript_function(body, "setSongViewMode")
+    renderer = javascript_function(body, "renderSongSheet")
+
+    # Transpose and spelling remain available in desktop Lyrics mode, while
+    # the Grid-only Changes/Beats control stays hidden there.
+    assert '<span class="display-tools">' in body
+    assert '<button id="repeatDisplayButton" data-grid-only' in body
+    assert "refreshSongSheetLabels();" in transpose
+    assert "sendDisplayOptions(true);" in spelling
+    assert "data.success && refreshLyrics" in sender
+
+    # Refresh fetches server-formatted labels and reuses the retained active
+    # beat; neither a view switch nor a label refresh changes synchronization.
+    assert "songSheetCache = null" in refresh
+    assert "songViewGeneration += 1" in refresh
+    assert "loadSongSheet();" in refresh
+    assert "activeLyricBeatIndex" not in refresh
+    assert "updateLyricsHighlight(activeLyricBeatIndex)" in renderer
+    assert "semitonesInput" not in switcher
 
 
 def test_lyrics_view_reuses_grid_sync_state_for_chord_highlight():

@@ -1887,7 +1887,7 @@
                         aria-label="Select rhythm analysis source"></select>
               </span>
             </span>
-            <span class="display-tools" data-grid-only>
+            <span class="display-tools">
               <span class="transpose-control">
                 <button type="button" onclick="stepSemitones(-1)" aria-label="Transpose down"
                         title="Transpose down one semitone">-</button>
@@ -1895,7 +1895,7 @@
                 <button type="button" onclick="stepSemitones(1)" aria-label="Transpose up"
                         title="Transpose up one semitone">+</button>
               </span>
-              <button id="repeatDisplayButton" type="button" onclick="toggleRepeatDisplay()"
+              <button id="repeatDisplayButton" data-grid-only type="button" onclick="toggleRepeatDisplay()"
                       title="Show every beat" aria-label="Show every beat" aria-pressed="true">Changes</button>
               <button id="accidentalButton" type="button" onclick="toggleAccidentals()"
                       title="Use flat chord names" aria-label="Use flat chord names">Flats ♭</button>
@@ -2527,6 +2527,16 @@
         songSheetRequestInFlight = false;
         updateSongViewControl();
       });
+    }
+
+    function refreshSongSheetLabels() {
+      songSheetCache = null;
+      // Supersede any response carrying the previous display settings, while
+      // retaining the authoritative active beat used by renderSongSheet().
+      songViewGeneration += 1;
+      songSheetRequestInFlight = false;
+      if (songViewMode !== 'song') return;
+      loadSongSheet();
     }
 
     function setSongViewMode(mode) {
@@ -4640,6 +4650,7 @@
           console.error('Error updating semitones:', data.error);
         } else {
           clearEditUndo();
+          refreshSongSheetLabels();
         }
       })
       .catch(error => {
@@ -4677,14 +4688,14 @@
       button.title = preferFlats ? 'Use flat chord names' : 'Use sharp chord names';
       button.setAttribute('aria-label', preferFlats ? 'Use flat chord names' : 'Use sharp chord names');
       button.classList.toggle('display-on', !preferFlats);
-      sendDisplayOptions();
+      sendDisplayOptions(true);
     }
 
     function toggleAccidentals() {
       setPreferFlats(!preferFlats);
     }
 
-    function sendDisplayOptions() {
+    function sendDisplayOptions(refreshLyrics = false) {
       fetch('/update_display_options', {
         method: 'POST',
         headers: {
@@ -4697,6 +4708,8 @@
       .then(data => {
         if (!data.success && data.error !== 'Player not initialized') {
           console.error('Error updating display options:', data.error);
+        } else if (data.success && refreshLyrics) {
+          refreshSongSheetLabels();
         }
       })
       .catch(error => {
