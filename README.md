@@ -416,6 +416,21 @@ selected chord-track snapshot to the musical beat/measure timeline, and writes
 environment, never starts analysis automatically, and does not overwrite an
 existing `.cho` unless `--force` is given.
 
+Typical workflow:
+
+1. Analyze the song normally if it has not been analyzed yet:
+
+   `chordflask-analyze song.mp3`
+
+2. Fetch synchronized lyrics and create the `.cho` sidecar:
+
+   `chordflask-genlyrics song.mp3`
+
+3. Open the song in ChordFlask and select **Grid | Lyrics**.
+
+`chordflask-genlyrics` is available in source installations; the standalone can
+display generated `.cho` files but does not fetch or generate lyrics.
+
 ```bash
 chordflask-genlyrics song.mp3
 chordflask-genlyrics /music/album
