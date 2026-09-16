@@ -656,7 +656,14 @@ class ChordData:
         if self.__active_rhythm_track_id == track_id:
             self.__active_rhythm_track_id = None
             self.__rhythm_selection_explicit = False
-            self._rebuild_active_view()
+            if self.__rhythm_tracks:
+                self._rebuild_active_view()
+            else:
+                self._bpm = None
+                self._meter_signature = None
+                self._beat_times = []
+                self._beat_numbers = []
+                self._beat_chord_indexes = []
         self._get_chords_cached.cache_clear()
 
     # ── beat-aligned chord editing ─────────────────────────────────────
@@ -717,7 +724,12 @@ class ChordData:
         if self.__active_chord_track_id == track_id:
             self.__active_chord_track_id = None
             self.__chord_selection_explicit = False
-            self._rebuild_active_view()
+            if self.__chord_tracks:
+                self._rebuild_active_view()
+            else:
+                self._base_chords = []
+                self._chord_times = []
+                self._beat_chord_indexes = []
         self._get_chords_cached.cache_clear()
 
     # ── active view rebuild ────────────────────────────────────────────

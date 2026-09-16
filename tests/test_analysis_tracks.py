@@ -327,6 +327,43 @@ def test_select_unknown_track_raises():
         track.select_chord_track("nonexistent")
 
 
+def test_removing_last_track_clears_only_its_active_values():
+    track = ChordData()
+    track.set_chord_track("only-chords", [{"timestamp": 0.0, "chord": "C"}])
+    track.set_rhythm_track(
+        "only-rhythm",
+        bpm=120,
+        meter_signature=4,
+        beat_times=[0.0, 0.5],
+        beat_numbers=[1, 2],
+    )
+
+    track.remove_chord_track("only-chords")
+
+    assert track.active_chord_track_id is None
+    assert track.get_chords() == []
+    assert track.chord_times == []
+    assert track.beat_chord_indexes == []
+    assert track.active_rhythm_track_id == "only-rhythm"
+    assert track.bpm == 120
+    assert track.meter_signature == 4
+    assert track.beat_times == [0.0, 0.5]
+    assert track.beat_numbers == [1, 2]
+
+    track.set_chord_track("replacement", [{"timestamp": 0.0, "chord": "G"}])
+    track.remove_rhythm_track("only-rhythm")
+
+    assert track.active_rhythm_track_id is None
+    assert track.bpm is None
+    assert track.meter_signature is None
+    assert track.beat_times == []
+    assert track.beat_numbers == []
+    assert track.beat_chord_indexes == []
+    assert track.active_chord_track_id == "replacement"
+    assert track.get_chords() == [(0.0, "G")]
+    assert track.chord_times == [0.0]
+
+
 # ── compatibility API ─────────────────────────────────────────────────
 
 

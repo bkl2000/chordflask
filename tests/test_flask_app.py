@@ -1511,7 +1511,7 @@ def test_load_file_reads_legacy_analysis_directory(tmp_path, monkeypatch):
     assert _state(app_wrapper).file_repr.datapath == str(legacy_dir)
 
 
-def test_load_file_marks_invalid_existing_analysis_for_hidden_reanalyze(
+def test_load_file_queues_invalid_analysis_and_preserves_current_player(
     tmp_path, monkeypatch
 ):
     app_wrapper, client = make_client()
@@ -1519,28 +1519,19 @@ def test_load_file_marks_invalid_existing_analysis_for_hidden_reanalyze(
     media.write_bytes(b"not used")
     chord_dir = tmp_path / ".chordflask"
     chord_dir.mkdir()
-    (chord_dir / "song.json").write_text("{invalid", encoding="utf-8")
+    json_path = chord_dir / "song.json"
+    json_path.write_text("{invalid", encoding="utf-8")
+    app_wrapper.analysis_queue = AnalysisQueue(tmp_path / "queue")
+
+    previous_player = object()
+    previous_file_repr = object()
+    state = _state(app_wrapper)
+    state.player = previous_player
+    state.file_repr = previous_file_repr
 
     class FakePlayer:
         def __init__(self, *args, **kwargs):
-            pass
-
-        def set_prefer_flats(self, prefer_flats):
-            pass
-
-        def set_repeat_mode(self, repeat_mode):
-            pass
-
-        def analysis_track_state(self):
-            return {"active_chord_track_id": None, "active_rhythm_track_id": None,
-                    "available_chord_tracks": [], "available_rhythm_tracks": []}
-
-        def audio_stems_state(self, include_versions=False):
-            return None
-
-        def select_analysis_tracks(self, chord_track_id=None, rhythm_track_id=None,
-                                   soft_fallback=False):
-            pass
+            raise AssertionError("invalid analysis must not initialize a player")
 
     monkeypatch.setattr(chordflask, "MP4PlayerFlask", FakePlayer)
 
@@ -1550,12 +1541,13 @@ def test_load_file_marks_invalid_existing_analysis_for_hidden_reanalyze(
     )
 
     assert response.status_code == 200
-    assert response.get_json()["analysis_valid"] is False
-    reanalyze = client.post(
-        "/reanalyze",
-        json={"dirname": str(tmp_path), "filename": media.name},
-    )
-    assert reanalyze.status_code == 409
+    payload = response.get_json()
+    assert payload["status"] == "queued"
+    assert payload["json_file"] is None
+    assert state.player is previous_player
+    assert state.file_repr is previous_file_repr
+    assert json_path.read_text(encoding="utf-8") == "{invalid"
+    assert app_wrapper.analysis_queue.status()["pending"][0]["path"] == str(media)
 
 
 def test_load_file_queues_analysis_when_json_is_missing(tmp_path, monkeypatch):

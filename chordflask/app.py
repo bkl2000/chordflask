@@ -719,11 +719,20 @@ class FlaskMP4App:
         analysis_dir = os.path.join(dirname, ANALYSIS_DIR_NAME)
         requested_file_repr = FileRepr(str(media), datapath=analysis_dir)
 
-        # Check if the JSON file exists. If not, queue it and keep the
-        # currently playing video/player active.
-        if not os.path.exists(requested_file_repr.get("json")):
+        # Queue missing or invalid analysis and keep the currently playing
+        # media/player active. The worker preserves an invalid existing JSON
+        # before rebuilding it.
+        analysis_exists = os.path.exists(requested_file_repr.get("json"))
+        analysis_valid = (
+            analysis_exists
+            and self.__analysis_is_valid(requested_file_repr.get("json"))
+        )
+        if not analysis_valid:
             queue_status = self.analysis_queue.enqueue(requested_file_repr.get())
-            logging.info(f"Queued missing analysis for {filename}: {queue_status}")
+            reason = "invalid" if analysis_exists else "missing"
+            logging.info(
+                f"Queued {reason} analysis for {filename}: {queue_status}"
+            )
             return jsonify({
                 'status': queue_status,
                 'message': 'Added to analysis queue' if queue_status == 'queued' else 'Already in analysis queue',
@@ -732,8 +741,6 @@ class FlaskMP4App:
                 'json_file': None,
                 'title': f"ChordFlask - {filename}"
             })
-
-        analysis_valid = self.__analysis_is_valid(requested_file_repr.get("json"))
 
         state = self._client()
         with state.lock:
