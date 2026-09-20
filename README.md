@@ -200,6 +200,52 @@ Details are in [docs/ANALYSIS.md](docs/ANALYSIS.md) (analysis and export),
 [docs/MAINTENANCE.md](docs/MAINTENANCE.md) (maintenance), and
 [docs/HELPERS.md](docs/HELPERS.md) (the underlying helper modules).
 
+### Optional automatic beat-grid correction
+
+Automatic beat-grid correction is disabled by default. To try it for newly
+requested analyses, start ChordFlask or the analysis helper with:
+
+```bash
+CHORDFLASK_AUTO_CORRECT_BEAT_GRID=1 scripts/chordflask
+CHORDFLASK_AUTO_CORRECT_BEAT_GRID=1 scripts/chordflask-analyze --replace song.mp4
+```
+
+Disable it again by omitting the variable, unsetting it, or setting it to `0`:
+
+```bash
+unset CHORDFLASK_AUTO_CORRECT_BEAT_GRID
+# or
+CHORDFLASK_AUTO_CORRECT_BEAT_GRID=0 scripts/chordflask
+```
+
+Accepted true values are `1`, `true`, `yes`, and `on`; accepted false values
+are `0`, `false`, `no`, and `off` (case-insensitive). Existing analysis files
+are loaded unchanged even while the option is enabled. Use an explicit
+replacement analysis, as in the second command above, to process an existing
+song again.
+
+When a newly detected beat sequence passes the conservative constant-tempo,
+drift, section, and one-to-one assignment checks, the regular
+`qm_barbeattracker` rhythm track contains the corrected grid and
+`qm_barbeattracker_original` preserves the detected timestamps and beat
+numbers. Either track can be selected with the existing rhythm-track selector.
+If the checks reject the sequence, no extra track or metadata is written and
+the detected beats remain byte-for-byte values in memory. Old files containing
+only the regular track remain valid and need no migration.
+
+The checks require at least 16 beats, reject discontinuous beat-number cycles,
+require every adjacent timestamp to remain an unambiguous single-beat match,
+limit local median-tempo variation to 4%, and limit global and sectional grid
+error. These checks prevent obvious drift and tempo changes; regular timestamps
+alone cannot establish the musically correct phase or distinguish correct
+tempo from half/double tempo.
+
+The existing programmatic `AudioAnalyzer(quantize_beats=True)` option remains
+forced quantization with its previous first-beat/rounded-BPM behavior. It is
+different from automatic correction; enabling it together with
+`auto_correct_beat_grid=True` is an error rather than an implicit precedence
+choice.
+
 ### Optional BTC analyzer
 
 Chordino is the built-in default analyzer. The optional BTC analyzer runs a

@@ -63,15 +63,20 @@ def test_analysis_service_loads_existing_json_without_reanalysis(tmp_path):
     ], beat_times=[0.0, 1.0])
     existing.bpm = 99
     existing.save_to_file(file_repr.get("json"))
+    original_json = Path(file_repr.get("json")).read_bytes()
     converter = FakeConverter()
     analyzer = FakeAnalyzer()
+    analyzer.auto_correct_beat_grid = True
     exporter = FakeExporter()
     service = ChordAnalysisService(converter=converter, analyzer=analyzer, exporter=exporter)
 
     loaded = service.ensure_analyzed(file_repr, use_madmom=True)
 
     assert loaded.get_chords() == [(0.0, "C"), (1.0, "G")]
+    assert loaded.get_chords_per_beat() == [(0.0, "C"), (1.0, "G")]
     assert loaded.bpm == 99
+    assert loaded.available_rhythm_track_ids == ["qm_barbeattracker"]
+    assert Path(file_repr.get("json")).read_bytes() == original_json
     assert converter.calls == []
     assert analyzer.calls == []
     assert exporter.calls == []

@@ -242,7 +242,7 @@ def test_load_file_reports_no_stems_without_audio_tracks(tmp_path):
     assert response.get_json()["stems"] is None
 
 
-def test_load_file_incomplete_set_is_unavailable(tmp_path):
+def test_load_file_incomplete_set_queues_invalid_analysis(tmp_path):
     import json
 
     media = tmp_path / "song.mp3"
@@ -260,13 +260,20 @@ def test_load_file_incomplete_set_is_unavailable(tmp_path):
         "rhythm_tracks": {},
         "audio_tracks": {STEMS_AUDIO_SET_ID: incomplete},
     }
-    (analysis_dir / "song.json").write_text(json.dumps(raw), encoding="utf-8")
+    json_path = analysis_dir / "song.json"
+    original = json.dumps(raw)
+    json_path.write_text(original, encoding="utf-8")
 
-    client = FlaskMP4App().app.test_client()
+    app_wrapper = FlaskMP4App()
+    client = app_wrapper.app.test_client()
     response = _load_song(client, tmp_path)
 
     assert response.status_code == 200
-    assert response.get_json()["stems"] is None
+    payload = response.get_json()
+    assert payload["status"] == "queued"
+    assert payload["json_file"] is None
+    assert app_wrapper.analysis_queue.status()["pending"][0]["path"] == str(media)
+    assert json_path.read_text(encoding="utf-8") == original
 
 
 def test_load_file_reports_no_stems_when_flac_deleted(tmp_path):
