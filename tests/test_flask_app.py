@@ -157,9 +157,10 @@ def test_continue_waits_for_missing_analysis_then_autoplays_new_song():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
+    activation = javascript_function(body, "processNextLoadIntent")
     queue_branch = body[
         body.index("if (data.status === 'queued'"):
-        body.index("semitonesInput.value = 0;")
+        body.index("semitonesInput.value = data.semitones;")
     ]
 
     assert "let pendingAnalysisLoad = null;" in body
@@ -173,6 +174,7 @@ def test_continue_waits_for_missing_analysis_then_autoplays_new_song():
     assert "autoplay: true," in body
     assert "dirname: waiting.dirname," in body
     assert "filename: waiting.filename" in body
+    assert "semitones: requestedSemitones" in activation
 
 
 def test_continue_stops_instead_of_skipping_failed_analysis():
@@ -239,7 +241,9 @@ def test_manual_navigation_uses_visible_order_and_waits_for_analysis():
         body.index("function playNextFileIfContinue")
     ]
     queue_start = body.index("if (data.status === 'queued'")
-    queue_branch = body[queue_start:body.index("semitonesInput.value = 0;", queue_start)]
+    queue_branch = body[
+        queue_start:body.index("semitonesInput.value = data.semitones;", queue_start)
+    ]
 
     assert "file => file.name === navigationAnchorName()" in navigate_function
     assert "currentFiles[currentIndex + offset]" in navigate_function
@@ -1071,6 +1075,21 @@ def test_routes_reject_malformed_payloads():
     ).status_code == 400
 
 
+@pytest.mark.parametrize("semitones", [True, "2", 25, -25])
+def test_load_file_validates_requested_semitones(semitones):
+    _, client = make_client()
+
+    response = client.post(
+        "/load_file",
+        json={"dirname": "/missing", "filename": "song.mp3", "semitones": semitones},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "error": "semitones must be an integer between -24 and 24"
+    }
+
+
 def test_reanalyze_requires_active_file_and_valid_payload(tmp_path):
     app_wrapper, client = make_client()
     media = tmp_path / "song.mp4"
@@ -1214,13 +1233,51 @@ def test_load_file_uses_existing_json_without_starting_analysis(tmp_path, monkey
 
     response = client.post(
         "/load_file",
-        json={"dirname": str(tmp_path), "filename": "song.mp4 | 0M"},
+        json={
+            "dirname": str(tmp_path),
+            "filename": "song.mp4 | 0M",
+            "semitones": 2,
+        },
     )
 
     assert response.status_code == 200
     assert response.get_json()["json_file"] == str(chord_dir / "song.json")
     assert response.get_json()["analysis_valid"] is True
+    assert response.get_json()["semitones"] == 2
     assert players[0][0].get() == str(media)
+    assert players[0][1]["semitones"] == 2
+    assert _state(app_wrapper).semitones == 2
+
+
+def test_load_file_defaults_and_applies_independent_song_transposes(tmp_path):
+    app_wrapper, client = make_client()
+    load_ready_media(client, tmp_path, "a.mp3")
+
+    state = _state(app_wrapper)
+    assert state.semitones == 0
+    assert state.player.semitones == 0
+
+    response_a = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": "a.mp3", "semitones": 2},
+    )
+    load_ready_media(client, tmp_path, "b.mp3")
+    assert response_a.get_json()["semitones"] == 2
+    assert state.semitones == 0
+    assert state.player.semitones == 0
+
+    response_b = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": "b.mp3", "semitones": -1},
+    )
+    response_a_again = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": "a.mp3", "semitones": 2},
+    )
+    assert response_b.get_json()["semitones"] == -1
+    assert response_a_again.get_json()["semitones"] == 2
+    assert state.semitones == 2
+    assert state.player.semitones == 2
 
 
 def test_ready_media_without_song_sidecar_reports_unavailable(tmp_path):
@@ -2424,8 +2481,10 @@ def test_song_view_uses_existing_chord_area_and_desktop_only_switch():
     assert "window.matchMedia('(min-width: 801px)')" in body
     assert "const usable = songViewAvailable && desktopSongView.matches" in controller
     assert "songViewSwitch.hidden = !usable" in controller
-    assert "if (!desktopSongView.matches && songViewMode === 'song')" in body
-    assert "setSongViewMode('grid')" in javascript_function(body, "handleSongViewportChange")
+    viewport = javascript_function(body, "handleSongViewportChange")
+    assert "desktopSongView.matches" in viewport
+    assert "preferredSongViewMode === 'song'" in viewport
+    assert "localStorage.setItem" not in viewport
     # The existing smartphone controls remain present; Lyrics is hidden by the
     # established <=800px responsive rule rather than a new mobile mechanism.
     assert 'id="mobileMenuButton"' in body
@@ -2467,7 +2526,9 @@ def test_song_mode_switch_isolated_from_player_and_grid_display_state():
     assert "editMode" in switcher
     assert "editRequestInFlight" in switcher
     assert "syncPlaybackPosition(true)" in switcher
-    assert "songViewMode = 'grid'" in resetter
+    assert "preferredSongViewMode === 'song'" in resetter
+    assert "songViewAvailable" in resetter
+    assert "desktopSongView.matches" in resetter
     assert "songSheetCache = null" in resetter
     for forbidden in (
         "video.currentTime", "video.pause", "video.load", "video.src",
@@ -2476,6 +2537,58 @@ def test_song_mode_switch_isolated_from_player_and_grid_display_state():
     ):
         assert forbidden not in switcher
         assert forbidden not in resetter
+
+
+def test_transpose_preferences_are_stored_per_full_media_path_and_loaded_atomically():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    reader = javascript_function(body, "readTransposeByMedia")
+    lookup = javascript_function(body, "rememberedSemitones")
+    writer = javascript_function(body, "rememberSemitones")
+    activation = javascript_function(body, "processNextLoadIntent")
+    updater = javascript_function(body, "updateSemitones")
+    refresh = javascript_function(body, "refreshLoadedAnalysis")
+
+    assert "transposeByMedia: 'chordflask.transposeByMedia'" in body
+    assert "JSON.parse" in reader
+    assert "JSON.stringify(transposeByMedia)" in writer
+    assert "transposeByMedia[mediaIdentity] = semitones" in writer
+    assert "readTransposeByMedia()[mediaIdentity]" in lookup
+    assert "? value : 0" in lookup
+    assert "intent.requestedPath = mediaPath(intent.dirname, intent.filename)" in body
+    assert "const requestedSemitones = rememberedSemitones(requestedPath)" in activation
+    assert "semitones: requestedSemitones" in activation
+    assert activation.index("semitones: requestedSemitones") < activation.index(
+        ".then(response =>"
+    )
+    assert "loadedMediaIdentity = requestedPath" in activation
+    assert "semitonesInput.value = data.semitones" in activation
+    assert "rememberSemitones(loadedMediaIdentity, semitones)" in updater
+    assert "semitones: rememberedSemitones(loadedMediaIdentity)" in refresh
+
+
+def test_preferred_song_view_is_persistent_and_separate_from_effective_mode():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    resetter = javascript_function(body, "resetSongView")
+    switcher = javascript_function(body, "setSongViewMode")
+    viewport = javascript_function(body, "handleSongViewportChange")
+
+    assert "preferredSongView: 'chordflask.preferredSongView'" in body
+    assert "localStorage.getItem(storageKeys.preferredSongView) === 'lyrics'" in body
+    assert "preferredSongViewMode === 'song'" in resetter
+    assert "songViewAvailable" in resetter
+    assert "desktopSongView.matches" in resetter
+    assert "if (songViewMode === 'song') loadSongSheet()" in resetter
+    assert "localStorage.setItem(storageKeys.preferredSongView, 'lyrics')" in switcher
+    assert "localStorage.setItem(storageKeys.preferredSongView, 'grid')" in switcher
+    assert "preferredSongViewMode = 'song'" in switcher
+    assert "preferredSongViewMode = 'grid'" in switcher
+    assert "preferredSongViewMode === 'song'" in viewport
+    assert "songViewAvailable" in viewport
+    assert "desktopSongView.matches" in viewport
+    assert "loadSongSheet()" in viewport
+    assert "localStorage.setItem" not in viewport
 
 
 def test_position_updates_preserve_song_dom_and_scroll():

@@ -703,6 +703,15 @@ class FlaskMP4App:
         data, error_response = self._json_body()
         if error_response:
             return error_response
+        requested_semitones = data.get('semitones', 0)
+        if (
+            isinstance(requested_semitones, bool)
+            or not isinstance(requested_semitones, int)
+            or not -24 <= requested_semitones <= 24
+        ):
+            return jsonify(
+                error="semitones must be an integer between -24 and 24"
+            ), 400
         try:
             media = self._existing_media_file(data.get('dirname'), data.get('filename'))
         except (ValueError, FileNotFoundError, PermissionError) as error:
@@ -744,8 +753,7 @@ class FlaskMP4App:
 
         state = self._client()
         with state.lock:
-            # Reset semitones to 0 initially for files that can actually be loaded.
-            state.semitones = 0
+            state.semitones = requested_semitones
             state.file_repr = requested_file_repr
 
             # Initialize the player with the selected file and display settings.
@@ -792,6 +800,7 @@ class FlaskMP4App:
             'media_kind': self._media_kind(media),
             'json_file': json_file,
             'analysis_valid': analysis_valid,
+            'semitones': state.semitones,
             'title': f"ChordFlask - {filename}",
             'stems': stems,
             'song_view_available': song_view_available,

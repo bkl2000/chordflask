@@ -2256,6 +2256,7 @@
     let loadedFileName = '';
     let loadedFileDirectory = '';
     let loadedMediaPath = '';
+    let loadedMediaIdentity = '';
     let loadedAnalysisValid = false;
     let loadRequestInFlight = false;
     let batchRequestInFlight = false;
@@ -2281,7 +2282,9 @@
       repeatMode: 'chordifier.repeatMode',
       preferFlats: 'chordifier.preferFlats',
       chordTrackId: 'chordflask.chordTrackId',
-      rhythmTrackId: 'chordflask.rhythmTrackId'
+      rhythmTrackId: 'chordflask.rhythmTrackId',
+      transposeByMedia: 'chordflask.transposeByMedia',
+      preferredSongView: 'chordflask.preferredSongView'
     };
 
     let desiredChordTrackId = localStorage.getItem(storageKeys.chordTrackId) || '';
@@ -2303,6 +2306,11 @@
     let trackRequestInFlight = false;
     let songViewAvailable = false;
     let songViewMode = 'grid';
+    let preferredSongViewMode = (
+      localStorage.getItem(storageKeys.preferredSongView) === 'lyrics'
+        ? 'song'
+        : 'grid'
+    );
     let songSheetCache = null;
     let songSheetRequestInFlight = false;
     let songViewGeneration = 0;
@@ -2403,7 +2411,11 @@
     function resetSongView(available) {
       songViewGeneration += 1;
       songViewAvailable = available === true;
-      songViewMode = 'grid';
+      songViewMode = (
+        preferredSongViewMode === 'song'
+        && songViewAvailable
+        && desktopSongView.matches
+      ) ? 'song' : 'grid';
       songSheetCache = null;
       songSheetRequestInFlight = false;
       songSheet.replaceChildren();
@@ -2411,6 +2423,7 @@
       activeLyricMarkerIndex = -1;
       activeLyricBeatIndex = null;
       applySongViewMode();
+      if (songViewMode === 'song') loadSongSheet();
     }
 
     function appendSongText(parent, className, text, tagName = 'div') {
@@ -2545,6 +2558,8 @@
           !songViewAvailable || !desktopSongView.matches
           || editMode || editRequestInFlight
         ) return;
+        preferredSongViewMode = 'song';
+        localStorage.setItem(storageKeys.preferredSongView, 'lyrics');
         songViewMode = 'song';
         applySongViewMode();
         loadSongSheet();
@@ -2553,6 +2568,8 @@
         syncPlaybackPosition(true);
         return;
       }
+      preferredSongViewMode = 'grid';
+      localStorage.setItem(storageKeys.preferredSongView, 'grid');
       const returningToGrid = songViewMode === 'song';
       songViewMode = 'grid';
       applySongViewMode();
@@ -2611,11 +2628,20 @@
     }
 
     function handleSongViewportChange() {
-      if (!desktopSongView.matches && songViewMode === 'song') {
-        setSongViewMode('grid');
-      } else {
+      const nextMode = (
+        preferredSongViewMode === 'song'
+        && songViewAvailable
+        && desktopSongView.matches
+      ) ? 'song' : 'grid';
+      if (nextMode === songViewMode) {
         updateSongViewControl();
+        return;
       }
+      const returningToGrid = songViewMode === 'song';
+      songViewMode = nextMode;
+      applySongViewMode();
+      if (songViewMode === 'song') loadSongSheet();
+      if (returningToGrid || songViewMode === 'song') syncPlaybackPosition(true);
     }
 
     function updateTrackSelectors(payload) {
@@ -2718,6 +2744,32 @@
 
     function mediaPath(dirname, filename) {
       return `${dirname.replace(/\/+$/, '')}/${filename}`;
+    }
+
+    function readTransposeByMedia() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(storageKeys.transposeByMedia) || '{}');
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function rememberedSemitones(mediaIdentity) {
+      const value = readTransposeByMedia()[mediaIdentity];
+      return Number.isInteger(value) && value >= -24 && value <= 24 ? value : 0;
+    }
+
+    function rememberSemitones(mediaIdentity, semitones) {
+      if (!mediaIdentity) return;
+      const transposeByMedia = readTransposeByMedia();
+      transposeByMedia[mediaIdentity] = semitones;
+      try {
+        localStorage.setItem(
+          storageKeys.transposeByMedia,
+          JSON.stringify(transposeByMedia)
+        );
+      } catch { /* Optional preference. */ }
     }
 
     function pathBasename(path) {
@@ -3856,6 +3908,7 @@
 
       const intent = loadIntentQueue.shift();
       const { autoplay, analysisWaitReason, dirname, filename, requestedPath } = intent;
+      const requestedSemitones = rememberedSemitones(requestedPath);
       activeLoadIntent = intent;
 
       localStorage.setItem(storageKeys.dirname, dirname);
@@ -3876,6 +3929,7 @@
         body: JSON.stringify({
           dirname: dirname,
           filename: filename,
+          semitones: requestedSemitones,
           chord_track_id: desiredChordTrackId || undefined,
           rhythm_track_id: desiredRhythmTrackId || undefined
         })
@@ -3915,7 +3969,7 @@
         exitEditMode();
         clearEditUndo();
         resetSongView(data.song_view_available);
-        semitonesInput.value = 0;
+        semitonesInput.value = data.semitones;
         localStorage.setItem(storageKeys.file, filename);
         callbackOutput.innerText = '';
         selectMediaPlayer(data.media_kind, filename);
@@ -3925,6 +3979,7 @@
         loadedFileName = filename;
         loadedFileDirectory = dirname;
         loadedMediaPath = data.mp4_file || requestedPath;
+        loadedMediaIdentity = requestedPath;
         loadedAnalysisValid = data.analysis_valid === true;
         fileStatus.innerText = pendingAnalysisLoad
           ? `Waiting for analysis: ${pendingAnalysisLoad.filename}`
@@ -4066,7 +4121,8 @@
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         body: JSON.stringify({
           dirname: loadedFileDirectory,
-          filename: loadedFileName
+          filename: loadedFileName,
+          semitones: rememberedSemitones(loadedMediaIdentity)
         })
       })
       .then(response => {
@@ -4083,7 +4139,7 @@
         clearEditUndo();
         resetSongView(data.song_view_available);
         loadedAnalysisValid = data.analysis_valid === true;
-        semitonesInput.value = 0;
+        semitonesInput.value = data.semitones;
         updateTrackSelectors(data);
         updateStemsAvailability(data.stems);
         refreshStemPreparationState();
@@ -4649,6 +4705,7 @@
         if (!data.success) {
           console.error('Error updating semitones:', data.error);
         } else {
+          rememberSemitones(loadedMediaIdentity, semitones);
           clearEditUndo();
           refreshSongSheetLabels();
         }

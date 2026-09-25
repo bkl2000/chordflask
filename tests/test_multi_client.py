@@ -153,6 +153,30 @@ def test_transpose_display_tracks_unicode_are_independent(tmp_path):
     assert state_b.use_unicode is False
 
 
+def test_load_time_transpose_is_isolated_per_client(tmp_path):
+    app = FlaskMP4App()
+    _write_song(tmp_path, "a.mp3")
+    _write_song(tmp_path, "b.mp3")
+    a = _make_client(app, "client-a")
+    b = _make_client(app, "client-b")
+
+    a.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": "a.mp3", "semitones": 2},
+    )
+    b.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": "b.mp3", "semitones": -1},
+    )
+
+    state_a = app.clients.get("client-a")
+    state_b = app.clients.get("client-b")
+    assert state_a.semitones == 2
+    assert state_a.player.semitones == 2
+    assert state_b.semitones == -1
+    assert state_b.player.semitones == -1
+
+
 # ── 10: stem serving is client-specific ───────────────────────────────
 
 
