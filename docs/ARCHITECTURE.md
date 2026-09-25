@@ -50,7 +50,11 @@ existing analysis + embedded/LRCLIB lyrics + optional source-only PyThaiNLP
 The source-installation generator selects one chord-track snapshot and contacts
 LRCLIB only on explicit invocation. Analysis JSON remains authoritative for
 musical chords and timing; the `.cho` holds song-sheet presentation plus local
-mapping metadata. The resulting sidecar then follows a separate read-only path:
+mapping metadata. Experimental `x_chordflask_romanized` presentation metadata
+belongs to the immediately following original lyric line, has no independent
+timing, and leaves that line's chord/beat ranges authoritative. Unknown or
+older readers can ignore the custom directive. The resulting sidecar then
+follows a separate read-only path:
 
 ```text
 ready active media
@@ -187,9 +191,12 @@ imports and startup do not depend on it.
 `chordflask_lyrics/` is an optional source-installation package in this normal
 environment. It performs explicit generation-time LRCLIB requests and writes
 external `.cho` song-sheet data without changing the analysis schema or
-importing into the web application. It has no separate virtual environment and
-is excluded from the standalone, which retains only the core ChordPro reader
-and Lyrics view.
+importing into the web application. Its experimental Thai romanization path
+uses the source-installed PyThaiNLP/ONNX Runtime or TLTK dependencies and stores
+the result once in the sidecar. It has no separate virtual environment and is
+excluded from the standalone, which retains only the core ChordPro reader and
+desktop Lyrics display for already-stored romanization. No generation or model
+loading occurs in the browser or standalone.
 
 BTC and Demucs use separate optional venvs so their model and compute
 dependencies are not installed or imported in the core runtime. The standalone
@@ -268,7 +275,8 @@ maintenance commands, and the standalone bundle.
 - Chord, rhythm, edited, BTC, and Demucs data remain distinct tracks or audio
   sets under the shared Schema-v3 contract.
 - External same-stem Song sidecars remain user-owned, read-only display input;
-  they are never imported into analysis or transformed by Grid display state.
+  they are never imported into analysis, rewritten by maintenance, or
+  transformed by Grid display state.
 - Templates and runtime assets remain package-owned and available in editable,
   installed, and frozen operation.
 - Existing routes, browser behavior, persistence formats, security assumptions,

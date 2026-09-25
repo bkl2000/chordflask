@@ -4,6 +4,7 @@
 and installation state. It is a framework-free tool: it uses only the
 `chordflask_base` model/schema layer and the Python standard library, so it
 works without the web app, the analysis engine, or any audio library.
+It neither imports nor requires PyThaiNLP, ONNX Runtime, or TLTK.
 
 All commands are run from the repository root:
 
@@ -56,6 +57,9 @@ least one category flag is required:
 Valid analysis JSON, source media, and user-edited data are never deleted.
 Use `--dry-run` first to show the candidates and totals without deleting
 anything. Dry runs use the same lock checks and refusal rules as real cleanup.
+External same-stem `.cho` sidecars are outside `.chordflask` storage and are
+never inspected, rewritten, or deleted. This includes sidecars containing
+`x_chordflask_romanized` metadata.
 
 ## Stems report
 
@@ -115,6 +119,15 @@ Loads each analysis JSON through the `chordflask_base` repository and reports
 whether it is valid. A media directory validates every `.chordflask/*.json`
 inside it. This is a pure check: nothing is changed or rewritten.
 
+The shared model handles current schema-v3 chord and rhythm tracks, including
+`user_edited`, `qm_barbeattracker_original`, and beat-grid correction metadata,
+and optional `audio_tracks["demucs:htdemucs"]` stem data. Validation loads
+these through the model, migration skips current schema-v3 files, and
+storage/stem commands preserve valid analysis and referenced stem generations.
+Queue and worker lock state, Demucs locks, logs, and media-local storage
+categories remain separate and are handled only by the commands that explicitly
+report or guard them.
+
 ## Doctor
 
 ```bash
@@ -127,6 +140,14 @@ Reports the installation state without changing anything:
 - system `ffmpeg` on `PATH`
 - the two required Vamp plugin binaries
 - the global queue directory and whether it is writable
+
+`doctor` intentionally checks only dependencies required for the core runtime.
+It does not report the source-only lyrics/romanization packages. Those packages
+are optional at application runtime and intentionally absent from standalone
+builds; treating them as doctor failures would incorrectly mark a healthy
+standalone as incomplete. The generator itself reports a clear error when a
+requested romanization engine is unavailable, without importing or loading ML
+packages during maintenance.
 
 ## Exit codes
 

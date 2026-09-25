@@ -96,9 +96,11 @@ the control is simply not offered. Tablet/mobile layouts never show it.
 The standalone reads and displays same-stem lowercase `.cho` song sheets in
 the Lyrics view, including chord-follow synchronization when the `.cho` already
 contains ChordFlask range metadata. It does not include
-`chordflask-genlyrics`, the `chordflask_lyrics` package, an LRCLIB client, or
-lyrics network access. PyThaiNLP, ONNX Runtime, TLTK, and romanization generation
-are also excluded. Romanization already stored in a `.cho` still displays in
-desktop Lyrics because the lightweight core parser and UI remain bundled.
-Generate `.cho` files with a normal source/virtualenv installation and keep them
-beside the media when using the standalone.
+`chordflask-genlyrics`, the `chordflask_lyrics` package, an LRCLIB client,
+lyric-generation network functionality, PyThaiNLP, ONNX Runtime, TLTK, or
+romanization generation. Experimental romanization already stored in a `.cho`
+still displays beneath its canonical original Thai lyric in desktop Lyrics
+because the lightweight core parser and UI remain bundled; it is never
+recomputed. Narrow/mobile layout remains Grid-only. Generate `.cho` files with
+a normal source/virtualenv installation and keep them beside the media when
+using the standalone.

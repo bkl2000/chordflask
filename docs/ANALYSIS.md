@@ -248,9 +248,13 @@ generator. `--track auto` (the default) prefers a valid `user_edited` track,
 then uses the analysis active/default track, and finally `chordino` when
 necessary. An explicit unavailable track fails for that file without fallback.
 Changing the active analysis track later does not rewrite an existing `.cho`.
-Optional `x_chordflask_romanized` metadata belongs to the immediately following
-logical lyric line. Desktop Lyrics renders it below the original text without
-adding chord markers or another synchronized row; narrow layouts omit it.
+Optional `x_chordflask_romanized` is presentation metadata belonging to the
+immediately following logical lyric line. It has no independent timing.
+Chord/beat ranges and chord markers remain attached to the original lyric line,
+which stays canonical. Desktop Lyrics renders the metadata below that original
+text as a second visual line in the same synchronized row; narrow/mobile
+layouts stay Grid-only and omit it. Unknown or older ChordPro readers can ignore
+the custom directive like the other `x_chordflask` metadata.
 `x_chordflask_beats` lists the analyzed beat index of each chord marker in the
 immediately following line, in order. `x_chordflask_end` closes the final
 marker's exclusive mapped beat range. No range crosses a genuine unmapped
@@ -280,7 +284,8 @@ The generator runs in the normal source-installation environment, requires an
 existing analysis, and fetches synchronized lyrics from the external LRCLIB
 service on demand without an API key for normal lookup. Generated `.cho` files
 remain local user data; ChordFlask ships no lyrics database, and song lyrics may
-be copyrighted.
+be copyrighted. Thai romanization is experimental in 0.9.16, is generated once
+into the `.cho`, and is never recomputed by the browser or standalone.
 
 This input path differs from ChordFlask's existing ChordPro export. The export
 described below is generated from the analyzed beat grid, contains no lyrics,

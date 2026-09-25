@@ -47,14 +47,24 @@ These are kept as usable command-line tools and have smoke-test coverage.
   explicit missing track fails for that file without fallback. `--force`
   permits replacement of an existing `.cho`; `--dry-run` performs lookup,
   alignment, and rendering without writing. Directory failures do not stop
-  later files. `--romanize` uses the source-only PyThaiNLP
-  `thai2rom_onnx` engine by default to attach Thai pronunciation assistance to
-  the original logical lyric row. Normal source setup installs all three
-  supported engines: `thai2rom_onnx`, `tltk`, and PyThaiNLP's built-in `royin`.
-  Engines never silently fall back. Wrapper: `scripts/chordflask-genlyrics`. This package is
-  explicitly excluded from the standalone and uses the normal ChordFlask
-  environment rather than a separate LRCLIB environment. Normal LRCLIB lookup
-  needs no API key, and generated lyrics remain local user data.
+  later files. Existing `.cho` files are intentionally skipped unless `--force`
+  is supplied.
+
+  Thai romanization is **experimental in 0.9.16**. `--romanize` uses the
+  source-only PyThaiNLP `thai2rom_onnx` engine by default; `--romanize-engine
+  tltk` selects the TLTK alternative and `--romanize-engine royin` selects the
+  RTGS-oriented engine. Engines never silently fall back. Romanization is
+  generated once as non-timed presentation metadata in the `.cho`; it is not
+  recomputed by the browser or standalone, and the original Thai lyric remains
+  canonical. It is intended as pronunciation assistance rather than IPA or
+  authoritative tone notation, and results may vary for wording and names.
+  Source setup installs `pythainlp[onnx]>=5.3.3,<6` and
+  `tltk>=1.10,<1.11`, without PyTorch.
+
+  Wrapper: `scripts/chordflask-genlyrics`. This package is explicitly excluded
+  from the standalone and uses the normal ChordFlask environment rather than a
+  separate LRCLIB environment. Normal LRCLIB lookup needs no API key, and
+  generated lyrics remain local user data.
 
   ```bash
   scripts/chordflask-genlyrics song.mp3
@@ -64,6 +74,10 @@ These are kept as usable command-line tools and have smoke-test coverage.
   scripts/chordflask-genlyrics --track btc song.mp3
   scripts/chordflask-genlyrics --force --track user_edited song.mp3
   scripts/chordflask-genlyrics --romanize song.mp3
+  scripts/chordflask-genlyrics --romanize --romanize-engine thai2rom_onnx song.mp3
+  scripts/chordflask-genlyrics --romanize --romanize-engine tltk song.mp3
+  scripts/chordflask-genlyrics --romanize --romanize-engine royin song.mp3
+  scripts/chordflask-genlyrics --force --romanize /music/thai-album
   scripts/chordflask-genlyrics --dry-run /music/album
   ```
 

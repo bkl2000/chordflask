@@ -382,11 +382,11 @@ unmapped instrumental gap clears the highlight until the next mapped line.
 Generated markers cover the actual analyzed chord changes in mapped Lyrics
 passages without repeating unchanged beats.
 
-When a sidecar contains generated Thai romanization metadata, desktop Lyrics
-shows the romanization immediately below the original lyric in the same logical
-row. Chord markers, highlighting, scrolling, and beat ranges remain attached to
-the original line. The existing narrow smartphone/tablet Grid presentation is
-unchanged and does not show romanization.
+Thai romanization is **Experimental in 0.9.16**. When a sidecar contains this
+metadata, desktop Lyrics shows it immediately below the original Thai lyric in
+the same logical row. Chord markers, highlighting, scrolling, and beat ranges
+remain attached to the original line. The existing narrow/mobile presentation
+stays Grid-only and does not show romanization.
 
 This external sidecar is distinct from ChordFlask's generated ChordPro export,
 which is a lyric-free representation of an analyzed beat grid stored under
@@ -478,17 +478,27 @@ chord-track snapshot to the musical beat/measure timeline and writes `song.cho`
 beside `song.mp3`, `.mp4`, or `.webm`. It never starts analysis automatically
 and does not overwrite an existing `.cho` unless `--force` is given.
 
-Typical workflow:
+Typical workflow for the experimental Thai romanization feature:
 
-1. Analyze the song normally if it has not been analyzed yet:
+```bash
+chordflask-analyze song.mp3
+chordflask-genlyrics --romanize song.mp3
+chordflask
+```
 
-   `chordflask-analyze song.mp3`
+Then open the song and select **Grid | Lyrics**. For a directory, use:
 
-2. Use embedded lyrics or fetch synchronized lyrics and create the `.cho` sidecar:
+```bash
+chordflask-genlyrics --romanize /music/thai-album
+```
 
-   `chordflask-genlyrics song.mp3`
+Existing `.cho` files are intentionally skipped. Regenerate an existing
+sidecar with romanization only when you intend to replace it:
 
-3. Open the song in ChordFlask and select **Grid | Lyrics**.
+```bash
+chordflask-genlyrics --force --romanize song.mp3
+chordflask-genlyrics --force --romanize /music/thai-album
+```
 
 `chordflask-genlyrics` is available in source installations; the standalone can
 display generated `.cho` files but does not fetch or generate lyrics.
@@ -501,6 +511,8 @@ chordflask-genlyrics --track auto song.mp3
 chordflask-genlyrics --track btc song.mp3
 chordflask-genlyrics --force --track user_edited song.mp3
 chordflask-genlyrics --romanize song.mp3
+chordflask-genlyrics --romanize --romanize-engine thai2rom_onnx song.mp3
+chordflask-genlyrics --romanize --romanize-engine tltk song.mp3
 chordflask-genlyrics --romanize --romanize-engine royin song.mp3
 ```
 
@@ -511,13 +523,29 @@ the generated file. `--track` selects `auto` (the default), `chordino`, `btc`,
 `user_edited`, or another available track ID; the resolved track is recorded in
 the `.cho`, which is not dynamically rewritten by later track changes.
 `--dry-run` performs lookup, alignment, and rendering but writes nothing.
-`--romanize` locally adds a second, non-timed presentation line only for lyric
-rows containing Thai script; the original lyrics remain intact and canonical.
-The default `thai2rom_onnx` PyThaiNLP engine is installed by the source setup
-and avoids the heavier PyTorch runtime. `royin` (RTGS) is also available;
-normal source setup also installs `tltk`. A requested engine that is unavailable
-fails clearly instead of falling back. Romanization is pronunciation assistance,
-not authoritative phonetic or tonal notation.
+**Experimental:** `--romanize` adds pronunciation assistance below lyric rows
+containing Thai script. Romanization is generated once and stored as
+`x_chordflask_romanized` presentation metadata in the `.cho`; neither the
+browser nor the standalone recomputes it. Conceptually, desktop Lyrics shows:
+
+```text
+ฉันรักเธอ แต่เธอไม่รู้
+chan rak thoe tae thoe mai ru
+```
+
+Both visual lines are one synchronized lyric row. The original Thai lyric is
+always preserved as the canonical line, with its chord and beat ranges;
+romanization has no independent timing. This first experimental version is
+desktop-only, and the narrow/mobile layout remains Grid-only and unchanged.
+
+`--romanize` uses `thai2rom_onnx` by default. Select an engine explicitly with
+`--romanize-engine thai2rom_onnx`, `--romanize-engine tltk`, or
+`--romanize-engine royin`; `tltk` is an alternative and `royin` is
+RTGS-oriented. There is no silent engine fallback: requesting an unavailable
+engine fails clearly. The output is a pronunciation/karaoke aid, not IPA, does
+not encode Thai tones authoritatively, and may vary in quality for particular
+wording and names. Source setup installs `pythainlp[onnx]>=5.3.3,<6` and
+`tltk>=1.10,<1.11`; it does not install PyTorch.
 
 > **Version matching:** ChordFlask matches LRCLIB lyrics by song metadata and
 > duration, but does not audio-fingerprint the recording. Live, acoustic,
@@ -528,10 +556,10 @@ not authoritative phonetic or tonal notation.
 
 
 Generated `.cho` files are local user data. ChordFlask does not ship a lyrics
-database; song lyrics may be copyrighted. The standalone can read and display
-existing `.cho` files in its Lyrics view, but it does not include the generator,
-LRCLIB client code, PyThaiNLP/ONNX/TLTK generation dependencies, or automatic
-internet access. It can display romanization already stored in a `.cho`.
+database; song lyrics may be copyrighted. Generation is source-installation
+only. The standalone can display romanization already stored in a `.cho`, but
+contains no `chordflask-genlyrics`, PyThaiNLP, ONNX Runtime, TLTK, LRCLIB
+client, or lyric-generation network functionality.
 
 ### Analysis storage and cleanup
 
