@@ -13,8 +13,8 @@ fast on-demand and batch analysis, and shows the results in sync while you play
 the media in the browser. The displayed chords can be transposed, corrected,
 compared, and exported as Markdown or PDF. Playback and analysis run locally;
 media and analysis data are never uploaded. The optional `chordflask-genlyrics`
-command uses embedded lyrics when available and otherwise performs an explicit
-on-demand lyrics lookup via LRCLIB.
+command uses same-stem LRC or embedded lyrics when available and can perform an
+explicit on-demand lyrics lookup via LRCLIB.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+ (CPython 3.12–3.14). Native Windows is not supported; Windows users can run
@@ -468,12 +468,15 @@ displayed. MIDI is not included. Full format and option details are in
 ### On-demand synchronized lyrics
 
 Source installations provide `chordflask-genlyrics`. It requires an existing
-valid ChordFlask analysis and first uses usable lyrics embedded in the media.
-MP3 USLT and compatible container lyrics tags are read through the existing
-FFmpeg toolchain; embedded LRC timestamps are preserved, while plain lyric
-lines are placed evenly across the analyzed beat timeline. If no usable tag is
-present, the command fetches line-synchronized lyrics from the external LRCLIB
-service on demand without an API key for normal lookup. It aligns one selected
+valid ChordFlask analysis. By default it tries a synchronized same-stem `.lrc`,
+then lyrics embedded in the media, then LRCLIB (`lrc:embedded:lrclib`). External
+LRC files must contain usable synchronized lines; they remain untouched user
+data beside the media file. MP3 USLT and compatible container lyrics tags are
+read through the existing FFmpeg toolchain; embedded LRC timestamps are
+preserved, while plain lyric lines are placed evenly across the analyzed beat
+timeline. If neither local source is usable, the command fetches
+line-synchronized lyrics from the external LRCLIB service on demand without an
+API key for normal lookup. It aligns one selected
 chord-track snapshot to the musical beat/measure timeline and writes `song.cho`
 beside `song.mp3`, `.mp4`, or `.webm`. It never starts analysis automatically
 and does not overwrite an existing `.cho` unless `--force` is given.
@@ -506,6 +509,8 @@ display generated `.cho` files but does not fetch or generate lyrics.
 ```bash
 chordflask-genlyrics song.mp3
 chordflask-genlyrics /music/album
+chordflask-genlyrics --lyrics embedded:lrclib song.mp3
+chordflask-genlyrics --lyrics lrc song.mp3
 chordflask-genlyrics --tag "Eagles Hotel California" song.mp3
 chordflask-genlyrics --track auto song.mp3
 chordflask-genlyrics --track btc song.mp3
@@ -516,10 +521,14 @@ chordflask-genlyrics --romanize --romanize-engine tltk song.mp3
 chordflask-genlyrics --romanize --romanize-engine royin song.mp3
 ```
 
-`--tag` is a single-file manual lookup hint for filenames or embedded metadata
-that do not produce a good automatic match. Candidate identity and duration
-are still checked, and the exact hint is recorded as non-display provenance in
-the generated file. `--track` selects `auto` (the default), `chordino`, `btc`,
+`--lyrics` accepts an ordered, colon-separated list containing `lrc`,
+`embedded`, and/or `lrclib`; names cannot be empty, unknown, or repeated.
+`--tag` is a single-file manual LRCLIB lookup hint for filenames or embedded
+metadata that do not produce a good automatic match. Candidate identity and
+duration are still checked, and the exact hint is recorded as non-display
+provenance in the generated file; `lrclib` must be present in `--lyrics` when
+`--tag` is used.
+`--track` selects `auto` (the default), `chordino`, `btc`,
 `user_edited`, or another available track ID; the resolved track is recorded in
 the `.cho`, which is not dynamically rewritten by later track changes.
 `--dry-run` performs lookup, alignment, and rendering but writes nothing.

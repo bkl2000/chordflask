@@ -37,11 +37,16 @@ These are kept as usable command-line tools and have smoke-test coverage.
   ```
 
 - `chordflask_lyrics/` - the source-installation-only
-  `chordflask-genlyrics` command. It uses standard-library HTTP calls to fetch
-  synchronized lyrics from LRCLIB on demand, requires existing ChordFlask
-  analysis, and writes a same-stem `.cho` beside each media file. Directory
-  discovery uses the application's non-recursive preferred-media rules. The
-  `--tag SEARCH_TEXT` lookup hint is accepted only for a single file. `--track
+  `chordflask-genlyrics` command. Its default lyrics priority is
+  `lrc:embedded:lrclib`: a usable synchronized same-stem `.lrc`, embedded
+  lyrics, then an on-demand LRCLIB lookup using standard-library HTTP. External
+  `.lrc` files remain untouched user/external data beside their media files.
+  `--lyrics` accepts an ordered colon-separated subset of `lrc`, `embedded`,
+  and `lrclib`. The command requires existing ChordFlask analysis and writes a
+  same-stem `.cho` beside each media file. Directory discovery uses the
+  application's non-recursive preferred-media rules. The `--tag SEARCH_TEXT`
+  LRCLIB lookup hint is accepted only for a single file and requires `lrclib`
+  in `--lyrics`. `--track
   TRACK_ID` selects the chord-track snapshot (`auto` by default: valid
   `user_edited`, then the analysis active/default track, then `chordino`). An
   explicit missing track fails for that file without fallback. `--force`
@@ -69,6 +74,8 @@ These are kept as usable command-line tools and have smoke-test coverage.
   ```bash
   scripts/chordflask-genlyrics song.mp3
   scripts/chordflask-genlyrics /music/album
+  scripts/chordflask-genlyrics --lyrics embedded:lrclib song.mp3
+  scripts/chordflask-genlyrics --lyrics lrc song.mp3
   scripts/chordflask-genlyrics --tag "Artist Song Title" song.mp3
   scripts/chordflask-genlyrics --track auto song.mp3
   scripts/chordflask-genlyrics --track btc song.mp3

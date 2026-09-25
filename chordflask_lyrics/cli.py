@@ -25,23 +25,44 @@ from chordflask_base import (
 
 from .align import align_lyrics, render_chordpro, time_plain_lyrics
 from .embedded import get_embedded_lyrics
-from .lrclib import LRCLIBClient, LRCLIBError, LyricsRecord, SongIdentity
+from .lrclib import (
+    LRCLIBClient,
+    LRCLIBError,
+    LyricsRecord,
+    SongIdentity,
+    TimedLyricLine,
+    parse_synced_lyrics,
+)
 from .romanize import DEFAULT_ENGINE, SUPPORTED_ENGINES, RomanizationError, romanize_thai
 
 
 _FILENAME_SEPARATOR = re.compile(r"\s+(?:-|–|—)\s+")
+_LYRICS_SOURCES = ("lrc", "embedded", "lrclib")
+DEFAULT_LYRICS_SOURCES = _LYRICS_SOURCES
 
 
 class GenerationError(RuntimeError):
     """A clean per-file failure reported by the CLI."""
 
 
+def _parse_lyrics_sources(value: str) -> tuple[str, ...]:
+    sources = tuple(value.split(":"))
+    if not sources or any(not source for source in sources):
+        raise argparse.ArgumentTypeError("lyrics source list must not be empty")
+    unknown = [source for source in sources if source not in _LYRICS_SOURCES]
+    if unknown:
+        raise argparse.ArgumentTypeError(f'unknown lyrics source "{unknown[0]}"')
+    if len(set(sources)) != len(sources):
+        raise argparse.ArgumentTypeError("lyrics source names must not be duplicated")
+    return sources
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chordflask-genlyrics",
         description=(
-            "Use embedded lyrics or fetch synchronized lyrics from LRCLIB and "
-            "generate a .cho sidecar using existing ChordFlask analysis."
+            "Use external LRC, embedded, or LRCLIB lyrics and generate a .cho "
+            "sidecar using existing ChordFlask analysis."
         ),
     )
     parser.add_argument("--dry-run", action="store_true", help="match and render without writing")
@@ -50,6 +71,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--tag",
         metavar="SEARCH_TEXT",
         help="explicit LRCLIB search hint (single-file mode only)",
+    )
+    parser.add_argument(
+        "--lyrics",
+        type=_parse_lyrics_sources,
+        default=DEFAULT_LYRICS_SOURCES,
+        metavar="SOURCES",
+        help="ordered colon-separated sources (default: lrc:embedded:lrclib)",
     )
     parser.add_argument(
         "--track",
@@ -216,6 +244,71 @@ def _write_atomic(path: Path, content: str) -> None:
                 pass
 
 
+def _lyrics_record(identity: SongIdentity, media: Path, lines) -> LyricsRecord:
+    return LyricsRecord(
+        0,
+        identity.title or media.stem,
+        identity.artist or "Unknown Artist",
+        identity.album,
+        identity.duration,
+        lines,
+    )
+
+
+def _external_lrc(media: Path) -> tuple[TimedLyricLine, ...]:
+    try:
+        text = media.with_suffix(".lrc").read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError):
+        return ()
+    return parse_synced_lyrics(text)
+
+
+def _select_lyrics(
+    media: Path,
+    chord_data: ChordData,
+    client: LRCLIBClient,
+    sources: tuple[str, ...],
+    search_hint: str | None,
+) -> tuple[LyricsRecord, str]:
+    analysis_duration = _analysis_duration(chord_data)
+    media_identity = None
+    for source in sources:
+        if source == "lrc":
+            lines = _external_lrc(media)
+            if lines:
+                media_identity = media_identity or lookup_identity(
+                    media, analysis_duration=analysis_duration
+                )
+                return _lyrics_record(media_identity, media, lines), "lrc"
+        elif source == "embedded":
+            embedded = get_embedded_lyrics(media)
+            if embedded is None:
+                continue
+            lines = embedded.lines or time_plain_lyrics(embedded.text, chord_data.beat_times)
+            if lines:
+                media_identity = media_identity or lookup_identity(
+                    media, analysis_duration=analysis_duration
+                )
+                return (
+                    _lyrics_record(media_identity, media, lines),
+                    f"embedded:{embedded.source}",
+                )
+        elif source == "lrclib":
+            identity = lookup_identity(
+                media,
+                analysis_duration=analysis_duration,
+                include_filename=search_hint is None,
+            )
+            if not identity.title and not search_hint:
+                raise GenerationError("song title could not be determined")
+            record = client.lookup(identity, search_hint=search_hint)
+            if record is not None:
+                return record, "lrclib"
+        else:
+            raise GenerationError(f'unknown internal lyrics source "{source}"')
+    raise GenerationError("no usable lyrics found from configured sources")
+
+
 def generate_file(
     media: Path,
     *,
@@ -226,6 +319,7 @@ def generate_file(
     track: str = "auto",
     romanize: bool = False,
     romanize_engine: str = DEFAULT_ENGINE,
+    lyrics_sources: tuple[str, ...] = DEFAULT_LYRICS_SOURCES,
 ) -> tuple[str, str]:
     """Generate one sidecar and return ``(status, explanation)``."""
     output_path = media.with_suffix(".cho")
@@ -234,33 +328,9 @@ def generate_file(
 
     chord_data = _load_analysis(media, track)
     selected_track = chord_data.active_chord_track_id
-    embedded = get_embedded_lyrics(media)
-    identity = lookup_identity(
-        media,
-        analysis_duration=_analysis_duration(chord_data),
-        include_filename=embedded is not None or search_hint is None,
+    record, lyrics_source = _select_lyrics(
+        media, chord_data, client, lyrics_sources, search_hint
     )
-    if embedded is not None:
-        lines = embedded.lines or time_plain_lyrics(embedded.text, chord_data.beat_times)
-        if lines:
-            record = LyricsRecord(
-                0,
-                identity.title or media.stem,
-                identity.artist or "Unknown Artist",
-                identity.album,
-                identity.duration,
-                lines,
-            )
-            match_detail = f"matched {record.artist} — {record.title} via {embedded.source}"
-        else:
-            embedded = None
-    if embedded is None:
-        if not identity.title and not search_hint:
-            raise GenerationError("song title could not be determined")
-        record = client.lookup(identity, search_hint=search_hint)
-        if record is None:
-            raise GenerationError("no plausible synchronized lyrics found on LRCLIB")
-        match_detail = f"matched {record.artist} — {record.title}"
 
     beat_chords = PlaybackView(
         chord_data,
@@ -280,7 +350,7 @@ def generate_file(
     content = render_chordpro(
         record,
         rows,
-        search_hint=search_hint if embedded is None else None,
+        search_hint=search_hint if lyrics_source == "lrclib" else None,
         chord_track_id=selected_track,
         romanize=romanizer,
     )
@@ -289,10 +359,22 @@ def generate_file(
     from chordflask.chordpro_song import parse_chordpro
 
     parse_chordpro(content)
+    line_count = len(record.lines)
+    line_label = "line" if line_count == 1 else "lines"
+    if lyrics_source == "lrclib":
+        lyrics_detail = (
+            f"lyrics=lrclib ({line_count} timed {line_label}, "
+            f"matched {record.artist} — {record.title})"
+        )
+    else:
+        lyrics_detail = f"lyrics={lyrics_source} ({line_count} timed {line_label})"
+    detail = f"{lyrics_detail}; beats={len(chord_data.beat_times)}"
+    if romanize:
+        detail += f"; romanize={romanize_engine}"
     if dry_run:
-        return "dry-run", f"{match_detail}; would write {output_path.name}"
+        return "dry-run", f"{detail}; would write {output_path.name}"
     _write_atomic(output_path, content)
-    return "written", f"{match_detail}; wrote {output_path.name}"
+    return "written", f"{detail}; wrote {output_path.name}"
 
 
 def _resolve_files(target: Path) -> list[Path] | None:
@@ -316,8 +398,13 @@ def run(args, *, client=None) -> int:
     if args.tag is not None and not args.tag.strip():
         print("ERROR: --tag must not be empty", file=sys.stderr)
         return 2
+    lyrics_sources = getattr(args, "lyrics", DEFAULT_LYRICS_SOURCES)
+    if args.tag is not None and "lrclib" not in lyrics_sources:
+        print("ERROR: --tag requires lrclib in --lyrics", file=sys.stderr)
+        return 2
 
     client = client or LRCLIBClient()
+    print(f"Lyrics priority: {' > '.join(lyrics_sources)}")
     failures = 0
     skipped = 0
     written = 0
@@ -332,6 +419,7 @@ def run(args, *, client=None) -> int:
                 track=getattr(args, "track", "auto"),
                 romanize=getattr(args, "romanize", False),
                 romanize_engine=getattr(args, "romanize_engine", DEFAULT_ENGINE),
+                lyrics_sources=lyrics_sources,
             )
         except (GenerationError, LRCLIBError, RomanizationError, ValueError) as error:
             failures += 1

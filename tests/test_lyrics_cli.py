@@ -79,6 +79,7 @@ def args(target, **overrides):
         "dry_run": False,
         "romanize": False,
         "romanize_engine": "thai2rom_onnx",
+        "lyrics": cli.DEFAULT_LYRICS_SOURCES,
     }
     values.update(overrides)
     return Namespace(**values)
@@ -94,6 +95,24 @@ def test_track_cli_defaults_to_auto_and_accepts_explicit_id():
 
     assert parser.parse_args(["song.mp3"]).track == "auto"
     assert parser.parse_args(["--track", "btc", "song.mp3"]).track == "btc"
+
+
+def test_lyrics_cli_defaults_to_lrc_embedded_lrclib_and_preserves_order():
+    parser = cli.build_parser()
+
+    assert parser.parse_args(["song.mp3"]).lyrics == ("lrc", "embedded", "lrclib")
+    assert parser.parse_args(["--lyrics", "lrclib:lrc", "song.mp3"]).lyrics == (
+        "lrclib",
+        "lrc",
+    )
+
+
+@pytest.mark.parametrize("value", ["", "lrc:unknown", "lrc:lrc", "lrc::embedded"])
+def test_invalid_lyrics_source_specifications_fail_cleanly(value):
+    with pytest.raises(SystemExit) as error:
+        cli.build_parser().parse_args(["--lyrics", value, "song.mp3"])
+
+    assert error.value.code == 2
 
 
 def test_romanize_cli_is_optional_and_default_engine_is_onnx():
@@ -338,6 +357,163 @@ def test_missing_embedded_lyrics_fall_back_to_lrclib(monkeypatch, tmp_path):
     assert len(client.calls) == 1
 
 
+def test_same_stem_lrc_wins_over_embedded_and_lrclib(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    media.with_suffix(".lrc").write_text(
+        "\ufeff[00:00.20]external first\n[00:04.20]external second\n",
+        encoding="utf-8",
+    )
+    embedded_calls = []
+    monkeypatch.setattr(
+        cli,
+        "get_embedded_lyrics",
+        lambda path: embedded_calls.append(path),
+    )
+    client = FakeClient(lyrics_record())
+
+    status, detail = cli.generate_file(media, client=client)
+
+    assert status == "written"
+    assert "lyrics=lrc (2 timed lines)" in detail
+    assert embedded_calls == []
+    assert client.calls == []
+    parsed = read_chordpro(media.with_suffix(".cho"))
+    visible = "".join(
+        run["lyric"]
+        for block in parsed["blocks"]
+        if block["type"] == "line"
+        for run in block["runs"]
+    )
+    assert "external first" in visible
+
+
+def test_missing_and_unusable_lrc_fall_through(monkeypatch, tmp_path):
+    missing = tmp_path / "Artist - Missing.mp3"
+    untimed = tmp_path / "Artist - Untimed.mp3"
+    unreadable = tmp_path / "Artist - Unreadable.mp3"
+    for media in (missing, untimed, unreadable):
+        make_analysis(media)
+    untimed.with_suffix(".lrc").write_text("plain untimed lyrics", encoding="utf-8")
+    unreadable.with_suffix(".lrc").write_bytes(b"\xff\xfe")
+    monkeypatch.setattr(
+        cli,
+        "get_embedded_lyrics",
+        lambda path: EmbeddedLyrics("ffprobe:lyrics", "embedded first\nembedded second"),
+    )
+
+    for media in (missing, untimed, unreadable):
+        client = FakeClient(lyrics_record())
+        _, detail = cli.generate_file(media, client=client)
+        assert "lyrics=embedded:ffprobe:lyrics" in detail
+        assert client.calls == []
+
+
+def test_unusable_embedded_lyrics_fall_through_to_lrclib(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(
+        cli,
+        "get_embedded_lyrics",
+        lambda path: EmbeddedLyrics("ffprobe:lyrics", " \n "),
+    )
+    client = FakeClient(lyrics_record())
+
+    _, detail = cli.generate_file(media, client=client)
+
+    assert "lyrics=lrclib (2 timed lines, matched Artist — Song)" in detail
+    assert len(client.calls) == 1
+
+
+def test_explicit_source_ordering_is_honored(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    media.with_suffix(".lrc").write_text("[00:00.20]external", encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "get_embedded_lyrics",
+        lambda path: EmbeddedLyrics("ffprobe:lyrics", "embedded"),
+    )
+    client = FakeClient(lyrics_record())
+
+    _, detail = cli.generate_file(
+        media,
+        client=client,
+        lyrics_sources=("embedded", "lrc", "lrclib"),
+    )
+
+    assert "lyrics=embedded:ffprobe:lyrics" in detail
+    assert client.calls == []
+
+
+@pytest.mark.parametrize("lrc_text", [None, "plain untimed lyrics"])
+def test_lrc_only_never_probes_identity_or_uses_network(
+    monkeypatch, tmp_path, lrc_text
+):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    if lrc_text is not None:
+        media.with_suffix(".lrc").write_text(lrc_text, encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "lookup_identity",
+        lambda *args, **kwargs: pytest.fail("identity must not be probed"),
+    )
+    client = FakeClient(lyrics_record())
+
+    with pytest.raises(cli.GenerationError, match="no usable lyrics"):
+        cli.generate_file(media, client=client, lyrics_sources=("lrc",))
+
+    assert client.calls == []
+
+
+def test_unknown_internal_lyrics_source_fails_defensively(tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+
+    with pytest.raises(cli.GenerationError, match='unknown internal lyrics source "bad"'):
+        cli.generate_file(media, client=FakeClient(), lyrics_sources=("bad",))
+
+
+def test_tag_requires_lrclib_source(tmp_path, capsys):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+
+    assert cli.run(args(media, tag="Artist Song", lyrics=("lrc",))) == 2
+    assert "--tag requires lrclib in --lyrics" in capsys.readouterr().err
+
+
+def test_external_lrc_supports_romanization(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Thai.mp3"
+    make_analysis(media)
+    media.with_suffix(".lrc").write_text("[00:00.20]ภาษาไทย", encoding="utf-8")
+    monkeypatch.setattr(cli, "romanize_thai", lambda text, *, engine: "phasa thai")
+
+    _, detail = cli.generate_file(
+        media,
+        client=FakeClient(),
+        lyrics_sources=("lrc",),
+        romanize=True,
+    )
+
+    assert "romanize=thai2rom_onnx" in detail
+    assert "{x_chordflask_romanized: phasa thai}" in media.with_suffix(
+        ".cho"
+    ).read_text(encoding="utf-8")
+
+
+def test_run_reports_priority_source_and_beat_count(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    media.with_suffix(".lrc").write_text("[00:00.20]external", encoding="utf-8")
+
+    assert cli.run(args(media), client=FakeClient()) == 0
+
+    output = capsys.readouterr().out
+    assert output.count("Lyrics priority: lrc > embedded > lrclib") == 1
+    assert "lyrics=lrc (1 timed line); beats=8; wrote Artist - Song.cho" in output
+
+
 def test_embedded_uslt_is_preferred_without_lrclib_lookup(monkeypatch, tmp_path):
     media = tmp_path / "Artist - Song.mp3"
     make_analysis(media)
@@ -352,7 +528,7 @@ def test_embedded_uslt_is_preferred_without_lrclib_lookup(monkeypatch, tmp_path)
     status, detail = cli.generate_file(media, client=client)
 
     assert status == "written"
-    assert "via ffprobe:lyrics" in detail
+    assert "lyrics=embedded:ffprobe:lyrics" in detail
     assert client.calls == []
     parsed = read_chordpro(media.with_suffix(".cho"))
     visible = "".join(
