@@ -406,11 +406,13 @@ network. See [Security](#security) for the media-root restrictions.
 
 Different browsers and devices have independent playback and display state;
 tabs in the same browser profile intentionally share one ChordFlask client
-state. This state is held in memory and resets when ChordFlask restarts. Chord
-edits, however, are shared files, so simultaneous edits to one song can give
-one client a conflict; that client receives the current disk state and can
-re-edit. This state separation is not authentication or hardened multi-user
-isolation.
+state. Most playback state is held in memory and resets when ChordFlask
+restarts. Browser preferences such as the preferred Grid/Lyrics view and
+per-song transposition are stored locally in the browser and survive a
+ChordFlask restart. Chord edits, however, are shared files, so simultaneous
+edits to one song can give one client a conflict; that client receives the
+current disk state and can re-edit. This state separation is not authentication
+or hardened multi-user isolation.
 
 Generated JSON, MusicXML, MIDI, cached audio, and optional Demucs FLAC stems are stored in a
 `.chordflask` directory beside the media. Your user therefore needs write
