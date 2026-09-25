@@ -24,6 +24,11 @@ scripts/chordflask-maintain <subcommand> ...
 | `stems cleanup` | **modifies files** — deletes only unreferenced stem generations |
 | `migrate-schema` | **modifies files** — rewrites analysis JSON to schema v3 |
 
+Start with read-only commands. `doctor`, `validate`, and both report commands
+are safe inventory/diagnostic operations. Cleanup and migration require an
+explicit subcommand and target; no maintenance command silently repairs or
+deletes an analysis merely because it was inspected.
+
 ## Storage report
 
 ```bash
@@ -60,6 +65,13 @@ anything. Dry runs use the same lock checks and refusal rules as real cleanup.
 External same-stem `.cho` sidecars are outside `.chordflask` storage and are
 never inspected, rewritten, or deleted. This includes sidecars containing
 `x_chordflask_romanized` metadata.
+
+Corrupt-analysis backups are retained unless both `--corrupt-backups` and an
+explicit positive `--older-than-days` retention age are provided. The age is
+applied only to that backup category. Orphan temporary work is incomplete data
+left outside the final analysis contract; cached audio is derived and can be
+created again from its source video. Neither category includes source media,
+valid JSON, exports, or Edited chord data.
 
 ## Stems report
 
@@ -148,6 +160,59 @@ builds; treating them as doctor failures would incorrectly mark a healthy
 standalone as incomplete. The generator itself reports a clear error when a
 requested romanization engine is unavailable, without importing or loading ML
 packages during maintenance.
+
+## Diagnosis and repair workflows
+
+### Check an installation before touching collection data
+
+```bash
+chordflask-maintain doctor
+```
+
+Resolve missing FFmpeg, Vamp plugins, or an unwritable queue directory first.
+`doctor` does not inspect media-local analyses.
+
+### Validate one collection
+
+```bash
+chordflask-maintain validate /music/videos
+chordflask-maintain storage report /music/videos
+```
+
+Validation identifies unreadable or structurally invalid analysis JSON. The
+storage report provides category sizes and leftover status without deleting
+anything. A corrupt analysis is not automatically overwritten: preserve any
+reported backup, inspect the failure, then deliberately reanalyze the affected
+media if regeneration is appropriate. See [ANALYSIS.md](ANALYSIS.md) for
+replacement semantics and Edited-track preservation.
+
+### Preview cleanup before applying it
+
+```bash
+chordflask-maintain storage cleanup /music/videos \
+  --orphan-temp --cached-audio --dry-run
+chordflask-maintain stems cleanup /music/videos --orphans --dry-run
+```
+
+Run the corresponding command without `--dry-run` only after reviewing the
+candidates. Cleanup refuses ambiguous or active states instead of guessing.
+Analysis worker locks and Demucs locks protect work that may still be owned by
+a running process. If a refusal is unexpected, stop only the ChordFlask process
+that owns that work and rerun the report; do not delete lock or queue files as a
+generic repair step.
+
+### Migrate old but valid analysis
+
+```bash
+chordflask-maintain validate /music/videos
+chordflask-maintain migrate-schema /music/videos
+chordflask-maintain validate /music/videos
+```
+
+Migration changes the storage schema, not musical analysis. It retains chord,
+rhythm, user-edited, and other valid track data and uses atomic replacement.
+Keep normal filesystem backups when migrating a valuable collection, even
+though each individual failed write leaves its original unchanged.
 
 ## Exit codes
 

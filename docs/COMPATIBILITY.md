@@ -1,4 +1,4 @@
-# Forward Compatibility
+# Platform and runtime compatibility
 
 ChordFlask targets Ubuntu 24.04+, Linux Mint 22+, and Debian 13+ as the supported
 platform family. Newer compatible releases in the same family are accepted
@@ -7,6 +7,22 @@ through capability-based detection, not a hard-coded version allowlist.
 This document records the forward-compatibility strategy for each component so
 maintainers can assess what must be tested for a new distro or Python release.
 It does not turn a synthetic or mocked check into a support claim.
+
+## User-facing platform matrix
+
+| Platform | Core source install | Standalone | Notes |
+| --- | --- | --- | --- |
+| Ubuntu 24.04+ x86_64 | Supported | Supported with a compatible build | The Mint 22 prebuilt bundle is suitable for Ubuntu 24.04. |
+| Linux Mint 22+ x86_64 | Supported | Supported | Current prebuilt bundle family. |
+| Debian 13+ x86_64 | Supported | Supported with a compatible build | Debian commonly supplies a newer default Python than Ubuntu 24.04. |
+| WSL2 with a supported Debian-family distribution | Tested source workflow | Not the primary standalone target | Open the local UI from the Windows browser at `localhost`. |
+| Native Windows | Not supported | Not supported | Use WSL2 instead. |
+| Other Linux distributions/architectures | Not claimed | Not claimed | Capability checks may work, but that is not a support statement. |
+
+The core application supports MP3, MP4, and WebM through system FFmpeg. Browser
+behavior still depends on codecs available to the browser. Optional Demucs stem
+playback has additional browser limits documented in
+[DEMUCS.md](DEMUCS.md#known-limitations).
 
 ## Setup
 
@@ -78,6 +94,25 @@ audio saving. See the [Demucs runtime matrix and validation
 record](DEMUCS.md#runtime-compatibility) for interpreter overrides, existing-venv
 upgrades, and remaining warnings. Core runtime dependencies are unchanged.
 
+## Lyrics and romanization runtime
+
+`chordflask-genlyrics` is part of the source/virtualenv installation and uses
+the core supported CPython 3.12–3.14 range. Ordinary LRC, embedded-lyrics, and
+LRCLIB generation does not load a romanization model.
+
+Source setup installs `pythainlp[onnx]>=5.3.3,<6`, including ONNX Runtime, for
+the default `thai2rom_onnx` engine without installing PyTorch. The `royin`
+engine uses the same PyThaiNLP installation. TLTK 1.10 is installed only where
+its dependency stack is compatible, currently Python 3.12 and 3.13; it is not
+installed on Python 3.14 because its gensim dependency cannot currently build
+there. Explicitly selecting an unavailable engine fails, with no silent
+fallback. See [LYRICS.md](LYRICS.md#thai-romanization) for behavior and quality
+limits.
+
+The standalone excludes the generator, LRCLIB client, PyThaiNLP, ONNX Runtime,
+and TLTK. It can still parse and display `.cho` files and romanization generated
+elsewhere because that reader has no model dependency.
+
 ## System FFmpeg
 
 ChordFlask requires a system `ffmpeg` on `PATH`. At startup, `ffmpeg_runtime.py`
@@ -130,6 +165,13 @@ executable. Forward compatibility concerns:
   a missing-system-FFmpeg smoke test exits with the expected apt hint.
 - **Python upgrades**: A Python version bump requires rebuilding and smoke-testing
   the standalone on the target family.
+
+The bundle is Linux x86_64 only and is not a static or cross-platform binary.
+Its build-host glibc establishes a minimum target glibc. Copying a bundle from a
+newer distribution to an older one can therefore fail before ChordFlask starts.
+Build on the oldest supported target family when one artifact must cover
+several compatible systems. Installation, feature differences, and diagnostic
+steps are in [STANDALONE.md](STANDALONE.md).
 
 ## Audio Dependencies
 

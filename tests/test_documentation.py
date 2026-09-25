@@ -28,8 +28,9 @@ def test_readme_names_portable_archive_and_complete_guide():
     guide = (REPO_ROOT / "docs" / "STANDALONE.md").read_text()
 
     assert "## Download" in readme
-    assert "flask/dist/chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz" in readme
     assert "docs/STANDALONE.md" in readme
+    assert "## Build the archive" in guide
+    assert "flask/dist/chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz" in guide
     for command in (
         "tar -xzf chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz",
         "./install_vamp.sh",
@@ -39,16 +40,20 @@ def test_readme_names_portable_archive_and_complete_guide():
         assert command in guide
 
 
-def test_readme_documents_launcher_refresh_for_0_9_upgrades():
+def test_helpers_doc_documents_portable_launcher_upgrades():
     readme = (REPO_ROOT / "README.md").read_text()
+    helpers = (REPO_ROOT / "docs" / "HELPERS.md").read_text()
     copy_command = (
         "cp scripts/chordflask \\\n"
         "   scripts/chordflask-{analyze,demucs,export,genlyrics,maintain} \\\n"
         "   ~/bin/"
     )
 
-    assert "When upgrading from 0.9.x" in readme
-    assert copy_command in readme
+    assert "](docs/HELPERS.md)" in readme
+    assert "### Portable launchers" in helpers
+    assert "upgrading from an older" in helpers
+    assert "0.9.x installation" in helpers
+    assert copy_command in helpers
 
 
 def test_readme_standalone_download_matches_version():
@@ -96,16 +101,28 @@ def test_public_documentation_links_resolve():
 
 def test_readme_documents_batch_leadsheet_export():
     readme = (REPO_ROOT / "README.md").read_text()
+    analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
 
-    assert "Batch leadsheet export" in readme
-    assert "scripts/chordflask-export ~/Music" in readme
-    assert "--sharps --transpose 2" in readme
-    assert "--chord-track original --repeat-mode chords" in readme
-    assert ".chordflask/<name>-chords-<track>.md" in readme
-    assert "one ZIP" in readme
+    assert "### Export a leadsheet" in readme
     assert "--format markdown" in readme
     assert "--format pdf" in readme
-    assert "reused" in readme.lower()
+    assert "](docs/ANALYSIS.md#command-line-export)" in readme
+    assert "## Saving a leadsheet" in analysis
+    assert "## Command-line export" in analysis
+    for option in (
+        "--format",
+        "--chord-track",
+        "--rhythm-track",
+        "--transpose",
+        "--sharps",
+        "--unicode",
+        "--repeat-mode",
+        "--no-metric-chords",
+    ):
+        assert option in analysis
+    assert ".chordflask/<name>-chords-<track>.md" in analysis
+    assert "one ZIP" in analysis
+    assert "reuses it" in analysis
 
 
 def test_helpers_doc_describes_export_options_and_exit_codes():
@@ -165,17 +182,24 @@ def test_helpers_doc_filenames_exist():
 def test_readme_documents_command_line_tools_block():
     readme = (REPO_ROOT / "README.md").read_text()
 
-    assert "### Command-line tools" in readme
-    assert "scripts/chordflask" in readme
-    assert "scripts/chordflask-analyze song.mp4" in readme
-    assert "scripts/chordflask-analyze /music/videos" in readme
-    assert "scripts/chordflask-export" in readme
-    assert "scripts/chordflask-maintain doctor" in readme
-    assert "Chordino is the built-in, default" in readme
+    assert "## Command-line tools" in readme
+    for command in (
+        "`chordflask`",
+        "`chordflask-analyze`",
+        "`chordflask-demucs`",
+        "`chordflask-export`",
+        "`chordflask-genlyrics`",
+        "`chordflask-maintain`",
+    ):
+        assert command in readme
+    assert "chordflask-maintain doctor" in readme
+    assert "](docs/HELPERS.md)" in readme
+    assert "](docs/ANALYSIS.md)" in readme
 
 
 def test_readme_documents_responsive_support_and_lan_usage():
     readme = (REPO_ROOT / "README.md").read_text()
+    security = (REPO_ROOT / "SECURITY.md").read_text()
     text = re.sub(r"\s+", " ", readme)
 
     assert (
@@ -183,13 +207,15 @@ def test_readme_documents_responsive_support_and_lan_usage():
         "Mobile support is functional but still undergoing broader real-device "
         "testing." in text
     )
-    assert "CHORDFLASK_MEDIA_ROOTS" in readme
     assert "--roots" in readme
     assert "--listen" in readme
     assert "--port" in readme
     assert 'chordflask --listen 0.0.0.0 --roots "/home/user/Music"' in text
-    assert "platform path separator" in readme
-    assert "not automatically exposed" in readme
+    assert "](SECURITY.md)" in readme
+    assert "## Configuring media roots" in security
+    assert "CHORDFLASK_MEDIA_ROOTS" in security
+    assert "platform path separator" in security
+    assert "not added automatically" in security
 
 
 def test_analysis_doc_documents_command_line_analysis():
@@ -205,15 +231,20 @@ def test_analysis_doc_documents_command_line_analysis():
 def test_public_docs_describe_btc_as_optional():
     readme = (REPO_ROOT / "README.md").read_text()
     analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
+    btc = (REPO_ROOT / "chordflask_btc" / "model" / "README.md").read_text()
 
     # BTC is documented as an explicit, optional analyzer, not the default.
     assert "make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1" in readme
     assert "make btc-check" in readme
-    assert "scripts/chordflask-analyze --analyzer btc song.mp4" in readme
+    assert "chordflask-analyze --analyzer btc song.mp3" in readme
+    assert "](chordflask_btc/model/README.md)" in readme
     assert "Chordino is the default." in analysis
-    assert "Optional BTC analyzer" in analysis
-    assert "chordflask-analyze-btc" not in readme
-    assert "chordflask-analyze-btc" not in analysis
+    assert "### Optional BTC analyzer" in analysis
+    assert "scripts/chordflask-analyze --analyzer btc song.mp4" in analysis
+    assert "separate `btc` chord track" in analysis
+    assert "## Runtime compatibility" in btc
+    for text in (readme, analysis, btc):
+        assert "chordflask-analyze-btc" not in text
 
 
 def test_public_docs_describe_demucs_as_optional_grouped_stems():
@@ -221,19 +252,23 @@ def test_public_docs_describe_demucs_as_optional_grouped_stems():
     analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
     demucs = (REPO_ROOT / "docs" / "DEMUCS.md").read_text()
 
-    for text in (readme, analysis, demucs):
+    assert "make setup-demucs" in readme
+    assert "make demucs-check" in readme
+    assert "chordflask-demucs ~/Music" in readme
+    assert "Vocals" in readme and "Drums" in readme
+    assert "Bass" in readme and "Other" in readme
+    assert "STEMS" in readme
+    assert "](docs/DEMUCS.md)" in readme
+
+    for text in (analysis, demucs):
         assert "htdemucs" in text
         assert "bass" in text and "drums" in text and "other" in text and "vocals" in text
         assert "audio_tracks[\"demucs:htdemucs\"]" in text
         assert "--replace" in text
-    assert "make setup-demucs" in readme
     assert "make demucs-check" in analysis
     assert "source_timeline" in demucs
-    # The player-side STEMS control and per-stem volume are documented.
-    assert "[STEMS]" in readme
     assert "STEMS" in demucs
     assert "volume" in demucs
-    assert "Voc" in readme
     assert "chordflask-maintain stems report" in demucs
 
 

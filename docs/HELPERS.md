@@ -99,6 +99,24 @@ These are kept as usable command-line tools and have smoke-test coverage.
   holds the shared render/write logic and the export option definitions; new
   code should use `chordflask-export` rather than running this module directly.
 
+### Portable launchers
+
+After a source setup, repository launchers can be copied or symlinked into a
+directory on `PATH`:
+
+```bash
+make all
+cp scripts/chordflask \
+   scripts/chordflask-{analyze,demucs,export,genlyrics,maintain} \
+   ~/bin/
+```
+
+They select the configured/default ChordFlask virtual environment, preserve the
+caller's working directory, and run the installed console command. They do not
+infer a source checkout from their own location. When upgrading from an older
+0.9.x installation, copy the launchers again: older copies can still target the
+pre-package source layout.
+
 ## Production Boundary
 
 The active production `ChordAnalyzer` lives in `chordflask/chordanalyzer.py`

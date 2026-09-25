@@ -92,6 +92,9 @@ This does not establish end-to-end validation across every target system.
 CUDA requires a compatible GPU and driver; automatic CPU fallback and model
 download on first processing remain unchanged.
 
+See [COMPATIBILITY.md](COMPATIBILITY.md#optional-demucs-runtime) for how this
+optional environment relates to the supported core Python/platform matrix.
+
 ## Batch command
 
 The command accepts one file or one non-recursive directory:
@@ -122,6 +125,27 @@ Directory discovery is direct-only and uses the normal MP4, WebM, MP3
 same-stem priority. Processing is serial to keep resource use predictable.
 Run the preparation once for a directory; re-running reports `CURRENT` for
 songs that are already prepared.
+
+### Prepare one song
+
+```bash
+chordflask-demucs song.mp3
+```
+
+Use `--dry-run` first when checking whether the song is `CURRENT`, `TODO`, or
+`STALE`. A `TODO` song is prepared by a normal run. A `STALE` set is protected
+until `--replace` explicitly requests a complete new generation.
+
+### Prepare a practice directory
+
+```bash
+chordflask-demucs --dry-run ~/Music/Practice
+chordflask-demucs ~/Music/Practice
+```
+
+The command visits supported files directly inside that directory and continues
+serially. Run ChordFlask normally afterward; no import or registration command
+is needed because each complete set is already attached to its analysis data.
 
 ## Storage layout
 
@@ -189,6 +213,24 @@ re-tested before changing it.
 
 Stem loading failure safely returns to the original audio and restores the
 original master mute state.
+
+### Karaoke workflow
+
+1. Prepare the song and load it in ChordFlask.
+2. Select **STEMS**.
+3. Select **Voc** to mute Vocals.
+4. Adjust Drums, Bass, and Other if the backing balance needs changing.
+5. Use the ordinary playback, seek, Repeat, Auto, and A/B loop controls.
+
+### Instrument-practice workflow
+
+1. Select **STEMS** for a prepared song.
+2. Mute the part you will perform, for example **Bass**.
+3. Reduce rather than mute another part when a quieter reference is useful.
+4. Set A/B around the section to practise and repeat it.
+
+Stem volume and mute choices last only for the current song/session. The FLAC
+files themselves are persistent and reused; mixer settings do not modify them.
 
 ## Optional stem caching
 

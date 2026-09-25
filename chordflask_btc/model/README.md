@@ -6,6 +6,57 @@ it never touches the ChordFlask analyzer or the normal ChordFlask virtual
 environment. It is only used when the user runs `make setup-btc` and then
 `chordflask-analyze --analyzer btc`.
 
+Chordino remains ChordFlask's built-in default. BTC is optional and writes an
+additional named chord track; it does not replace or modify Chordino.
+
+## Installation and weights acknowledgement
+
+From a source checkout:
+
+```bash
+make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1
+make btc-check
+```
+
+Setup creates the isolated `~/.venvs/chordflask-btc` environment and downloads
+the model checkpoint only after the explicit acknowledgement. The checkpoint
+has no clearly documented redistribution licence, so it is neither committed
+to this repository nor included in releases or standalone bundles. Setup checks
+its fixed size and SHA-256 before it can be loaded.
+
+`make btc-check` reports the selected interpreter, installed model/runtime, and
+whether a compatible CUDA device is available. CUDA is used when the runtime
+can use it; otherwise inference falls back to CPU. CPU works but is normally
+slower.
+
+## Analyze and select the BTC track
+
+Analyze one song or a non-recursive directory explicitly:
+
+```bash
+chordflask-analyze --analyzer btc song.mp3
+chordflask-analyze --analyzer btc ~/Music/Album
+```
+
+In a source checkout, `scripts/chordflask-analyze` is equivalent. BTC is
+integrated as the separate `btc` chord track while the existing Chordino and
+rhythm tracks remain available. Open the song and select BTC in the chord-track
+selector to compare it with Chordino or Edited data.
+
+Repeat runs reuse the existing BTC result. Use `--replace` only to regenerate
+that selected analyzer's track:
+
+```bash
+chordflask-analyze --analyzer btc --replace song.mp3
+```
+
+Exports and lyrics generation can select it by track ID:
+
+```bash
+chordflask-export --chord-track btc song.mp3
+chordflask-genlyrics --track btc song.mp3
+```
+
 ## Runtime compatibility
 
 `make setup-btc` uses Python 3.12, 3.13, or 3.14 and installs `torch==2.10.0`
@@ -30,11 +81,32 @@ without deleting the venv. Existing checkpoint provenance and hash validation,
 numpy/librosa installation, and automatic CPU fallback remain unchanged.
 CUDA use requires a compatible NVIDIA GPU and driver.
 
+The runtime is separate from the core ChordFlask and Demucs environments. A
+working core installation does not imply that BTC's PyTorch/CUDA stack is
+installed, and a BTC setup problem does not disable Chordino. See
+[platform and runtime compatibility](../../docs/COMPATIBILITY.md#optional-btc-runtime)
+for the relationship between these matrices.
+
 The maintainer manually verified torch 2.10.0+cu128 on Ubuntu/Xubuntu 26.04,
 Python 3.14, and an RTX 5070 Laptop: CUDA 12.8 was available, all 221 checkpoint
 state keys matched, `load_state_dict` succeeded, and a CUDA forward pass produced
 encoder shape `(1, 108, 128)` and prediction shape `(1, 108)`. This is BTC runtime
 validation, not full application or standalone acceptance across the matrix.
+
+## Availability and limitations
+
+- BTC produces chord labels only; it uses ChordFlask's existing rhythm-track
+  contracts for display and export.
+- Recognition remains automatic and approximate. A different model can produce
+  different errors, vocabulary choices, or boundaries; BTC is not an
+  authoritative transcription.
+- GPU use depends on the installed NVIDIA driver and PyTorch wheel. Automatic
+  CPU fallback is expected when CUDA is unavailable.
+- Model download is a one-time external network operation and requires the
+  explicit weights acknowledgement.
+- BTC generation is source-installation only and is not part of the standalone
+  bundle. A standalone can read an already stored compatible `btc` track but
+  cannot install the runtime or run inference.
 
 ## Files
 

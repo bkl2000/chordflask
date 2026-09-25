@@ -40,6 +40,28 @@ scripts/chordflask-analyze /music/videos
   target directory are considered; subdirectories are skipped. Where several
   extensions share one base name, MP4 wins over WebM over MP3.
 
+### Analysis lifecycle and reuse
+
+A valid existing Chordino analysis is reused by the browser, CLI, export, and
+lyrics workflows. Selecting an unanalyzed song in the browser submits one job;
+`chordflask-analyze` performs the same analysis directly for one file or a
+non-recursive directory. A normal directory run skips current results, so it is
+safe to repeat when preparing an album incrementally.
+
+Use `--dry-run` to see the planned `CURRENT`/work status without writing. Use
+`--replace` only when the selected analyzer should run again. Chordino
+replacement refreshes its chord track and the QM rhythm result, but validates
+the replacement before publication and preserves unrelated analyzer tracks,
+Edited data, display preferences, and user data. BTC replacement affects only
+the BTC track.
+
+The interactive queue is persistent and written atomically. One managed worker
+owns processing. On restart, a job left in `processing` returns to `pending`.
+Work happens in a per-song temporary directory; generated audio, MusicXML, and
+MIDI are published atomically and validated final JSON is published last as the
+completion marker. Incomplete temporary output is therefore never considered a
+finished analysis. Failed jobs remain eligible for an explicit retry.
+
 ### Optional BTC analyzer
 
 The optional BTC analyzer is available only after the user has installed its
@@ -116,6 +138,36 @@ scanned recursively.
   stored analysis.
 - The small **↻** control requests fresh Chordino/QM analysis while playback and
   browsing remain available.
+- On desktop (1024 px and wider), drag the divider between media and chords to
+  resize the panels, or focus it and use the arrow keys. **Dark** and **Light**
+  change only the chord panel theme. The browser remembers both preferences;
+  tablet and phone layouts are unchanged.
+
+## Original and Edited chords
+
+Chordino, optional BTC, reference data, and manual corrections are independent
+chord tracks. The browser's track selector changes which one is displayed;
+selecting a track never deletes or rewrites the others. **Original** refers to
+the analyzer result used as the editing source. **Edited** is the separate
+`user_edited` beat-aligned track.
+
+To correct chords in the browser:
+
+1. Load a ready song and pause playback.
+2. Select **Edit**. Editing requires the Chordino chord track and the QM rhythm
+   track and is unavailable while analysis is queued or running.
+3. Select a beat cell, enter or choose the chord, and accept it.
+4. Use **Undo** for changes made in the current edit session, or **Done** to
+   return to normal playback.
+5. Use **Reset** only when the complete Edited version should be deleted and the
+   display should return to Original.
+
+Entering Edit creates and selects an Edited copy aligned to the QM rhythm grid;
+accepting a correction changes that copy, never the analyzer track. The Edited
+track records its rhythm source so export and lyrics generation continue to use
+the grid against which the corrections were made. Fresh Chordino/QM analysis
+preserves Edited chords and their recorded rhythm snapshot; **Reset** is the
+explicit operation that removes them.
 
 ## Stored analysis
 
@@ -208,89 +260,92 @@ differ:
 ~/.venvs/chordflask/bin/python scripts/metric_chords_diff.py path/to/chords.json
 ```
 
-## External ChordPro Song sheets
+## Optional automatic beat-grid correction
 
-A user may put an optional lyric-bearing ChordPro file beside ready media by
-replacing its final suffix with lowercase `.cho`:
+Automatic beat-grid correction is an opt-in analysis-time heuristic for songs
+whose detected beats already support an approximately constant-tempo grid. It
+is disabled by default:
 
-```text
-/music/Synthetic Song.mp4
-/music/Synthetic Song.cho
+```bash
+CHORDFLASK_AUTO_CORRECT_BEAT_GRID=1 scripts/chordflask
+CHORDFLASK_AUTO_CORRECT_BEAT_GRID=1 \
+  scripts/chordflask-analyze --replace song.mp3
 ```
 
-At browser widths of 801 px or greater, the chord panel then offers **Grid |
-Lyrics** and starts in **Grid**. Lyrics replaces the Grid content in that same
-scrollable panel and does not change the media player. ChordPro title, artist,
-subtitle, key, capo, common section directives, comments, lyrics, and inline
-chord markers are displayed as a readable text-only sheet.
+Accepted true values are `1`, `true`, `yes`, and `on`; false values are `0`,
+`false`, `no`, `off`, and the empty value, case-insensitively. Any other value
+is an error. Enabling the setting affects only newly requested Chordino/QM
+analysis. Existing JSON is loaded unchanged unless `--replace` is requested.
 
-While playback runs, the Lyrics view follows the same analyzed timeline as the
-Grid: the current player position maps to the current analyzed beat/chord, and
-the corresponding lyric chord marker is highlighted. Marker identity is the
-analyzed beat position, not the chord text, so repeated chord names stay
-distinct events. The row containing the active marker is kept in a comfortable
-viewport band; scrolling only happens when the row leaves that band. Seek and
-Grid/Lyrics switching reuse the existing position sync and update immediately.
+### Candidate grid and acceptance criteria
 
-Generated `chordflask-genlyrics` sheets keep every chord marker an ordinary
-ChordPro name and carry the mapping in small custom, non-display directives:
+The heuristic estimates one interval from robust long-baseline slopes over the
+detected timestamps, then places the grid origin at the median timestamp
+residual. It applies the fitted grid only when every safety check passes:
 
-```text
-{x_chordflask_track: btc}
-{x_chordflask_romanized: some romanized lyric}
-{x_chordflask_beats: 17,23}
-{x_chordflask_end: 40}
-[G]some lyric [Am]more lyric
-```
+- there are at least 16 detected beats;
+- timestamps are finite, non-negative, strictly increasing, and have a complete
+  beat-number sequence;
+- beat numbers advance continuously through the configured meter, rejecting a
+  likely missing or extra beat;
+- every adjacent interval is 0.55–1.45 times the fitted interval, preserving an
+  unambiguous one-to-one assignment rather than hiding dropped or duplicated
+  beats;
+- the song is divided into at most eight diagnostic sections, each normally at
+  least four beats; the spread of local median intervals is no more than 4% of
+  one fitted beat interval;
+- median section offsets drift by no more than 10% of one beat interval;
+- the median absolute grid error is no more than 6% of a beat and the 95th
+  percentile error is no more than 15%;
+- no individual assignment error reaches 45% of a beat;
+- the corrected first timestamp is not before time zero.
 
-`x_chordflask_track` records the actual chord-track snapshot embedded by the
-generator. `--track auto` (the default) prefers a valid `user_edited` track,
-then uses the analysis active/default track, and finally `chordino` when
-necessary. An explicit unavailable track fails for that file without fallback.
-Changing the active analysis track later does not rewrite an existing `.cho`.
-Optional `x_chordflask_romanized` is presentation metadata belonging to the
-immediately following logical lyric line. It has no independent timing.
-Chord/beat ranges and chord markers remain attached to the original lyric line,
-which stays canonical. Desktop Lyrics renders the metadata below that original
-text as a second visual line in the same synchronized row; narrow/mobile
-layouts stay Grid-only and omit it. Unknown or older ChordPro readers can ignore
-the custom directive like the other `x_chordflask` metadata.
-`x_chordflask_beats` lists the analyzed beat index of each chord marker in the
-immediately following line, in order. `x_chordflask_end` closes the final
-marker's exclusive mapped beat range. No range crosses a genuine unmapped
-instrumental gap, so playback there clears the highlight instead of leaving the
-last lyric chord active indefinitely. Other ChordPro readers ignore the
-directives as unknown metadata. If a hand-edited file no longer has exactly one
-beat per chord marker, the mismatch disables precise sync for that line only
-and the line renders statically; it is never rejected.
+An already exact grid (maximum error at or below `1e-9` seconds) is left
+unchanged. These thresholds are deliberately conservative: passing them shows
+that a constant grid is consistent with the detected sequence, not that it is
+musically authoritative.
 
-Within mapped Lyrics coverage, generated markers include every analyzed chord
-change that Changes mode would show while suppressing unchanged repeated beats.
+### Accepted and rejected results
 
-Hand-written `.cho` files without the directives still parse, display, and open
-in Lyrics view; they simply do not receive chord-follow highlighting. The
-metadata never appears as visible lyric text and `.cho` is never an alternative
-source of chord truth: the analysis JSON always wins.
+When accepted, `qm_barbeattracker` becomes the corrected constant grid and its
+BPM is the fitted interval converted to BPM. The unchanged detector output is
+stored as `qm_barbeattracker_original`, including original timestamps, beat
+numbers, and BPM. Both appear in the existing rhythm-track selector. The
+corrected track records its source relationship in metadata.
 
-The sidecar is supplied by the user or generated explicitly by
-`chordflask-genlyrics`; displaying or synchronizing it performs no network
-access. It also does not import the sidecar into analysis: analyzed
-chord/rhythm track selection, Edited data, transpose, accidental spelling,
-Unicode preference, repeat-display mode, timing, and persistence remain
-independent. Invalid UTF-8, oversized, missing, malformed, or unreadable Song
-input fails locally without breaking Grid or playback.
+When any check fails, no extra track or correction metadata is written. The
+ordinary `qm_barbeattracker` retains the detected values. Old files containing
+only that track remain valid and require no migration. Analysis logging records
+whether correction was applied or rejected and includes the reason and relevant
+diagnostics (estimated BPM, interval, median/p95/maximum error, local interval
+variation, and section drift). `chordflask-maintain validate` can validate both
+the original and corrected Schema-v3 tracks.
 
-The generator runs in the normal source-installation environment, requires an
-existing analysis, and fetches synchronized lyrics from the external LRCLIB
-service on demand without an API key for normal lookup. Generated `.cho` files
-remain local user data; ChordFlask ships no lyrics database, and song lyrics may
-be copyrighted. Thai romanization is experimental in 0.9.16, is generated once
-into the `.cho`, and is never recomputed by the browser or standalone.
+### Limits and forced quantization
 
-This input path differs from ChordFlask's existing ChordPro export. The export
-described below is generated from the analyzed beat grid, contains no lyrics,
-and is not imported back into analysis. An external same-stem Song sidecar is
-read only for desktop browser display.
+Regular timestamps alone cannot prove the correct musical phase and cannot
+distinguish the intended tempo from a plausible half- or double-tempo grid.
+Songs with deliberate tempo changes, rubato, unstable detection, discontinuous
+beat numbering, or ambiguous adjacent assignments are expected to be rejected.
+The heuristic does not change the configured meter or infer a new one.
+
+The programmatic `AudioAnalyzer(quantize_beats=True)` mode is a different,
+forced operation. It retains its earlier first-beat and rounded/detected-BPM
+behavior and does not run these acceptance checks. `quantize_beats=True` and
+`auto_correct_beat_grid=True` cannot be enabled together; the combination is an
+error rather than an implicit precedence rule.
+
+## External ChordPro Lyrics sheets
+
+A same-stem lowercase `.cho` beside ready media is optional user-owned display
+input for **Grid | Lyrics**. It is separate from the lyric-free ChordPro export
+described below and is never imported into analysis. The generator requires an
+existing analysis, selects one chord-track snapshot, and adds beat-range
+metadata so Lyrics can follow the same playback timeline as Grid.
+
+Source priority, LRC parsing, embedded tags, LRCLIB matching, alignment,
+ChordPro metadata, Thai romanization, standalone behavior, and failure cases
+are documented in [LYRICS.md](LYRICS.md).
 
 ## Saving a leadsheet
 

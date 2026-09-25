@@ -50,6 +50,28 @@ Do not open a public issue.
   standalone contains no LRCLIB client or generator and performs no lyrics
   network lookup.
 
+## Configuring media roots
+
+Non-loopback listening requires at least one allowed media root:
+
+```bash
+chordflask --listen 0.0.0.0 --roots "/home/user/Music"
+```
+
+Separate multiple roots with the platform path separator (`:` on Linux/macOS,
+`;` on Windows):
+
+```bash
+chordflask --listen 0.0.0.0 \
+  --roots "/home/user/Music:/mnt/media/videos"
+```
+
+Scripts and services may set `CHORDFLASK_MEDIA_ROOTS`; the legacy
+`CHORDIFIER_MEDIA_ROOTS` name remains accepted for compatibility. The
+command-line `--roots` option takes precedence over both. Only media below the
+resolved roots is served on a non-loopback listener; the home directory or
+whole filesystem is not added automatically.
+
 ## Third-party components
 
 Vamp plugins and FFmpeg are external runtimes with their own security postures.

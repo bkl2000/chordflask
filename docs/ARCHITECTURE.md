@@ -8,6 +8,14 @@ browser playback. This document describes the current source layout, runtime
 processes, virtual-environment model, and persistence boundaries. It is a map
 of the implemented system, not a proposal for a different architecture.
 
+User workflows belong in the feature guides rather than this developer map:
+
+- [analysis, tracks, editing, and export](ANALYSIS.md);
+- [lyrics generation and synchronized sheets](LYRICS.md);
+- [optional Demucs stems](DEMUCS.md);
+- [maintenance and storage operations](MAINTENANCE.md); and
+- [source/standalone installation differences](STANDALONE.md).
+
 ## High-level runtime flow
 
 The normal interactive path is:
@@ -198,6 +206,10 @@ excluded from the standalone, which retains only the core ChordPro reader and
 desktop Lyrics display for already-stored romanization. No generation or model
 loading occurs in the browser or standalone.
 
+The source selection, LRCLIB matching, line alignment, CLI, and romanization
+contracts exposed to users are documented in [LYRICS.md](LYRICS.md); this page
+records only the component and process boundary.
+
 BTC and Demucs use separate optional venvs so their model and compute
 dependencies are not installed or imported in the core runtime. The standalone
 bundle contains the core application and package resources but excludes these
@@ -236,6 +248,16 @@ Chordino and QM Vamp analysis run in the core worker. BTC inference and Demucs
 separation run only as subprocesses using their dedicated environments. This
 keeps large optional model dependencies out of normal imports, web startup,
 maintenance commands, and the standalone bundle.
+
+Browser/device state and shared files have different lifetimes. Different
+browsers and devices receive independent playback/display state; tabs in one
+browser profile intentionally share one ChordFlask client state. Most playback
+state is in memory and resets when the server restarts. Browser preferences,
+including preferred Grid/Lyrics view and per-song transposition, are local
+browser storage and survive that restart. Chord edits are shared media-local
+files. Simultaneous edits of one song can therefore conflict; the rejected
+client receives current disk state and can edit again. These boundaries are
+state coordination, not authentication or hardened multi-user isolation.
 
 ## Where to change what
 
