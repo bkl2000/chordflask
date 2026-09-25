@@ -125,7 +125,7 @@ def test_held_chord_ownership_transfers_without_overlapping_later_row():
     assert ranges == sorted(ranges)
     assert all(
         end <= next_start
-        for (_, end), (next_start, _) in zip(ranges, ranges[1:])
+        for (_, end), (next_start, _) in zip(ranges, ranges[1:], strict=False)
     )
     assert all(
         sum(start <= beat < end for start, end in ranges) <= 1
