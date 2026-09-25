@@ -27,7 +27,7 @@ Windows browser at localhost.
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.15.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.15/chordflask-mint22-x86_64-py3.12-v0.9.15.tar.gz)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.16.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.16/chordflask-mint22-x86_64-py3.12-v0.9.16.tar.gz)**
 
 The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is based on Ubuntu 24.04.
 
