@@ -95,6 +95,48 @@ def test_active_repeated_chord_is_not_split_at_a_contiguous_row_boundary():
     assert content.count("[C]") == 1
 
 
+def test_held_chord_ownership_transfers_without_overlapping_later_row():
+    beat_times = [float(index) for index in range(48)]
+    beat_chords = ["C"] * 48
+    lines = (
+        TimedLyricLine(0, "first"),
+        TimedLyricLine(16, "middle"),
+        TimedLyricLine(32, "later"),
+    )
+
+    rows = align_lyrics(
+        lines,
+        beat_times=beat_times,
+        beat_numbers=[index % 4 + 1 for index in range(48)],
+        meter=4,
+        beat_chords=beat_chords,
+    )
+    content = render_chordpro(LyricsRecord(1, "T", "A", None, 48, lines), rows)
+    parsed = parse_chordpro(content)
+    markers = [
+        run
+        for block in parsed["blocks"] if block["type"] == "line"
+        for run in block["runs"] if "start_beat" in run
+    ]
+    ranges = [(run["start_beat"], run["end_beat"]) for run in markers]
+
+    assert ranges == [(0, 32), (32, 48)]
+    assert all(0 <= start < end <= len(beat_times) for start, end in ranges)
+    assert ranges == sorted(ranges)
+    assert all(
+        end <= next_start
+        for (_, end), (next_start, _) in zip(ranges, ranges[1:])
+    )
+    assert all(
+        sum(start <= beat < end for start, end in ranges) <= 1
+        for beat in range(len(beat_times))
+    )
+    assert next(
+        run for run in markers
+        if run["start_beat"] <= 32 < run["end_beat"]
+    )["lyric"] == "later"
+
+
 def test_all_changes_survive_a_contiguous_lyrics_row_boundary():
     beat_times = [float(index) for index in range(32)]
     beat_chords = (

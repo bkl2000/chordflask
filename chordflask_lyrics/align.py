@@ -121,7 +121,8 @@ def _bound_row_runs(rows, beat_chords):
     coverage. Adjacent rows are continuous coverage, so a display-row boundary
     does not truncate a held chord. A gap between rows retains the earlier
     coverage boundary. If adjacent rows split one run, the earlier marker owns
-    it and the redundant marker at the start of the next row is removed.
+    it and the redundant marker at the start of the next row is removed. A
+    later surviving marker takes ownership at its own start beat.
     """
     bounded = list(rows)
     for index, row in enumerate(bounded):
@@ -142,25 +143,39 @@ def _bound_row_runs(rows, beat_chords):
             and row.measure_start + row.measure_count == next_row.measure_start
         )
         effective_end = run_end if contiguous else min(row.end_beat, run_end)
-        bounded[index] = replace(row, end_beat=effective_end)
-
-        if not contiguous:
-            continue
-        next_chords = [run for run in next_row.runs if run.chord is not None]
-        if not next_chords:
-            continue
-        first_next_run = next_chords[0]
-        if (
-            first_next_run.beat_index is None
-            or first_next_run.beat_index >= run_end
-        ):
-            continue
-        next_runs = tuple(
-            replace(run, chord=None, chord_time=None, beat_index=None)
-            if run is first_next_run else run
-            for run in next_row.runs
+        next_chords = (
+            [run for run in next_row.runs if run.chord is not None]
+            if next_row is not None
+            else []
         )
-        bounded[index + 1] = replace(next_row, runs=next_runs)
+        if contiguous and next_chords:
+            first_next_run = next_chords[0]
+            if (
+                first_next_run.beat_index is not None
+                and first_next_run.beat_index < run_end
+            ):
+                next_runs = tuple(
+                    replace(run, chord=None, chord_time=None, beat_index=None)
+                    if run is first_next_run else run
+                    for run in next_row.runs
+                )
+                bounded[index + 1] = replace(next_row, runs=next_runs)
+
+        next_mapped_run = next(
+            (
+                run
+                for later_row in bounded[index + 1 :]
+                for run in later_row.runs
+                if run.chord is not None and run.beat_index is not None
+            ),
+            None,
+        )
+        if (
+            next_mapped_run is not None
+            and last_run.beat_index < next_mapped_run.beat_index < effective_end
+        ):
+            effective_end = next_mapped_run.beat_index
+        bounded[index] = replace(row, end_beat=effective_end)
     return tuple(bounded)
 
 
