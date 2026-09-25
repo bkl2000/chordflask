@@ -119,6 +119,67 @@ def test_index_contains_file_autoload_logic():
     assert "loadRequestInFlight" in body
 
 
+def test_playback_sync_has_bounded_single_request_and_forced_retry():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+
+    assert "const positionSyncTimeoutMs = 5000;" in body
+    assert "if (positionSyncInFlight)" in sync
+    assert "positionSyncPending = positionSyncPending || force;" in sync
+    in_flight_gate = sync.index("if (positionSyncInFlight)")
+    request_start = sync.index("const controller = new AbortController();")
+    fetch_start = sync.index("fetch('/set_position'")
+    assert in_flight_gate < request_start < fetch_start
+    assert "() => controller.abort()" in sync
+    assert "positionSyncTimeoutMs" in sync
+    assert "signal: controller.signal" in sync
+    assert "clearTimeout(requestTimeout);" in sync
+    assert sync.index("clearTimeout(requestTimeout);") < sync.index(
+        "positionSyncInFlight = false;"
+    )
+    completion = sync.index(".finally(() =>")
+    pending_retry = sync.index("if (positionSyncPending)", completion)
+    clear_pending = sync.index("positionSyncPending = false;", pending_retry)
+    forced_retry = sync.index("syncPlaybackPosition(true);", clear_pending)
+    assert completion < pending_retry < clear_pending < forced_retry
+
+
+def test_playback_sync_lifecycle_hooks_request_forced_resync():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+
+    visibility_hook = (
+        "document.addEventListener('visibilitychange', () => {\n"
+        "      if (document.visibilityState === 'visible') {\n"
+        "        syncPlaybackPosition(true);"
+    )
+    assert visibility_hook in body
+    assert (
+        "window.addEventListener('pageshow', "
+        "() => syncPlaybackPosition(true));"
+    ) in body
+    assert (
+        "window.addEventListener('online', "
+        "() => syncPlaybackPosition(true));"
+    ) in body
+
+
+def test_playback_sync_only_logs_unexpected_fetch_errors():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+
+    abort_guard = "if (error.name !== 'AbortError')"
+    error_log = "console.error('Error syncing playback position:', error);"
+    assert abort_guard in sync
+    assert error_log in sync
+    assert sync.index(abort_guard) < sync.index(error_log)
+
+
 def test_index_contains_ab_loop_controls():
     _, client = make_client()
 

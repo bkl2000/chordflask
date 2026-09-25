@@ -4509,6 +4509,7 @@
     let positionSyncPending = false;
     let playbackSyncGeneration = 0;
     const positionSyncIntervalMs = 90;
+    const positionSyncTimeoutMs = 5000;
     const pollingLeadSeconds = positionSyncIntervalMs / 2000;
     let estimatedRoundTripSeconds = 0;
 
@@ -4607,6 +4608,11 @@
       positionSyncInFlight = true;
       const requestGeneration = playbackSyncGeneration;
       const requestStartedAt = performance.now();
+      const controller = new AbortController();
+      const requestTimeout = window.setTimeout(
+        () => controller.abort(),
+        positionSyncTimeoutMs
+      );
       // Project to the point at which the browser will paint the response.
       // This replaces the historical fixed 0.4 s anticipation with measured
       // local round-trip latency, bounded so a temporary stall cannot jump bars.
@@ -4625,7 +4631,8 @@
           position: position,
           include_edit_grid: editMode,
           grid_mode: isDesktopChordGrid() ? 'desktop' : 'compact'
-        })
+        }),
+        signal: controller.signal
       })
       .then(response => response.json())
       .then(data => {
@@ -4640,9 +4647,12 @@
         renderCallbackData(data);
       })
       .catch(error => {
-        console.error('Error syncing playback position:', error);
+        if (error.name !== 'AbortError') {
+          console.error('Error syncing playback position:', error);
+        }
       })
       .finally(() => {
+        clearTimeout(requestTimeout);
         positionSyncInFlight = false;
         if (positionSyncPending) {
           positionSyncPending = false;
@@ -4652,6 +4662,13 @@
     }
 
     setInterval(() => syncPlaybackPosition(false), positionSyncIntervalMs);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        syncPlaybackPosition(true);
+      }
+    });
+    window.addEventListener('pageshow', () => syncPlaybackPosition(true));
+    window.addEventListener('online', () => syncPlaybackPosition(true));
     [videoPlayer, audioPlayer].forEach(player => {
       player.addEventListener('seeked', () => syncPlaybackPosition(true));
       player.addEventListener('play', () => {
