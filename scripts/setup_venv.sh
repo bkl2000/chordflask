@@ -271,9 +271,13 @@ import chordflask.chordutils
 import chordflask.filerepr
 import onnxruntime
 import pythainlp
-import tltk
 PY
 )
+    case "$ACTIVE_PYTHON_VERSION" in
+        3.10|3.11|3.12|3.13)
+            import_check+=$'\nimport tltk'
+            ;;
+    esac
     run_setup_command \
         "required application imports could not be verified" \
         "${VENV_DIR}/bin/python3" -c "$import_check"

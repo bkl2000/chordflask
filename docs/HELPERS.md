@@ -63,8 +63,11 @@ These are kept as usable command-line tools and have smoke-test coverage.
   recomputed by the browser or standalone, and the original Thai lyric remains
   canonical. It is intended as pronunciation assistance rather than IPA or
   authoritative tone notation, and results may vary for wording and names.
-  Source setup installs `pythainlp[onnx]>=5.3.3,<6` and
-  `tltk>=1.10,<1.11`, without PyTorch.
+  Source setup installs `pythainlp[onnx]>=5.3.3,<6` without PyTorch. TLTK 1.10
+  is also installed on supported Python versions where its dependency stack is
+  compatible, currently Python 3.12 and 3.13. On Python 3.14, use
+  `thai2rom_onnx` (the default) or `royin`; explicitly requesting unavailable
+  `tltk` fails without falling back.
 
   Wrapper: `scripts/chordflask-genlyrics`. This package is explicitly excluded
   from the standalone and uses the normal ChordFlask environment rather than a

@@ -1,4 +1,4 @@
 # Source-only dependency for optional Thai lyric romanization.
 # The ONNX extra powers the default thai2rom_onnx engine without PyTorch.
 pythainlp[onnx]>=5.3.3,<6
-tltk>=1.10,<1.11
+tltk>=1.10,<1.11; python_version < "3.14"

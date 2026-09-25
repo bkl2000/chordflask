@@ -41,6 +41,13 @@ compatible-version ranges from the requirements files without a separate pinned
 constraints file. Constraints improve repeatability for a reviewed dependency
 combination; they are not a prerequisite for a Python version to be supported.
 
+Source lyrics setup installs TLTK 1.10 on supported Python versions where its
+dependency stack is compatible, currently Python 3.12 and 3.13. Python 3.14
+does not install or verify TLTK because its gensim dependency cannot build
+there; the default PyThaiNLP `thai2rom_onnx` engine and the `royin` engine
+remain available. Explicitly selecting unavailable `tltk` fails without an
+engine fallback.
+
 To add support for a new Python version:
 
 1. Run `make setup` with that version on the supported distro family.

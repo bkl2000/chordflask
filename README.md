@@ -555,7 +555,10 @@ RTGS-oriented. There is no silent engine fallback: requesting an unavailable
 engine fails clearly. The output is a pronunciation/karaoke aid, not IPA, does
 not encode Thai tones authoritatively, and may vary in quality for particular
 wording and names. Source setup installs `pythainlp[onnx]>=5.3.3,<6` and
-`tltk>=1.10,<1.11`; it does not install PyTorch.
+does not install PyTorch. TLTK 1.10 is also installed on supported Python
+versions where its dependency stack is compatible, currently Python 3.12 and
+3.13. On Python 3.14, use `thai2rom_onnx` (the default) or `royin`; explicitly
+requesting unavailable `tltk` fails without falling back.
 
 > **Version matching:** ChordFlask matches LRCLIB lyrics by song metadata and
 > duration, but does not audio-fingerprint the recording. Live, acoustic,
