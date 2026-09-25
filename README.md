@@ -523,6 +523,7 @@ the generated file. `--track` selects `auto` (the default), `chordino`, `btc`,
 `user_edited`, or another available track ID; the resolved track is recorded in
 the `.cho`, which is not dynamically rewritten by later track changes.
 `--dry-run` performs lookup, alignment, and rendering but writes nothing.
+
 **Experimental:** `--romanize` adds pronunciation assistance below lyric rows
 containing Thai script. Romanization is generated once and stored as
 `x_chordflask_romanized` presentation metadata in the `.cho`; neither the
