@@ -9,6 +9,7 @@ REQUIREMENTS_FILE="${ROOT_DIR}/requirements.txt"
 DEV_REQUIREMENTS_FILE="${ROOT_DIR}/requirements-dev.txt"
 BUILD_REQUIREMENTS_FILE="${ROOT_DIR}/requirements-build.txt"
 OPTIONAL_REQUIREMENTS_FILE="${ROOT_DIR}/requirements-optional.txt"
+LYRICS_REQUIREMENTS_FILE="${ROOT_DIR}/requirements-lyrics.txt"
 PYTHON312_CONSTRAINTS_FILE="${ROOT_DIR}/constraints-python312.txt"
 PYTHON_BIN="${CHORDIFIER_PYTHON:-}"
 RECREATE=false
@@ -268,6 +269,9 @@ import chordflask.chordanalyzer
 import chordflask.chorddata
 import chordflask.chordutils
 import chordflask.filerepr
+import onnxruntime
+import pythainlp
+import tltk
 PY
 )
     run_setup_command \
@@ -363,6 +367,10 @@ if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
     echo "Requirements file not found: ${REQUIREMENTS_FILE}" >&2
     exit 1
 fi
+if [[ ! -f "$LYRICS_REQUIREMENTS_FILE" ]]; then
+    echo "Lyrics requirements file not found: ${LYRICS_REQUIREMENTS_FILE}" >&2
+    exit 1
+fi
 if [[ "$INSTALL_DEV" == true && ! -f "$DEV_REQUIREMENTS_FILE" ]]; then
     echo "Developer requirements file not found: ${DEV_REQUIREMENTS_FILE}" >&2
     exit 1
@@ -435,6 +443,9 @@ run_setup_command \
 run_setup_command \
     "runtime requirements could not be installed" \
     python3 -m pip install "${PIP_CONSTRAINT_ARGS[@]}" -r "$REQUIREMENTS_FILE"
+run_setup_command \
+    "source lyrics engines could not be installed" \
+    python3 -m pip install "${PIP_CONSTRAINT_ARGS[@]}" -r "$LYRICS_REQUIREMENTS_FILE"
 
 if [[ "$INSTALL_DEV" == true ]]; then
     run_setup_command \

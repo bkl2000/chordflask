@@ -95,6 +95,9 @@ pyinstaller \
     --exclude-module=imageio_ffmpeg.binaries \
     --exclude-module=chordflask_btc \
     --exclude-module=chordflask_lyrics \
+    --exclude-module=pythainlp \
+    --exclude-module=onnxruntime \
+    --exclude-module=tltk \
     --exclude-module=chordflask.helpers.chordleadsheet_batch \
     --add-data "${PROJECT_ROOT}/chordflask/templates:chordflask/templates" \
     --add-data "${PROJECT_ROOT}/chordflask/assets:chordflask/assets" \

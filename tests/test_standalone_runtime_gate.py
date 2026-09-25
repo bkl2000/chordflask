@@ -63,6 +63,11 @@ def test_source_only_lyrics_generator_is_rejected():
     assert module.find_offenders(_listing(*names)) == list(names)
 
 
+def test_source_only_romanization_dependencies_are_rejected():
+    names = ("pythainlp", "pythainlp.transliterate", "onnxruntime", "tltk.nlp")
+    assert module.find_offenders(_listing(*names)) == list(names)
+
+
 def test_model_weights_and_cache_are_rejected():
     for name in (
         "weights.pt",

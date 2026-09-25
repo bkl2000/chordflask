@@ -25,6 +25,7 @@ HEAVY_PACKAGE = re.compile(r"^(?:torch|torchaudio|torchcodec|demucs)(?:[./-]|$)"
 MODEL_WEIGHT = re.compile(r"\.(?:pt|pth|th|onnx|safetensors|ckpt)$")
 MODEL_CACHE = re.compile(r"(?:^|/)(?:htdemucs|htdemucs_ft|mdx_extra)(?:[./-]|$)")
 SOURCE_ONLY_PACKAGE = re.compile(r"^chordflask_lyrics(?:[./-]|$)")
+ROMANIZATION_PACKAGE = re.compile(r"^(?:pythainlp|onnxruntime|tltk)(?:[./-]|$)")
 
 
 def _recursive_listing(archive: str) -> str:
@@ -54,6 +55,7 @@ def find_offenders(listing: str) -> list[str]:
             or MODEL_WEIGHT.search(name)
             or MODEL_CACHE.search(name)
             or SOURCE_ONLY_PACKAGE.match(name)
+            or ROMANIZATION_PACKAGE.match(name)
         ):
             offenders.append(name)
     return offenders

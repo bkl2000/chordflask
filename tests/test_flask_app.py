@@ -1539,6 +1539,24 @@ def test_song_display_transposition_preserves_source_and_sync_ranges(tmp_path):
     assert sidecar.read_text(encoding="utf-8") == source
 
 
+def test_song_endpoint_exposes_romanization_without_duplicate_sync_data(tmp_path):
+    _, client = make_client()
+    source = (
+        "{x_chordflask_romanized: chan rak thoe}\n"
+        "{x_chordflask_beats: 20}\n"
+        "{x_chordflask_end: 24}\n"
+        "[C]ฉันรักเธอ"
+    )
+    (tmp_path / "song.cho").write_text(source, encoding="utf-8")
+    load_ready_media(client, tmp_path)
+
+    block = client.get("/get_song_sheet").get_json()["blocks"][0]
+    assert block["romanized"] == "chan rak thoe"
+    assert block["runs"] == [
+        {"chord": "C", "lyric": "ฉันรักเธอ", "start_beat": 20, "end_beat": 24}
+    ]
+
+
 def test_song_endpoint_is_bound_to_active_media_and_revalidates_disappearance(tmp_path):
     app_wrapper, client = make_client()
     sidecar = tmp_path / "song.cho"
@@ -2667,6 +2685,22 @@ def test_song_renderer_uses_text_only_dom_construction_for_untrusted_data():
         assert unsafe_api not in renderer
         assert unsafe_api not in text_helper
         assert unsafe_api not in error_renderer
+
+
+def test_song_renderer_keeps_romanization_in_the_original_logical_row():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    renderer = javascript_function(body, "renderSongSheet")
+    narrow_rule = body[
+        body.index("@media (max-width: 800px)"):
+        body.index("@media (max-width: 640px)")
+    ]
+
+    assert "if (block.romanized)" in renderer
+    assert "appendSongText(line, 'song-romanized', block.romanized)" in renderer
+    assert "lyricChordMarkers.push" in renderer
+    assert renderer.count("lyricChordMarkers.push") == 1
+    assert re.search(r"\.song-romanized\s*\{\s*display: none;", narrow_rule)
 
 
 def test_song_mode_switch_isolated_from_player_and_grid_display_state():

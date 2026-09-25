@@ -47,7 +47,11 @@ These are kept as usable command-line tools and have smoke-test coverage.
   explicit missing track fails for that file without fallback. `--force`
   permits replacement of an existing `.cho`; `--dry-run` performs lookup,
   alignment, and rendering without writing. Directory failures do not stop
-  later files. Wrapper: `scripts/chordflask-genlyrics`. This package is
+  later files. `--romanize` uses the source-only PyThaiNLP
+  `thai2rom_onnx` engine by default to attach Thai pronunciation assistance to
+  the original logical lyric row. Normal source setup installs all three
+  supported engines: `thai2rom_onnx`, `tltk`, and PyThaiNLP's built-in `royin`.
+  Engines never silently fall back. Wrapper: `scripts/chordflask-genlyrics`. This package is
   explicitly excluded from the standalone and uses the normal ChordFlask
   environment rather than a separate LRCLIB environment. Normal LRCLIB lookup
   needs no API key, and generated lyrics remain local user data.
@@ -59,6 +63,7 @@ These are kept as usable command-line tools and have smoke-test coverage.
   scripts/chordflask-genlyrics --track auto song.mp3
   scripts/chordflask-genlyrics --track btc song.mp3
   scripts/chordflask-genlyrics --force --track user_edited song.mp3
+  scripts/chordflask-genlyrics --romanize song.mp3
   scripts/chordflask-genlyrics --dry-run /music/album
   ```
 

@@ -97,5 +97,8 @@ The standalone reads and displays same-stem lowercase `.cho` song sheets in
 the Lyrics view, including chord-follow synchronization when the `.cho` already
 contains ChordFlask range metadata. It does not include
 `chordflask-genlyrics`, the `chordflask_lyrics` package, an LRCLIB client, or
-lyrics network access. Generate `.cho` files with a normal source/virtualenv
-installation and keep them beside the media when using the standalone.
+lyrics network access. PyThaiNLP, ONNX Runtime, TLTK, and romanization generation
+are also excluded. Romanization already stored in a `.cho` still displays in
+desktop Lyrics because the lightweight core parser and UI remain bundled.
+Generate `.cho` files with a normal source/virtualenv installation and keep them
+beside the media when using the standalone.

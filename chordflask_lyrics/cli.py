@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from functools import partial
 import json
 import math
 import os
@@ -25,6 +26,7 @@ from chordflask_base import (
 from .align import align_lyrics, render_chordpro, time_plain_lyrics
 from .embedded import get_embedded_lyrics
 from .lrclib import LRCLIBClient, LRCLIBError, LyricsRecord, SongIdentity
+from .romanize import DEFAULT_ENGINE, SUPPORTED_ENGINES, RomanizationError, romanize_thai
 
 
 _FILENAME_SEPARATOR = re.compile(r"\s+(?:-|–|—)\s+")
@@ -54,6 +56,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="auto",
         metavar="TRACK_ID",
         help="chord track to embed (default: auto)",
+    )
+    parser.add_argument(
+        "--romanize",
+        action="store_true",
+        help="add Thai romanization metadata to generated lyric lines",
+    )
+    parser.add_argument(
+        "--romanize-engine",
+        choices=SUPPORTED_ENGINES,
+        default=DEFAULT_ENGINE,
+        help=f"Thai romanization engine (default: {DEFAULT_ENGINE})",
     )
     parser.add_argument("target", type=Path, help="MP3/MP4/WebM file or a directory")
     return parser
@@ -211,6 +224,8 @@ def generate_file(
     force: bool = False,
     dry_run: bool = False,
     track: str = "auto",
+    romanize: bool = False,
+    romanize_engine: str = DEFAULT_ENGINE,
 ) -> tuple[str, str]:
     """Generate one sidecar and return ``(status, explanation)``."""
     output_path = media.with_suffix(".cho")
@@ -261,11 +276,13 @@ def generate_file(
         meter=chord_data.meter_signature,
         beat_chords=beat_chords,
     )
+    romanizer = partial(romanize_thai, engine=romanize_engine) if romanize else None
     content = render_chordpro(
         record,
         rows,
         search_hint=search_hint if embedded is None else None,
         chord_track_id=selected_track,
+        romanize=romanizer,
     )
 
     # Validate against the same parser used by the web application before publish.
@@ -313,8 +330,10 @@ def run(args, *, client=None) -> int:
                 force=args.force,
                 dry_run=args.dry_run,
                 track=getattr(args, "track", "auto"),
+                romanize=getattr(args, "romanize", False),
+                romanize_engine=getattr(args, "romanize_engine", DEFAULT_ENGINE),
             )
-        except (GenerationError, LRCLIBError, ValueError) as error:
+        except (GenerationError, LRCLIBError, RomanizationError, ValueError) as error:
             failures += 1
             print(f"[{index}/{len(files)}] SKIP {media}: {error}", file=sys.stderr)
             continue

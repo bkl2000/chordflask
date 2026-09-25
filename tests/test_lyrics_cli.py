@@ -9,6 +9,7 @@ from chordflask_base import ChordData
 from chordflask_lyrics import cli
 from chordflask_lyrics.embedded import EmbeddedLyrics
 from chordflask_lyrics.lrclib import LyricsRecord, SongIdentity, TimedLyricLine
+from chordflask_lyrics.romanize import RomanizationError, romanize_thai
 
 
 def make_analysis(media: Path, *, extra_tracks=None):
@@ -76,6 +77,8 @@ def args(target, **overrides):
         "track": "auto",
         "force": False,
         "dry_run": False,
+        "romanize": False,
+        "romanize_engine": "thai2rom_onnx",
     }
     values.update(overrides)
     return Namespace(**values)
@@ -91,6 +94,54 @@ def test_track_cli_defaults_to_auto_and_accepts_explicit_id():
 
     assert parser.parse_args(["song.mp3"]).track == "auto"
     assert parser.parse_args(["--track", "btc", "song.mp3"]).track == "btc"
+
+
+def test_romanize_cli_is_optional_and_default_engine_is_onnx():
+    parser = cli.build_parser()
+
+    plain = parser.parse_args(["song.mp3"])
+    enabled = parser.parse_args(["--romanize", "song.mp3"])
+    selected = parser.parse_args(["--romanize-engine", "tltk", "song.mp3"])
+
+    assert plain.romanize is False
+    assert enabled.romanize is True
+    assert enabled.romanize_engine == "thai2rom_onnx"
+    assert selected.romanize_engine == "tltk"
+
+
+def test_thai_detection_mixed_text_and_requested_engine():
+    calls = []
+
+    def fake_romanize(text, *, engine):
+        calls.append((text, engine))
+        return {"ฉันรักเธอ": "chan rak thoe", "มาก": "mak"}[text]
+
+    assert romanize_thai("Latin only", romanize=fake_romanize) is None
+    assert romanize_thai(
+        "ฉันรักเธอ very มาก!", engine="tltk", romanize=fake_romanize
+    ) == "chan rak thoe very mak!"
+    assert calls == [("ฉันรักเธอ", "tltk"), ("มาก", "tltk")]
+
+
+def test_thai_words_are_segmented_for_readable_spacing():
+    calls = []
+
+    def fake_romanize(text, *, engine):
+        calls.append((text, engine))
+        return {"ฉัน": "chan", "รัก": "rak", "เธอ": "thoe"}[text]
+
+    result = romanize_thai(
+        "ฉันรักเธอ",
+        romanize=fake_romanize,
+        tokenize=lambda text: ["ฉัน", "รัก", "เธอ"],
+    )
+
+    assert result == "chan rak thoe"
+    assert calls == [
+        ("ฉัน", "thai2rom_onnx"),
+        ("รัก", "thai2rom_onnx"),
+        ("เธอ", "thai2rom_onnx"),
+    ]
 
 
 def test_filename_and_embedded_metadata_lookup(monkeypatch, tmp_path):
@@ -149,6 +200,132 @@ def test_existing_force_and_dry_run(monkeypatch, tmp_path):
     assert cli.generate_file(media, client=client, force=True)[0] == "written"
     assert sidecar.read_text(encoding="utf-8") != "old"
     assert read_chordpro(sidecar)["metadata"]["title"] == "Song"
+
+
+def test_generation_without_romanize_is_byte_compatible(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    calls = []
+    monkeypatch.setattr(cli, "romanize_thai", lambda *a, **k: calls.append((a, k)))
+
+    cli.generate_file(media, client=FakeClient(lyrics_record()))
+
+    assert calls == []
+    assert "x_chordflask_romanized" not in media.with_suffix(".cho").read_text()
+
+
+def test_generation_writes_only_thai_romanization_metadata(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Thai.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    record = LyricsRecord(
+        2,
+        "Thai",
+        "Artist",
+        None,
+        8,
+        (TimedLyricLine(0.2, "ฉันรักเธอ"), TimedLyricLine(4.2, "Latin only")),
+    )
+    calls = []
+
+    def fake_romanize(text, *, engine):
+        calls.append((text, engine))
+        return "chan rak thoe Latin only" if "ฉัน" in text else None
+
+    monkeypatch.setattr(cli, "romanize_thai", fake_romanize)
+
+    cli.generate_file(
+        media,
+        client=FakeClient(record),
+        romanize=True,
+        romanize_engine="royin",
+    )
+
+    content = media.with_suffix(".cho").read_text(encoding="utf-8")
+    parsed = read_chordpro(media.with_suffix(".cho"))
+    lyric_blocks = [block for block in parsed["blocks"] if block["type"] == "line"]
+    assert content.count("{x_chordflask_romanized:") == 1
+    assert lyric_blocks[0]["romanized"] == "chan rak thoe Latin only"
+    assert "".join(run["lyric"] for run in lyric_blocks[0]["runs"]) == "ฉันรักเธอ Latin only"
+    assert calls == [("ฉันรักเธอ Latin only", "royin")]
+
+
+def test_enabled_romanization_adds_nothing_to_latin_only_generation(
+    monkeypatch, tmp_path
+):
+    media = tmp_path / "Artist - Latin.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    calls = []
+
+    def fake_romanize(text, *, engine):
+        calls.append((text, engine))
+        return None
+
+    monkeypatch.setattr(cli, "romanize_thai", fake_romanize)
+
+    cli.generate_file(media, client=FakeClient(lyrics_record()), romanize=True)
+
+    assert "x_chordflask_romanized" not in media.with_suffix(".cho").read_text()
+    assert calls == [("first second", "thai2rom_onnx")]
+
+
+def test_romanization_failure_is_clear_and_does_not_write(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "Artist - Thai.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    record = LyricsRecord(
+        2, "Thai", "Artist", None, 8, (TimedLyricLine(0.2, "ภาษาไทย"),)
+    )
+    monkeypatch.setattr(
+        cli,
+        "romanize_thai",
+        lambda *a, **k: (_ for _ in ()).throw(
+            RomanizationError('Thai romanization engine "tltk" is unavailable')
+        ),
+    )
+
+    assert cli.run(
+        args(media, romanize=True, romanize_engine="tltk"),
+        client=FakeClient(record),
+    ) == 1
+    assert 'engine "tltk" is unavailable' in capsys.readouterr().err
+    assert not media.with_suffix(".cho").exists()
+
+
+def test_missing_base_dependency_points_to_normal_setup(monkeypatch):
+    real_import = __import__
+
+    def fail_pythainlp(name, *args, **kwargs):
+        if name.startswith("pythainlp"):
+            raise ModuleNotFoundError("No module named 'pythainlp'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", fail_pythainlp)
+
+    with pytest.raises(RomanizationError, match="rerun make setup"):
+        romanize_thai("ภาษาไทย")
+
+
+def test_romanized_dry_run_does_not_write(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Thai.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    record = LyricsRecord(
+        2, "Thai", "Artist", None, 8, (TimedLyricLine(0.2, "ภาษาไทย"),)
+    )
+    monkeypatch.setattr(cli, "romanize_thai", lambda text, *, engine: "phasa thai")
+
+    status, _ = cli.generate_file(
+        media,
+        client=FakeClient(record),
+        romanize=True,
+        dry_run=True,
+    )
+
+    assert status == "dry-run"
+    assert not media.with_suffix(".cho").exists()
 
 
 def test_missing_embedded_lyrics_fall_back_to_lrclib(monkeypatch, tmp_path):

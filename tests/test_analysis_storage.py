@@ -182,6 +182,20 @@ def test_report_changes_nothing(tmp_path):
     assert json_file.read_bytes() == b"x" * 40
 
 
+def test_storage_report_ignores_and_preserves_romanized_chordpro_sidecar(tmp_path):
+    media = tmp_path / "album"
+    sidecar = _write(media / "song.cho", 0)
+    content = "{x_chordflask_romanized: chan rak thoe}\n[C]ฉันรักเธอ\n"
+    sidecar.write_text(content, encoding="utf-8")
+    _write(media / ".chordflask" / "song.json", 40)
+
+    inspection = inspect_storage(media)
+    format_storage_report(inspection)
+
+    assert sidecar.read_text(encoding="utf-8") == content
+    assert all(category.name != "ChordPro" for category in inspection.categories)
+
+
 def test_independent_directories_not_cross_inspected(tmp_path):
     a = tmp_path / "a"
     b = tmp_path / "b"

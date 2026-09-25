@@ -210,6 +210,8 @@ def test_chordflask_maintain_is_framework_free():
         "from librosa",
         "import music21",
         "from music21",
+        "import pythainlp",
+        "from pythainlp",
         "chordflask_training",
         "from training",
     ):

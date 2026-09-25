@@ -205,6 +205,9 @@ def test_build_script_excludes_batch_helper_but_keeps_shared_formatter():
     )
     assert "--exclude-module=chordflask_btc" in content
     assert "--exclude-module=chordflask_lyrics" in content
+    assert "--exclude-module=pythainlp" in content
+    assert "--exclude-module=onnxruntime" in content
+    assert "--exclude-module=tltk" in content
     assert "--exclude-module=chordflask_demucs" not in content
     assert "check_standalone_runtime.py" in content
     assert "prohibited heavy optional runtime" in content

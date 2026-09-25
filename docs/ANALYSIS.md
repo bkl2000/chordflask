@@ -237,6 +237,7 @@ ChordPro name and carry the mapping in small custom, non-display directives:
 
 ```text
 {x_chordflask_track: btc}
+{x_chordflask_romanized: some romanized lyric}
 {x_chordflask_beats: 17,23}
 {x_chordflask_end: 40}
 [G]some lyric [Am]more lyric
@@ -247,6 +248,9 @@ generator. `--track auto` (the default) prefers a valid `user_edited` track,
 then uses the analysis active/default track, and finally `chordino` when
 necessary. An explicit unavailable track fails for that file without fallback.
 Changing the active analysis track later does not rewrite an existing `.cho`.
+Optional `x_chordflask_romanized` metadata belongs to the immediately following
+logical lyric line. Desktop Lyrics renders it below the original text without
+adding chord markers or another synchronized row; narrow layouts omit it.
 `x_chordflask_beats` lists the analyzed beat index of each chord marker in the
 immediately following line, in order. `x_chordflask_end` closes the final
 marker's exclusive mapped beat range. No range crosses a genuine unmapped

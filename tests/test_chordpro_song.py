@@ -111,6 +111,43 @@ def test_chordflask_beat_directives_are_hidden_sync_metadata():
     ]
 
 
+def test_romanization_attaches_to_same_synced_logical_line():
+    parsed = parse_chordpro(
+        "{x_chordflask_romanized: chan rak thoe}\n"
+        "{x_chordflask_beats: 12,15}\n"
+        "{x_chordflask_end: 20}\n"
+        "[C]ฉันรัก [G]เธอ"
+    )
+
+    assert parsed["blocks"] == [{
+        "type": "line",
+        "romanized": "chan rak thoe",
+        "runs": [
+            {"chord": "C", "lyric": "ฉันรัก ", "start_beat": 12, "end_beat": 15},
+            {"chord": "G", "lyric": "เธอ", "start_beat": 15, "end_beat": 20},
+        ],
+    }]
+
+
+def test_romanization_does_not_leak_and_empty_metadata_is_ignored():
+    parsed = parse_chordpro(
+        "{x_chordflask_romanized: nueng}\nหนึ่ง\n"
+        "สอง\n{x_chordflask_romanized: }\nสาม"
+    )
+
+    assert parsed["blocks"][0]["romanized"] == "nueng"
+    assert "romanized" not in parsed["blocks"][1]
+    assert "romanized" not in parsed["blocks"][2]
+
+
+def test_unknown_directive_clears_pending_romanization_consistently():
+    parsed = parse_chordpro(
+        "{x_chordflask_romanized: nueng}\n{unknown: value}\nหนึ่ง"
+    )
+
+    assert "romanized" not in parsed["blocks"][0]
+
+
 def test_chord_track_provenance_is_metadata_not_visible_text():
     parsed = parse_chordpro("{x_chordflask_track: btc}\n\n[C]Hello")
 

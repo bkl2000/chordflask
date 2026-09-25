@@ -578,6 +578,14 @@
       white-space: pre-wrap;
     }
 
+    .song-romanized {
+      flex: 0 0 100%;
+      color: var(--chord-muted);
+      font-size: 0.82em;
+      line-height: 1.25;
+      white-space: pre-wrap;
+    }
+
     .song-blank {
       height: 0.9em;
     }
@@ -1499,6 +1507,10 @@
 
     @media (max-width: 800px) {
       #songViewSwitch {
+        display: none;
+      }
+
+      .song-romanized {
         display: none;
       }
 
@@ -2492,6 +2504,9 @@
           }
           line.appendChild(runElement);
         });
+        if (block.romanized) {
+          appendSongText(line, 'song-romanized', block.romanized);
+        }
         fragment.appendChild(line);
       });
       lyricChordMarkers.sort((a, b) => a.startBeat - b.startBeat);

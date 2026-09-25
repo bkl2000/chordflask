@@ -382,6 +382,12 @@ unmapped instrumental gap clears the highlight until the next mapped line.
 Generated markers cover the actual analyzed chord changes in mapped Lyrics
 passages without repeating unchanged beats.
 
+When a sidecar contains generated Thai romanization metadata, desktop Lyrics
+shows the romanization immediately below the original lyric in the same logical
+row. Chord markers, highlighting, scrolling, and beat ranges remain attached to
+the original line. The existing narrow smartphone/tablet Grid presentation is
+unchanged and does not show romanization.
+
 This external sidecar is distinct from ChordFlask's generated ChordPro export,
 which is a lyric-free representation of an analyzed beat grid stored under
 `.chordflask` or included in a browser download.
@@ -494,6 +500,8 @@ chordflask-genlyrics --tag "Eagles Hotel California" song.mp3
 chordflask-genlyrics --track auto song.mp3
 chordflask-genlyrics --track btc song.mp3
 chordflask-genlyrics --force --track user_edited song.mp3
+chordflask-genlyrics --romanize song.mp3
+chordflask-genlyrics --romanize --romanize-engine royin song.mp3
 ```
 
 `--tag` is a single-file manual lookup hint for filenames or embedded metadata
@@ -503,6 +511,13 @@ the generated file. `--track` selects `auto` (the default), `chordino`, `btc`,
 `user_edited`, or another available track ID; the resolved track is recorded in
 the `.cho`, which is not dynamically rewritten by later track changes.
 `--dry-run` performs lookup, alignment, and rendering but writes nothing.
+`--romanize` locally adds a second, non-timed presentation line only for lyric
+rows containing Thai script; the original lyrics remain intact and canonical.
+The default `thai2rom_onnx` PyThaiNLP engine is installed by the source setup
+and avoids the heavier PyTorch runtime. `royin` (RTGS) is also available;
+normal source setup also installs `tltk`. A requested engine that is unavailable
+fails clearly instead of falling back. Romanization is pronunciation assistance,
+not authoritative phonetic or tonal notation.
 
 > **Version matching:** ChordFlask matches LRCLIB lyrics by song metadata and
 > duration, but does not audio-fingerprint the recording. Live, acoustic,
@@ -515,7 +530,8 @@ the `.cho`, which is not dynamically rewritten by later track changes.
 Generated `.cho` files are local user data. ChordFlask does not ship a lyrics
 database; song lyrics may be copyrighted. The standalone can read and display
 existing `.cho` files in its Lyrics view, but it does not include the generator,
-LRCLIB client code, or automatic internet access.
+LRCLIB client code, PyThaiNLP/ONNX/TLTK generation dependencies, or automatic
+internet access. It can display romanization already stored in a `.cho`.
 
 ### Analysis storage and cleanup
 

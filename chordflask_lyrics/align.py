@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import bisect
+from collections.abc import Callable
 
 from chordflask.chord_markdown import group_beats_into_measures
 
@@ -297,6 +298,7 @@ def render_chordpro(
     key: str | None = None,
     capo: int | None = None,
     chord_track_id: str | None = None,
+    romanize: Callable[[str], str | None] | None = None,
 ) -> str:
     """Render aligned rows into the subset accepted by ChordFlask's parser."""
     output = [f"{{title: {_escape(record.title)}}}", f"{{artist: {_escape(record.artist)}}}"]
@@ -310,6 +312,10 @@ def render_chordpro(
         output.append(f"{{x_chordflask_track: {_escape(chord_track_id)}}}")
     output.append("")
     for row in rows:
+        lyric_text = "".join(run.lyric for run in row.runs)
+        romanized = romanize(lyric_text) if romanize is not None else None
+        if romanized:
+            output.append(f"{{x_chordflask_romanized: {_escape(romanized)}}}")
         chord_runs = [run for run in row.runs if run.chord is not None]
         beat_indices = [run.beat_index for run in chord_runs]
         if (

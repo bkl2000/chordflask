@@ -401,6 +401,21 @@ def test_source_media_unchanged(tmp_path):
     assert source.read_bytes() == before
 
 
+def test_cleanup_never_touches_external_romanized_chordpro_sidecar(tmp_path):
+    media = tmp_path / "album"
+    sidecar = media / "song.cho"
+    sidecar.parent.mkdir()
+    content = "{x_chordflask_romanized: chan rak thoe}\n[C]ฉันรักเธอ\n"
+    sidecar.write_text(content, encoding="utf-8")
+    orphan = media / ".chordflask" / ".song.analyze-1"
+    _write(orphan / "partial.json", 20)
+
+    cleanup_orphan_temp(media)
+
+    assert not orphan.exists()
+    assert sidecar.read_text(encoding="utf-8") == content
+
+
 # ── CLI validation ──────────────────────────────────────────────────
 
 

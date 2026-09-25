@@ -42,7 +42,7 @@ services. Completed Schema-v3 JSON is published beside the media.
 An optional external ChordPro Lyrics sheet has a generation-time path:
 
 ```text
-existing analysis + LRCLIB synchronized lyrics
+existing analysis + embedded/LRCLIB lyrics + optional source-only PyThaiNLP
    -> chordflask-genlyrics
    -> same-stem .cho with presentation and local sync metadata
 ```
@@ -57,7 +57,7 @@ ready active media
    -> resolved same-stem .cho beside that media
    -> active-client /get_song_sheet route
    -> bounded strict-UTF-8 parser
-   -> structured JSON (custom x_chordflask range/track metadata)
+   -> structured JSON (custom x_chordflask range/track/romanization metadata)
    -> browser DOM nodes populated with textContent
 ```
 
