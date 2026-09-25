@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from functools import partial
 import json
 import math
@@ -269,7 +270,7 @@ def _select_lyrics(
     client: LRCLIBClient,
     sources: tuple[str, ...],
     search_hint: str | None,
-) -> tuple[LyricsRecord, str]:
+) -> tuple[LyricsRecord, str, float | None]:
     analysis_duration = _analysis_duration(chord_data)
     media_identity = None
     for source in sources:
@@ -279,7 +280,7 @@ def _select_lyrics(
                 media_identity = media_identity or lookup_identity(
                     media, analysis_duration=analysis_duration
                 )
-                return _lyrics_record(media_identity, media, lines), "lrc"
+                return _lyrics_record(media_identity, media, lines), "lrc", None
         elif source == "embedded":
             embedded = get_embedded_lyrics(media)
             if embedded is None:
@@ -292,6 +293,7 @@ def _select_lyrics(
                 return (
                     _lyrics_record(media_identity, media, lines),
                     f"embedded:{embedded.source}",
+                    None,
                 )
         elif source == "lrclib":
             identity = lookup_identity(
@@ -299,11 +301,17 @@ def _select_lyrics(
                 analysis_duration=analysis_duration,
                 include_filename=search_hint is None,
             )
+            if search_hint is not None:
+                identity = SongIdentity(duration=identity.duration)
             if not identity.title and not search_hint:
                 raise GenerationError("song title could not be determined")
             record = client.lookup(identity, search_hint=search_hint)
             if record is not None:
-                return record, "lrclib"
+                if record.lines:
+                    return record, "lrclib:synced", identity.duration
+                lines = time_plain_lyrics(record.plain_text or "", chord_data.beat_times)
+                if lines:
+                    return replace(record, lines=lines), "lrclib:plain", identity.duration
         else:
             raise GenerationError(f'unknown internal lyrics source "{source}"')
     raise GenerationError("no usable lyrics found from configured sources")
@@ -328,7 +336,7 @@ def generate_file(
 
     chord_data = _load_analysis(media, track)
     selected_track = chord_data.active_chord_track_id
-    record, lyrics_source = _select_lyrics(
+    record, lyrics_source, media_duration = _select_lyrics(
         media, chord_data, client, lyrics_sources, search_hint
     )
 
@@ -350,7 +358,7 @@ def generate_file(
     content = render_chordpro(
         record,
         rows,
-        search_hint=search_hint if lyrics_source == "lrclib" else None,
+        search_hint=search_hint if lyrics_source.startswith("lrclib:") else None,
         chord_track_id=selected_track,
         romanize=romanizer,
     )
@@ -361,13 +369,27 @@ def generate_file(
     parse_chordpro(content)
     line_count = len(record.lines)
     line_label = "line" if line_count == 1 else "lines"
-    if lyrics_source == "lrclib":
+    if lyrics_source == "lrclib:synced":
         lyrics_detail = (
-            f"lyrics=lrclib ({line_count} timed {line_label}, "
+            f"lyrics=lrclib:synced ({line_count} timed {line_label}, "
+            f"matched {record.artist} — {record.title})"
+        )
+    elif lyrics_source == "lrclib:plain":
+        lyrics_detail = (
+            f"lyrics=lrclib:plain ({line_count} {line_label}, "
             f"matched {record.artist} — {record.title})"
         )
     else:
         lyrics_detail = f"lyrics={lyrics_source} ({line_count} timed {line_label})"
+    if (
+        search_hint is not None
+        and media_duration is not None
+        and record.duration is not None
+        and abs(media_duration - record.duration) > max(4.0, media_duration * 0.05)
+    ):
+        lyrics_detail = lyrics_detail[:-1] + (
+            f"; duration {record.duration:.1f}s vs media {media_duration:.1f}s)"
+        )
     detail = f"{lyrics_detail}; beats={len(chord_data.beat_times)}"
     if romanize:
         detail += f"; romanize={romanize_engine}"

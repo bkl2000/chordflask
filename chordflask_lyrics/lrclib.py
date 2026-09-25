@@ -46,6 +46,7 @@ class LyricsRecord:
     album: str | None
     duration: float | None
     lines: tuple[TimedLyricLine, ...]
+    plain_text: str | None = None
 
 
 def parse_synced_lyrics(value: object) -> tuple[TimedLyricLine, ...]:
@@ -68,7 +69,7 @@ def parse_synced_lyrics(value: object) -> tuple[TimedLyricLine, ...]:
 
 
 def parse_record(value: object) -> LyricsRecord | None:
-    """Return a usable synchronized record, or None for plain-only lyrics."""
+    """Return a record containing usable synchronized or plain lyrics."""
     if not isinstance(value, dict):
         raise LRCLIBError("LRCLIB returned a malformed lyrics record")
     title = value.get("trackName", value.get("name"))
@@ -92,13 +93,16 @@ def parse_record(value: object) -> LyricsRecord | None:
     if not isinstance(album, str) or not album.strip():
         album = None
     lines = parse_synced_lyrics(value.get("syncedLyrics"))
-    if not lines:
+    if lines:
+        return LyricsRecord(record_id, title, artist, album, duration, lines)
+    plain_text = value.get("plainLyrics")
+    if not isinstance(plain_text, str) or not plain_text.strip():
         return None
-    return LyricsRecord(record_id, title, artist, album, duration, lines)
+    return LyricsRecord(record_id, title, artist, album, duration, (), plain_text)
 
 
 def parse_response(value: object) -> list[LyricsRecord]:
-    """Parse either a get object or search array, retaining synchronized results."""
+    """Parse either a get object or search array, retaining usable results."""
     if isinstance(value, dict):
         values = [value]
     elif isinstance(value, list):
@@ -146,7 +150,7 @@ def select_best_record(
     """Select the best plausible match rather than trusting result ordering."""
     ranked = []
     for record in records:
-        if not _duration_matches(identity.duration, record.duration):
+        if not search_hint and not _duration_matches(identity.duration, record.duration):
             continue
         title_score = _similarity(identity.title, record.title)
         artist_score = _similarity(identity.artist, record.artist)
@@ -159,7 +163,11 @@ def select_best_record(
             continue
         duration_score = 0.0
         if identity.duration is not None and record.duration is not None:
-            duration_score = 1.0 - min(abs(identity.duration - record.duration) / 10.0, 1.0)
+            difference = abs(identity.duration - record.duration)
+            if search_hint:
+                duration_score = 1.0 / (1.0 + difference)
+            else:
+                duration_score = 1.0 - min(difference / 10.0, 1.0)
         ranked.append((title_score + artist_score + hint_score + duration_score, -record.record_id, record))
     return max(ranked, default=(0.0, 0, None), key=lambda item: (item[0], item[1]))[2]
 

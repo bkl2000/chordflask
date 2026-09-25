@@ -6,7 +6,6 @@ from chordflask_lyrics import lrclib
 from chordflask_lyrics.lrclib import (
     LRCLIBClient,
     LRCLIBError,
-    LyricsRecord,
     SongIdentity,
     TimedLyricLine,
     parse_response,
@@ -36,15 +35,31 @@ def test_parses_line_synchronized_lyrics_and_preserves_text():
     )
 
 
-def test_response_retains_synced_and_ignores_plain_only_records():
+def test_response_prefers_synced_lyrics_when_plain_also_exists():
+    record = parse_response([record_data()])[0]
+
+    assert record.lines[0].text == "First line"
+    assert record.plain_text is None
+
+
+def test_response_retains_plain_only_records():
     records = parse_response(
         [
             record_data(id=1, syncedLyrics=None),
             record_data(id=2),
         ]
     )
-    assert [record.record_id for record in records] == [2]
-    assert records[0].lines[0].text == "First line"
+    assert [record.record_id for record in records] == [1, 2]
+    assert records[0].lines == ()
+    assert records[0].plain_text == "plain only"
+    assert records[1].lines[0].text == "First line"
+
+
+@pytest.mark.parametrize("plain_lyrics", [None, "", " \n ", 42])
+def test_response_rejects_records_without_usable_lyrics(plain_lyrics):
+    assert parse_response(
+        record_data(syncedLyrics="untimed lyrics", plainLyrics=plain_lyrics)
+    ) == []
 
 
 @pytest.mark.parametrize("payload", [None, "", 42, {"id": 1}, [{"id": 1}]])
@@ -75,19 +90,48 @@ def test_selection_does_not_accept_first_bad_or_plain_result():
     assert selected.record_id == 2
 
 
-def test_explicit_search_hint_and_duration_still_validate_candidates():
-    good = parse_response(record_data(id=9))[0]
-    wrong_duration = LyricsRecord(
-        10,
-        good.title,
-        good.artist,
-        good.album,
-        200,
-        good.lines,
-    )
-    identity = SongIdentity(duration=391)
-    assert select_best_record([wrong_duration, good], identity, search_hint="Eagles Hotel California") == good
-    assert select_best_record([good], identity, search_hint="Other Artist Unknown Song") is None
+def test_explicit_search_hint_accepts_duration_mismatch():
+    record = parse_response(record_data(duration=200))[0]
+
+    assert select_best_record(
+        [record], SongIdentity(duration=391), search_hint="Eagles Hotel California"
+    ) == record
+
+
+def test_explicit_search_hint_prefers_closer_duration():
+    farther = parse_response(record_data(id=1, duration=200))[0]
+    closer = parse_response(record_data(id=2, duration=380))[0]
+
+    assert select_best_record(
+        [farther, closer],
+        SongIdentity(duration=391),
+        search_hint="Eagles Hotel California",
+    ) == closer
+
+
+def test_automatic_matching_still_rejects_duration_mismatch():
+    record = parse_response(record_data(duration=200))[0]
+
+    assert select_best_record(
+        [record],
+        SongIdentity(title="Hotel California", artist="Eagles", duration=391),
+    ) is None
+
+
+def test_explicit_search_hint_rejects_insufficient_query_coverage():
+    record = parse_response(record_data())[0]
+
+    assert select_best_record(
+        [record], SongIdentity(duration=391), search_hint="Other Artist Unknown Song"
+    ) is None
+
+
+def test_automatic_matching_keeps_title_and_artist_thresholds():
+    record = parse_response(record_data())[0]
+
+    assert select_best_record(
+        [record], SongIdentity(title="Unrelated", artist="Elsewhere", duration=391)
+    ) is None
 
 
 def test_sample_response_is_json_serializable_for_network_fixture_shape():

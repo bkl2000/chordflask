@@ -1,4 +1,5 @@
 from argparse import Namespace
+import json
 from pathlib import Path
 
 import pytest
@@ -53,6 +54,10 @@ def lyrics_record():
         8,
         (TimedLyricLine(0.2, "first"), TimedLyricLine(4.2, "second")),
     )
+
+
+def plain_lyrics_record(text="first\nsecond"):
+    return LyricsRecord(2, "Song", "Artist", "Album", 8, (), text)
 
 
 def track_chords(chord):
@@ -199,6 +204,121 @@ def test_tag_is_passed_exactly_and_preserved_but_not_visible(monkeypatch, tmp_pa
     )
     assert hint not in visible
     assert "first" in visible and "second" in visible
+
+
+def test_plain_lrclib_lyrics_use_plain_timing_and_preserve_tag(
+    monkeypatch, tmp_path
+):
+    media = tmp_path / "awkward.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    calls = []
+
+    def fake_time_plain_lyrics(text, beat_times):
+        calls.append((text, beat_times))
+        return (TimedLyricLine(0.0, "first"), TimedLyricLine(4.0, "second"))
+
+    monkeypatch.setattr(cli, "time_plain_lyrics", fake_time_plain_lyrics)
+    hint = "Artist Song"
+
+    status, detail = cli.generate_file(
+        media,
+        client=FakeClient(plain_lyrics_record()),
+        search_hint=hint,
+    )
+
+    assert status == "written"
+    assert calls == [("first\nsecond", [float(index) for index in range(8)])]
+    assert "lyrics=lrclib:plain (2 lines, matched Artist — Song)" in detail
+    content = media.with_suffix(".cho").read_text(encoding="utf-8")
+    assert "{x_lrclib_search: Artist Song}" in content
+    assert "first" in content and "second" in content
+
+
+def test_tag_ignores_unrelated_embedded_identity_and_generates_plain_result(
+    monkeypatch, tmp_path
+):
+    media = tmp_path / "ได้ยินไหม - DA endorphineOFFICIAL MV.mp4"
+    make_analysis(media)
+    monkeypatch.setattr(
+        cli,
+        "probe_media",
+        lambda path: SongIdentity(
+            title="ได้ยินไหม OFFICIAL MV",
+            artist="Unrelated Channel",
+            duration=241.742948,
+        ),
+    )
+    urls = []
+
+    def open_request(request, timeout):
+        urls.append(request.full_url)
+        payload = json.dumps(
+            [
+                {
+                    "id": 44,
+                    "trackName": "Dai Yin Mai",
+                    "artistName": "DA Endorphine",
+                    "albumName": "Sound About...",
+                    "duration": 224.0,
+                    "plainLyrics": "ได้ยินไหม\nว่าฉันรักเธอ",
+                    "syncedLyrics": None,
+                }
+            ]
+        ).encode()
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def read(self):
+                return payload
+
+        return Response()
+
+    monkeypatch.setattr("chordflask_lyrics.lrclib.urlopen", open_request)
+
+    status, detail = cli.generate_file(
+        media,
+        client=cli.LRCLIBClient(minimum_interval=0),
+        search_hint="Da Endorphine - Dai Yin Mai",
+    )
+
+    assert status == "written"
+    assert (
+        "lyrics=lrclib:plain (2 lines, matched DA Endorphine — Dai Yin Mai; "
+        "duration 224.0s vs media 241.7s)" in detail
+    )
+    assert "/api/search?q=Da+Endorphine+-+Dai+Yin+Mai" in urls[0]
+    content = media.with_suffix(".cho").read_text(encoding="utf-8")
+    assert "{title: Dai Yin Mai}" in content
+    assert "ได้ยินไหม" in content
+
+
+def test_thai_plain_lrclib_lyrics_support_romanization(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    calls = []
+
+    def fake_romanize(text, *, engine):
+        calls.append((text, engine))
+        return "phasa thai"
+
+    monkeypatch.setattr(cli, "romanize_thai", fake_romanize)
+
+    cli.generate_file(
+        media,
+        client=FakeClient(plain_lyrics_record("ภาษาไทย")),
+        romanize=True,
+    )
+
+    content = media.with_suffix(".cho").read_text(encoding="utf-8")
+    assert "{x_chordflask_romanized: phasa thai}" in content
+    assert calls == [("ภาษาไทย", "thai2rom_onnx")]
 
 
 def test_existing_force_and_dry_run(monkeypatch, tmp_path):
@@ -421,7 +541,7 @@ def test_unusable_embedded_lyrics_fall_through_to_lrclib(monkeypatch, tmp_path):
 
     _, detail = cli.generate_file(media, client=client)
 
-    assert "lyrics=lrclib (2 timed lines, matched Artist — Song)" in detail
+    assert "lyrics=lrclib:synced (2 timed lines, matched Artist — Song)" in detail
     assert len(client.calls) == 1
 
 
