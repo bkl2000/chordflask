@@ -1,5 +1,7 @@
 import os
 import fcntl
+import logging
+from logging.handlers import RotatingFileHandler
 import re
 import subprocess
 import sys
@@ -388,6 +390,61 @@ def test_set_position_switches_grid_mode_at_same_position():
     assert compact.status_code == 200
     assert repeated.status_code == 200
     assert calls == [(0.5, "desktop"), (0.5, "compact")]
+
+
+def test_set_position_logs_render_traceback_with_context_and_reraises(
+    tmp_path, monkeypatch, caplog
+):
+    app_wrapper, client = make_client()
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(
+        str(media), datapath=str(tmp_path / ".chordflask"), create=True
+    )
+    data = ChordData()
+    data.set_chord_track("chordino", [{"timestamp": 0.0, "chord": "C"}])
+    data.set_rhythm_track(
+        "qm_barbeattracker",
+        bpm=120,
+        meter_signature=4,
+        beat_times=[0.0, 0.5],
+        beat_numbers=[1, 2],
+    )
+    data.save_to_file(file_repr.get("json"))
+    response = client.post(
+        "/load_file",
+        json={"dirname": str(tmp_path), "filename": media.name, "semitones": 3},
+    )
+    assert response.status_code == 200
+    assert client.post(
+        "/set_position", json={"position": 0.0, "grid_mode": "desktop"}
+    ).status_code == 200
+
+    def fail_render(_position):
+        raise RuntimeError("render failed")
+
+    state = _state(app_wrapper)
+    monkeypatch.setattr(state.player.playback_view, "render", fail_render)
+    app_wrapper.app.config["PROPAGATE_EXCEPTIONS"] = True
+    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError, match="render failed"):
+        client.post(
+            "/set_position",
+            json={"position": 1.25, "grid_mode": "desktop"},
+        )
+
+    records = [
+        record for record in caplog.records
+        if record.getMessage().startswith("Playback position update failed:")
+    ]
+    assert len(records) == 1
+    assert records[0].exc_info is not None
+    message = records[0].getMessage()
+    assert f"media={media}" in message
+    assert "position=1.25" in message
+    assert "grid_mode=desktop" in message
+    assert "chord_track=chordino" in message
+    assert "rhythm_track=qm_barbeattracker" in message
+    assert "semitones=3" in message
 
 
 def test_analysis_queue_status_reports_stopped_and_running_worker(tmp_path):
@@ -1777,6 +1834,41 @@ def test_run_prints_browser_url_and_ffmpeg_status(monkeypatch, capsys):
     assert "http://127.0.0.1:5056" in output
     assert "ChordFlask" in output
     assert "WARNING" not in output
+
+
+def test_web_logging_uses_bounded_rotation(tmp_path, monkeypatch):
+    app_wrapper, _ = make_client()
+    app_wrapper.analysis_queue = AnalysisQueue(tmp_path)
+    configured = {}
+
+    monkeypatch.setattr(
+        logging,
+        "basicConfig",
+        lambda **kwargs: configured.update(kwargs),
+    )
+    app_wrapper._configure_web_logging()
+
+    rotating = [
+        handler for handler in configured["handlers"]
+        if isinstance(handler, RotatingFileHandler)
+    ]
+    assert len(rotating) == 1
+    handler = rotating[0]
+    try:
+        assert Path(handler.baseFilename) == tmp_path / "web.log"
+        assert handler.maxBytes == 2 * 1024 * 1024
+        assert handler.backupCount == 3
+        assert configured["level"] == logging.INFO
+        assert configured["format"] == (
+            "%(asctime)s %(levelname)s: %(message)s "
+            "[in %(pathname)s:%(lineno)d]"
+        )
+        assert any(
+            type(item) is logging.StreamHandler
+            for item in configured["handlers"]
+        )
+    finally:
+        handler.close()
 
 
 def test_stem_cache_startup_message_is_printed_when_enabled(capsys):

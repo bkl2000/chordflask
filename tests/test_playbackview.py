@@ -1,4 +1,5 @@
 import inspect
+import logging
 
 from chordflask_base import ChordData
 from chordflask.filerepr import FileRepr
@@ -294,3 +295,88 @@ def test_callback_payload_exposes_active_beat_index_for_lyrics_sync(tmp_path):
     assert payload["active_index"] == 1
     assert payload["position"] == 1.1
     assert player.playback_view.render(1.1)["index"] == payload["active_index"]
+
+
+def _diagnostic_player(tmp_path):
+    media = tmp_path / "diagnostic.mp3"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(
+        str(media), datapath=str(tmp_path / ".chordflask"), create=True
+    )
+    data = ChordData()
+    data.set_base_chords(
+        [{"timestamp": 0.0, "chord": "C"}, {"timestamp": 1.0, "chord": "G"}],
+        beat_times=[0.0, 1.0, 2.0],
+    )
+    data.save_to_file(file_repr.get("json"))
+    return MP4PlayerFlask(file_repr)
+
+
+def test_suspicious_empty_output_warns_once_and_logs_one_recovery(
+    tmp_path, monkeypatch, caplog
+):
+    player = _diagnostic_player(tmp_path)
+
+    def render(position):
+        return {
+            "index": 0 if position < 1 else 1,
+            "output": "" if position < 1 else "grid",
+            "position": position,
+        }
+
+    monkeypatch.setattr(player.playback_view, "render", render)
+    with caplog.at_level(logging.INFO):
+        player.update_position(0.1)
+        player.update_position(0.2)
+        player.get_callback_output()
+        player.reset_render_cache()
+        player.get_callback_output()
+        player.update_position(1.1)
+        player.get_callback_output()
+
+    warnings = [
+        record for record in caplog.records
+        if record.getMessage().startswith("Suspicious empty chord output:")
+    ]
+    recoveries = [
+        record for record in caplog.records
+        if record.getMessage().startswith("Chord output recovered:")
+    ]
+    assert len(warnings) == 1
+    assert len(recoveries) == 1
+    assert "chord_track=chordino" in warnings[0].getMessage()
+    assert "rhythm_track=qm_barbeattracker" in warnings[0].getMessage()
+
+
+def test_normal_repeated_and_cached_output_does_not_warn(tmp_path, caplog):
+    player = _diagnostic_player(tmp_path)
+
+    with caplog.at_level(logging.WARNING):
+        player.update_position(0.1)
+        player.update_position(0.2)
+        player.get_callback_output()
+
+    assert not any(
+        record.getMessage().startswith("Suspicious empty chord output:")
+        for record in caplog.records
+    )
+
+
+def test_chord_load_failure_keeps_traceback(tmp_path, monkeypatch, caplog):
+    media = tmp_path / "broken.mp3"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"))
+
+    def fail_load(_self, _path):
+        raise RuntimeError("broken chord JSON")
+
+    monkeypatch.setattr(ChordData, "load_from_file", fail_load)
+    with caplog.at_level(logging.ERROR):
+        MP4PlayerFlask(file_repr)
+
+    record = next(
+        record for record in caplog.records
+        if record.getMessage().startswith("Error loading chords from ")
+    )
+    assert record.exc_info is not None
+    assert record.exc_info[0] is RuntimeError

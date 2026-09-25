@@ -4,6 +4,7 @@
 
 import argparse
 import logging
+from logging.handlers import RotatingFileHandler
 import math
 import os
 import secrets
@@ -1318,10 +1319,24 @@ class FlaskMP4App:
                 #logging.info(f"Setting video position to: {state.current_position} seconds")
 
                 if state.player:
-                    state.player.update_position(
-                        state.current_position,
-                        grid_mode=grid_mode,
-                    )
+                    try:
+                        state.player.update_position(
+                            state.current_position,
+                            grid_mode=grid_mode,
+                        )
+                    except Exception:
+                        chord_data = getattr(state.player, "chord_data", None)
+                        logging.exception(
+                            "Playback position update failed: media=%s position=%s "
+                            "grid_mode=%s chord_track=%s rhythm_track=%s semitones=%s",
+                            getattr(state.file_repr, "filename", None),
+                            state.current_position,
+                            grid_mode,
+                            getattr(chord_data, "active_chord_track_id", None),
+                            getattr(chord_data, "active_rhythm_track_id", None),
+                            state.semitones,
+                        )
+                        raise
                     payload = state.player.get_callback_output()
                     payload["success"] = True
                 else:
@@ -1509,7 +1524,11 @@ class FlaskMP4App:
             level=logging.INFO,
             format='%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]',
             handlers=[
-                logging.FileHandler(log_dir / "web.log"),
+                RotatingFileHandler(
+                    log_dir / "web.log",
+                    maxBytes=2 * 1024 * 1024,
+                    backupCount=3,
+                ),
                 logging.StreamHandler(),
             ]
         )

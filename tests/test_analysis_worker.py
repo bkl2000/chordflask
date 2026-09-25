@@ -1,4 +1,6 @@
 import fcntl
+import logging
+from logging.handlers import RotatingFileHandler
 import subprocess
 import sys
 from pathlib import Path
@@ -56,6 +58,31 @@ def test_worker_lock_reports_running_only_while_held(tmp_path):
         assert AnalysisWorker.is_running(queue) is True
 
     assert AnalysisWorker.is_running(queue) is False
+
+
+def test_worker_logging_uses_bounded_rotation(tmp_path, monkeypatch):
+    queue = AnalysisQueue(tmp_path)
+    worker = AnalysisWorker(queue=queue)
+    configured = {}
+
+    monkeypatch.setattr(
+        analysis_worker.logging,
+        "basicConfig",
+        lambda **kwargs: configured.update(kwargs),
+    )
+    worker._configure_logging()
+
+    handler = configured["handlers"][0]
+    try:
+        assert isinstance(handler, RotatingFileHandler)
+        assert Path(handler.baseFilename) == tmp_path / "worker.log"
+        assert handler.maxBytes == 2 * 1024 * 1024
+        assert handler.backupCount == 3
+        assert configured["level"] == logging.INFO
+        assert configured["format"] == "%(asctime)s %(message)s"
+        assert configured["datefmt"] == "%Y-%m-%dT%H:%M:%S"
+    finally:
+        handler.close()
 
 
 def test_supervisor_starts_source_worker_and_stops_owned_child(tmp_path, monkeypatch):

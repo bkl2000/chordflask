@@ -6,6 +6,7 @@ Single-worker chord analysis queue consumer.
 
 import fcntl
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import shutil
 import subprocess
@@ -39,9 +40,7 @@ class AnalysisWorker:
 
     def run_forever(self):
         self.queue.queue_dir.mkdir(parents=True, exist_ok=True)
-        log_file = str(self.queue.queue_dir / "worker.log")
-        logging.basicConfig(filename=log_file, level=logging.INFO,
-                            format="%(asctime)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+        self._configure_logging()
         with self.worker_lock_file.open("a+") as lock_handle:
             try:
                 fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -57,6 +56,20 @@ class AnalysisWorker:
                 did_work = self.run_once()
                 if not did_work:
                     time.sleep(self.poll_seconds)
+
+    def _configure_logging(self):
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+            handlers=[
+                RotatingFileHandler(
+                    self.queue.queue_dir / "worker.log",
+                    maxBytes=2 * 1024 * 1024,
+                    backupCount=3,
+                )
+            ],
+        )
 
     def run_once(self):
         item = self.queue.peek()

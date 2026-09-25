@@ -58,6 +58,7 @@ class MP4PlayerFlask:
         self.callback_output = deque(maxlen=self.max_lines)
         self.last_chord = None
         self.last_rendered_position = None
+        self.__empty_output_warning_active = False
 
         self._load_chords()
         self.chord_data.transpose(self.semitones)
@@ -484,8 +485,10 @@ class MP4PlayerFlask:
         try:
             self.chord_data.load_from_file(self.file_repr.get("json"))
             logging.info(f"Chords loaded from {self.file_repr.get('json')}")
-        except Exception as e:
-            logging.error(f"Error loading chords: {e}")
+        except Exception:
+            logging.exception(
+                "Error loading chords from %s", self.file_repr.get("json")
+            )
 
         try:
             self.song_data = SongData(self.file_repr.get("song_data"))
@@ -500,6 +503,7 @@ class MP4PlayerFlask:
         self.last_rendered_position = rendered["position"]
 
         if hasattr(self, "last_index") and self.last_index == rendered["index"]:
+            self.__diagnose_empty_output()
             return
 
         output = rendered["output"]
@@ -507,6 +511,50 @@ class MP4PlayerFlask:
         self.callback_output.clear()
         self.callback_output.append(output)
         self.last_index = rendered["index"]
+        self.__diagnose_empty_output()
+
+    def __diagnose_empty_output(self):
+        chord_data = self.chord_data
+        loaded_grid = bool(
+            chord_data.active_chord_track_id
+            and chord_data.active_rhythm_track_id
+            and chord_data.chord_times
+            and chord_data.beat_times
+        )
+        rendered_position = self.last_rendered_position
+        active_index = getattr(self, "last_index", None)
+        has_output = any(
+            isinstance(output, str) and output.strip()
+            for output in self.callback_output
+        )
+        suspicious = bool(
+            loaded_grid
+            and rendered_position is not None
+            and active_index is not None
+            and not has_output
+        )
+        if suspicious:
+            if self.__empty_output_warning_active:
+                return
+            self.__empty_output_warning_active = True
+            logging.warning(
+                "Suspicious empty chord output: media=%s position=%s "
+                "active_index=%s chord_track=%s rhythm_track=%s semitones=%s",
+                self.file_repr.get(),
+                rendered_position,
+                active_index,
+                chord_data.active_chord_track_id,
+                chord_data.active_rhythm_track_id,
+                self.semitones,
+            )
+        elif self.__empty_output_warning_active and has_output:
+            self.__empty_output_warning_active = False
+            logging.info(
+                "Chord output recovered: media=%s position=%s active_index=%s",
+                self.file_repr.get(),
+                rendered_position,
+                active_index,
+            )
 
     def update_position(self, position, grid_mode=None):
         if grid_mode is not None:
@@ -521,6 +569,7 @@ class MP4PlayerFlask:
         self.position_callback(position)
 
     def get_callback_output(self):
+        self.__diagnose_empty_output()
         return {
             "callback_output": list(self.callback_output),
             "bpm": self.chord_data.bpm,
