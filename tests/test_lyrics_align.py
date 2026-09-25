@@ -1,6 +1,18 @@
 from chordflask.chordpro_song import parse_chordpro
-from chordflask_lyrics.align import align_lyrics, beat_at_or_after_index, render_chordpro
+from chordflask_lyrics.align import (
+    align_lyrics,
+    beat_at_or_after_index,
+    render_chordpro,
+    time_plain_lyrics,
+)
 from chordflask_lyrics.lrclib import LyricsRecord, TimedLyricLine
+
+
+def test_plain_lyrics_are_distributed_over_existing_beat_times():
+    assert time_plain_lyrics("first\n\nsecond", [0.0, 1.0, 2.0, 3.0]) == (
+        TimedLyricLine(0.0, "first"),
+        TimedLyricLine(2.0, "second"),
+    )
 
 
 def test_lyric_start_maps_to_first_beat_at_or_after_without_moving_earlier():

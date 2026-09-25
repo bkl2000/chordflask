@@ -26,6 +26,23 @@ class AlignedRow:
     end_beat: int | None = None
 
 
+def time_plain_lyrics(value: str, beat_times: list[float]) -> tuple[TimedLyricLine, ...]:
+    """Place plain lyric lines in order across the analyzed beat timeline.
+
+    Plain tags contain no synchronization information. Equal beat-span placement
+    keeps this fallback deterministic and lets the normal alignment path handle
+    all chord and measure mapping.
+    """
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if not lines or not beat_times:
+        return ()
+    beat_count = len(beat_times)
+    return tuple(
+        TimedLyricLine(beat_times[min(index * beat_count // len(lines), beat_count - 1)], line)
+        for index, line in enumerate(lines)
+    )
+
+
 def beat_at_or_after_index(timestamp: float, beat_times: list[float]) -> int:
     """Map a lyric start to the first beat that does not precede it.
 

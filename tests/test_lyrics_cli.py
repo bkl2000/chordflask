@@ -7,6 +7,7 @@ from chordflask.chordpro_song import read_chordpro
 from chordflask.filerepr import FileRepr
 from chordflask_base import ChordData
 from chordflask_lyrics import cli
+from chordflask_lyrics.embedded import EmbeddedLyrics
 from chordflask_lyrics.lrclib import LyricsRecord, SongIdentity, TimedLyricLine
 
 
@@ -80,6 +81,11 @@ def args(target, **overrides):
     return Namespace(**values)
 
 
+@pytest.fixture(autouse=True)
+def no_embedded_lyrics(monkeypatch):
+    monkeypatch.setattr(cli, "get_embedded_lyrics", lambda path: None)
+
+
 def test_track_cli_defaults_to_auto_and_accepts_explicit_id():
     parser = cli.build_parser()
 
@@ -131,15 +137,80 @@ def test_existing_force_and_dry_run(monkeypatch, tmp_path):
     sidecar = media.with_suffix(".cho")
     sidecar.write_text("old", encoding="utf-8")
     monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    embedded_calls = []
+    monkeypatch.setattr(cli, "get_embedded_lyrics", lambda path: embedded_calls.append(path))
     client = FakeClient(lyrics_record())
 
     assert cli.generate_file(media, client=client)[0] == "skipped"
+    assert embedded_calls == []
     assert client.calls == []
     assert cli.generate_file(media, client=client, force=True, dry_run=True)[0] == "dry-run"
     assert sidecar.read_text(encoding="utf-8") == "old"
     assert cli.generate_file(media, client=client, force=True)[0] == "written"
     assert sidecar.read_text(encoding="utf-8") != "old"
     assert read_chordpro(sidecar)["metadata"]["title"] == "Song"
+
+
+def test_missing_embedded_lyrics_fall_back_to_lrclib(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    client = FakeClient(lyrics_record())
+
+    assert cli.generate_file(media, client=client)[0] == "written"
+    assert len(client.calls) == 1
+
+
+def test_embedded_uslt_is_preferred_without_lrclib_lookup(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    monkeypatch.setattr(
+        cli,
+        "get_embedded_lyrics",
+        lambda path: EmbeddedLyrics("ffprobe:lyrics", "first\nsecond"),
+    )
+    client = FakeClient(lyrics_record())
+
+    status, detail = cli.generate_file(media, client=client)
+
+    assert status == "written"
+    assert "via ffprobe:lyrics" in detail
+    assert client.calls == []
+    parsed = read_chordpro(media.with_suffix(".cho"))
+    visible = "".join(
+        run["lyric"]
+        for block in parsed["blocks"]
+        if block["type"] == "line"
+        for run in block["runs"]
+    )
+    assert "first" in visible and "second" in visible
+
+
+def test_embedded_synced_lyrics_keep_their_timestamps(monkeypatch, tmp_path):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    lines = (TimedLyricLine(0.2, "first"), TimedLyricLine(4.2, "second"))
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    monkeypatch.setattr(
+        cli,
+        "get_embedded_lyrics",
+        lambda path: EmbeddedLyrics("ffprobe:lyrics", "embedded LRC", lines),
+    )
+    client = FakeClient(lyrics_record())
+
+    cli.generate_file(media, client=client)
+
+    assert client.calls == []
+    parsed = read_chordpro(media.with_suffix(".cho"))
+    chord_runs = [
+        (run["chord"], run["start_beat"])
+        for block in parsed["blocks"]
+        if block["type"] == "line"
+        for run in block["runs"]
+        if run["chord"]
+    ]
+    assert chord_runs == [("C", 0), ("G", 4)]
 
 
 def test_generated_sidecar_preserves_sync_metadata_and_hides_it(monkeypatch, tmp_path):

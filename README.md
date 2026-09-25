@@ -13,7 +13,8 @@ fast on-demand and batch analysis, and shows the results in sync while you play
 the media in the browser. The displayed chords can be transposed, corrected,
 compared, and exported as Markdown or PDF. Playback and analysis run locally;
 media and analysis data are never uploaded. The optional `chordflask-genlyrics`
-command performs an explicit on-demand lyrics lookup via LRCLIB.
+command uses embedded lyrics when available and otherwise performs an explicit
+on-demand lyrics lookup via LRCLIB.
 
 ChordFlask supports Linux x86_64 on Ubuntu 24.04+, Linux Mint 22+, and Debian
 13+ (CPython 3.12–3.14). Native Windows is not supported; Windows users can run
@@ -123,7 +124,7 @@ Chordino is the built-in, default analyzer.
 | `chordflask-analyze` | Generate chord/beat analysis |
 | `chordflask-demucs` | Generate optional stems |
 | `chordflask-export` | Export analysis data |
-| `chordflask-genlyrics` | Fetch synchronized lyrics and create a local `.cho` song sheet |
+| `chordflask-genlyrics` | Use embedded or fetched lyrics to create a local `.cho` song sheet |
 | `chordflask-maintain` | Inspect/clean generated data |
 
 The two supported setups are intentionally different:
@@ -461,12 +462,15 @@ displayed. MIDI is not included. Full format and option details are in
 ### On-demand synchronized lyrics
 
 Source installations provide `chordflask-genlyrics`. It requires an existing
-valid ChordFlask analysis, fetches line-synchronized lyrics from the external
-LRCLIB service on demand without an API key for normal lookup, aligns one
-selected chord-track snapshot to the musical beat/measure timeline, and writes
-`song.cho` beside `song.mp3`, `.mp4`, or `.webm`. It uses the normal ChordFlask
-environment, never starts analysis automatically, and does not overwrite an
-existing `.cho` unless `--force` is given.
+valid ChordFlask analysis and first uses usable lyrics embedded in the media.
+MP3 USLT and compatible container lyrics tags are read through the existing
+FFmpeg toolchain; embedded LRC timestamps are preserved, while plain lyric
+lines are placed evenly across the analyzed beat timeline. If no usable tag is
+present, the command fetches line-synchronized lyrics from the external LRCLIB
+service on demand without an API key for normal lookup. It aligns one selected
+chord-track snapshot to the musical beat/measure timeline and writes `song.cho`
+beside `song.mp3`, `.mp4`, or `.webm`. It never starts analysis automatically
+and does not overwrite an existing `.cho` unless `--force` is given.
 
 Typical workflow:
 
@@ -474,7 +478,7 @@ Typical workflow:
 
    `chordflask-analyze song.mp3`
 
-2. Fetch synchronized lyrics and create the `.cho` sidecar:
+2. Use embedded lyrics or fetch synchronized lyrics and create the `.cho` sidecar:
 
    `chordflask-genlyrics song.mp3`
 

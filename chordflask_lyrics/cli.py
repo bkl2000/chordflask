@@ -1,4 +1,4 @@
-"""Command line entry point for on-demand LRCLIB ChordPro generation."""
+"""Command line entry point for on-demand lyrics ChordPro generation."""
 
 from __future__ import annotations
 
@@ -22,8 +22,9 @@ from chordflask_base import (
     ChordData,
 )
 
-from .align import align_lyrics, render_chordpro
-from .lrclib import LRCLIBClient, LRCLIBError, SongIdentity
+from .align import align_lyrics, render_chordpro, time_plain_lyrics
+from .embedded import get_embedded_lyrics
+from .lrclib import LRCLIBClient, LRCLIBError, LyricsRecord, SongIdentity
 
 
 _FILENAME_SEPARATOR = re.compile(r"\s+(?:-|–|—)\s+")
@@ -37,8 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chordflask-genlyrics",
         description=(
-            "Fetch synchronized lyrics from LRCLIB and generate a .cho sidecar "
-            "beside the media file using existing ChordFlask analysis."
+            "Use embedded lyrics or fetch synchronized lyrics from LRCLIB and "
+            "generate a .cho sidecar using existing ChordFlask analysis."
         ),
     )
     parser.add_argument("--dry-run", action="store_true", help="match and render without writing")
@@ -218,16 +219,33 @@ def generate_file(
 
     chord_data = _load_analysis(media, track)
     selected_track = chord_data.active_chord_track_id
+    embedded = get_embedded_lyrics(media)
     identity = lookup_identity(
         media,
         analysis_duration=_analysis_duration(chord_data),
-        include_filename=search_hint is None,
+        include_filename=embedded is not None or search_hint is None,
     )
-    if not identity.title and not search_hint:
-        raise GenerationError("song title could not be determined")
-    record = client.lookup(identity, search_hint=search_hint)
-    if record is None:
-        raise GenerationError("no plausible synchronized lyrics found on LRCLIB")
+    if embedded is not None:
+        lines = embedded.lines or time_plain_lyrics(embedded.text, chord_data.beat_times)
+        if lines:
+            record = LyricsRecord(
+                0,
+                identity.title or media.stem,
+                identity.artist or "Unknown Artist",
+                identity.album,
+                identity.duration,
+                lines,
+            )
+            match_detail = f"matched {record.artist} — {record.title} via {embedded.source}"
+        else:
+            embedded = None
+    if embedded is None:
+        if not identity.title and not search_hint:
+            raise GenerationError("song title could not be determined")
+        record = client.lookup(identity, search_hint=search_hint)
+        if record is None:
+            raise GenerationError("no plausible synchronized lyrics found on LRCLIB")
+        match_detail = f"matched {record.artist} — {record.title}"
 
     beat_chords = PlaybackView(
         chord_data,
@@ -246,7 +264,7 @@ def generate_file(
     content = render_chordpro(
         record,
         rows,
-        search_hint=search_hint,
+        search_hint=search_hint if embedded is None else None,
         chord_track_id=selected_track,
     )
 
@@ -255,9 +273,9 @@ def generate_file(
 
     parse_chordpro(content)
     if dry_run:
-        return "dry-run", f"matched {record.artist} — {record.title}; would write {output_path.name}"
+        return "dry-run", f"{match_detail}; would write {output_path.name}"
     _write_atomic(output_path, content)
-    return "written", f"matched {record.artist} — {record.title}; wrote {output_path.name}"
+    return "written", f"{match_detail}; wrote {output_path.name}"
 
 
 def _resolve_files(target: Path) -> list[Path] | None:
