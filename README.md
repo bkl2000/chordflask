@@ -14,49 +14,13 @@ chords.
 
 ## What you can do
 
-### Browse and play your collection
+ChordFlask is designed for exploring a music collection and playing along with whatever catches your interest. Browse your own audio and video directories, open a song, and let ChordFlask analyze it when you need it. You do not have to prepare the whole collection first: analyze one song spontaneously, queue several from the browser, or prepare an entire directory from the command line. Completed analyses stay with the collection and are reused the next time you return.
 
-Open existing music or video directories, select a file, and play it directly
-in the browser. Source media are not changed.
+During playback, the detected chords and beats follow the song in the browser. This makes it easy to pick up an instrument, improvise, or work out a part without first searching for a separate chord sheet. Transpose the displayed chords, set an A/B loop around a difficult passage, or correct individual chords while keeping the original analyzer result available.
 
-### See chords while the song plays
+Automatic chord recognition is not a perfect transcription, especially with dense arrangements or unusual harmony. It is intended as a practical starting point for playing, orientation, and improvisation. When the analysis is close but not quite right, you can correct it beat by beat instead of starting over.
 
-If analysis is missing, ChordFlask queues it. When it is ready, the chord grid
-and detected beats follow playback. Existing results are loaded instead of
-being recalculated at every start.
-
-### Practice difficult passages
-
-Set **A** and **B** loop markers, repeat a section, transpose the displayed
-chords, and follow the grid while practising. Transpose changes the display,
-not the audio or stored analysis.
-
-### Correct the analysis
-
-Use **Edit** to correct detected chords beat by beat. Corrections are stored as
-an **Edited** version; the original analyzer track remains available.
-
-### Prepare albums or directories
-
-Queue a bounded batch in the browser or analyze a directory from the command
-line. Files with valid existing analyses are skipped and reused.
-
-### Use lyrics with chords
-
-Create a synchronized Lyrics view from a same-stem `.lrc`, embedded lyrics, or
-an explicit LRCLIB lookup. ChordFlask combines the lyrics with the existing
-chord and beat timeline and offers **Grid | Lyrics** on desktop layouts.
-
-### Practice with stems
-
-Optional Demucs preparation separates **Vocals**, **Drums**, **Bass**, and
-**Other**. Mute Vocals for a karaoke backing track, mute Bass for bass practice,
-or adjust each part separately.
-
-### Export results
-
-Export the selected analysis as editable Markdown, a printable PDF, or a
-ChordPro file.
+Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro. The normal standalone bundle covers the interactive playback and analysis workflow, while additional preparation tools are available from a source installation through the command-line utilities.
 
 <!-- standalone-download:start -->
 ## Download
