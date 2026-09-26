@@ -1124,7 +1124,7 @@
     }
 
     #stemsButton,
-    #prepareStemsButton {
+    .prepare-group button {
       width: auto;
       min-width: 22px;
       height: 20px;
@@ -1138,21 +1138,30 @@
     }
 
     #stemsButton:hover:not(:disabled),
-    #prepareStemsButton:hover:not(:disabled) {
+    .prepare-group button:hover:not(:disabled) {
       border-color: #9eabb8;
       background: #313944;
       color: #fff;
     }
 
-    #prepareStemsButton:disabled {
+    .prepare-group button:disabled {
       opacity: 0.65;
       cursor: default;
     }
 
-    /* Prepare is an action; STEMS is a playback/mixing toggle. */
-    #prepareStemsButton {
+    /* Prepare actions stay distinct from the STEMS playback/mixing toggle. */
+    .prepare-group button {
       border-color: #7fc4ff;
       background: #1767a822;
+    }
+
+    .prepare-group {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      color: var(--chord-muted);
+      font-size: 12px;
+      white-space: nowrap;
     }
 
     #stemsButton.stem-on {
@@ -1327,6 +1336,10 @@
 
     /* The 801–1023px tablet layout retains its existing ratio and controls. */
     @media (min-width: 1024px) {
+      .prepare-group:not([hidden]) {
+        display: inline-flex;
+      }
+
       .app,
       .control-bar .controls {
         width: min(1800px, calc(100% - 48px));
@@ -1927,10 +1940,22 @@
               <button id="stemsButton" type="button" title="Enable or disable stem playback"
                       aria-label="Enable or disable stem playback" aria-pressed="false" hidden
                       onclick="toggleStems()">STEMS</button>
-              <button id="prepareStemsButton" type="button"
-                      title="Prepare vocal and instrument stems in the background"
-                      aria-label="Prepare vocal and instrument stems" hidden
-                      onclick="prepareStems()">Prepare</button>
+              <span id="prepareGroup" class="prepare-group" hidden
+                    aria-label="Prepare current song">
+                <span>Prepare:</span>
+                <button id="prepareLyricsButton" type="button" hidden
+                        title="Prepare lyrics for the current song"
+                        aria-label="Prepare lyrics for the current song"
+                        onclick="prepareLyrics()">Lyrics</button>
+                <button id="prepareBtcButton" type="button" hidden
+                        title="Prepare BTC analysis for the current song"
+                        aria-label="Prepare BTC analysis for the current song"
+                        onclick="prepareBtc()">BTC</button>
+                <button id="prepareStemsButton" type="button" hidden
+                        title="Prepare vocal and instrument stems for the current song"
+                        aria-label="Prepare vocal and instrument stems for the current song"
+                        onclick="prepareStems()">Stems</button>
+              </span>
             </span>
           </div>
           <div class="stem-toggles" id="stemTogglesRow" hidden>
@@ -2227,9 +2252,8 @@
       '(max-width: 640px), (min-width: 1024px)'
     );
     let mobilePlaybackControls = window.matchMedia('(max-width: 640px)');
-    // On-demand stem preparation is offered in the desktop layout only; the
-    // tablet/mobile layouts keep the existing prepared-stem playback controls.
-    let desktopStemPrepare = window.matchMedia('(min-width: 1024px)');
+    // On-demand preparation is offered only in the established desktop layout.
+    let desktopPrepare = window.matchMedia('(min-width: 1024px)');
     let loopStartButton = document.getElementById('loopStartButton');
     let loopEndButton = document.getElementById('loopEndButton');
     let loopToggleButton = document.getElementById('loopToggleButton');
@@ -2251,6 +2275,9 @@
     let stemMixerLabel = document.getElementById('stemMixerLabel');
     let stemMixerValue = document.getElementById('stemMixerValue');
     let stemMixerSlider = document.getElementById('stemMixerSlider');
+    let prepareGroup = document.getElementById('prepareGroup');
+    let prepareLyricsButton = document.getElementById('prepareLyricsButton');
+    let prepareBtcButton = document.getElementById('prepareBtcButton');
     let prepareStemsButton = document.getElementById('prepareStemsButton');
 
     let isRepeating = false;
@@ -2358,10 +2385,26 @@
     let stemWasMasterMuted = false;
     let stemsActivationToken = 0;
     let stemMixerStem = null;
-    let stemPrepareAvailable = false;
-    let stemPrepareState = 'idle';
-    let stemPreparePollTimer = null;
-    let stemPrepareRequestInFlight = false;
+    const prepareActions = {
+      lyrics: {
+        label: 'Lyrics', button: prepareLyricsButton,
+        startUrl: '/prepare_lyrics', statusUrl: '/lyrics_preparation_status',
+        refreshUrl: '/refresh_lyrics', available: false, state: 'idle',
+        pollTimer: null, requestInFlight: false,
+      },
+      btc: {
+        label: 'BTC', button: prepareBtcButton,
+        startUrl: '/prepare_btc', statusUrl: '/btc_preparation_status',
+        refreshUrl: '/refresh_btc', available: false, state: 'idle',
+        pollTimer: null, requestInFlight: false,
+      },
+      stems: {
+        label: 'Stems', button: prepareStemsButton,
+        startUrl: '/prepare_stems', statusUrl: '/stem_preparation_status',
+        refreshUrl: '/refresh_stems', available: false, state: 'idle',
+        pollTimer: null, requestInFlight: false,
+      },
+    };
 
     function updateCurrentPath() {
       const value = (dirnameInput.value || '').trim();
@@ -3474,13 +3517,15 @@
       teardownStems();
       resetStemVolumes();
       stemsAvailable = false;
-      stemPrepareAvailable = false;
-      stemPrepareState = 'idle';
-      if (stemPreparePollTimer) {
-        clearTimeout(stemPreparePollTimer);
-        stemPreparePollTimer = null;
+      for (const action of Object.values(prepareActions)) {
+        action.available = false;
+        action.state = 'idle';
+        action.requestInFlight = false;
+        if (action.pollTimer) clearTimeout(action.pollTimer);
+        action.pollTimer = null;
       }
       updateStemsUI();
+      updatePrepareButtons();
     }
 
     function updateStemsAvailability(payload) {
@@ -3489,89 +3534,110 @@
       stemsAvailable = Boolean(
         payload && Array.isArray(payload.stems) && payload.stems.length === STEM_NAMES.length
       );
-      if (stemsAvailable && stemPreparePollTimer) {
-        clearTimeout(stemPreparePollTimer);
-        stemPreparePollTimer = null;
+      if (stemsAvailable) {
+        prepareActions.stems.state = 'ready';
+        if (prepareActions.stems.pollTimer) {
+          clearTimeout(prepareActions.stems.pollTimer);
+          prepareActions.stems.pollTimer = null;
+        }
       }
       updateStemsUI();
+      updatePrepareButtons();
+    }
+
+    function updatePrepareButtons() {
+      let anyVisible = false;
+      for (const action of Object.values(prepareActions)) {
+        const visible = desktopPrepare.matches
+          && Boolean(loadedMediaPath) && loadedAnalysisValid && action.available;
+        action.button.hidden = !visible;
+        anyVisible = anyVisible || visible;
+        action.button.textContent = action.state === 'running'
+          ? `${action.label}…`
+          : action.state === 'ready'
+            ? `${action.label} Ready`
+            : action.state === 'error' ? `${action.label} Failed` : action.label;
+        action.button.disabled = action.state === 'running'
+          || action.state === 'ready' || action.requestInFlight;
+      }
+      prepareGroup.hidden = !anyVisible;
     }
 
     function updatePrepareStemsButton() {
-      const visible = desktopStemPrepare.matches
-        && Boolean(loadedMediaPath) && loadedAnalysisValid
-        && !stemsAvailable && stemPrepareAvailable && !stemsActive;
-      prepareStemsButton.hidden = !visible;
-      const running = stemPrepareState === 'running';
-      prepareStemsButton.textContent = running ? 'Preparing…' : 'Prepare';
-      prepareStemsButton.disabled = running || stemPrepareRequestInFlight;
+      updatePrepareButtons();
     }
 
-    function scheduleStemPreparationPoll() {
-      if (stemPreparePollTimer) {
-        clearTimeout(stemPreparePollTimer);
-      }
-      stemPreparePollTimer = setTimeout(refreshStemPreparationState, 1500);
+    function schedulePreparationPoll(name) {
+      const action = prepareActions[name];
+      if (action.pollTimer) clearTimeout(action.pollTimer);
+      action.pollTimer = setTimeout(() => refreshPreparationState(name), 1500);
     }
 
-    function refreshStemPreparationState() {
-      if (!desktopStemPrepare.matches) {
-        // Tablet/mobile must not poll capability or start preparation.
-        stemPrepareAvailable = false;
-        stemPrepareState = 'idle';
-        if (stemPreparePollTimer) {
-          clearTimeout(stemPreparePollTimer);
-          stemPreparePollTimer = null;
-        }
-        updatePrepareStemsButton();
+    function refreshPreparationState(name) {
+      const action = prepareActions[name];
+      if (!desktopPrepare.matches) {
+        action.available = false;
+        action.state = 'idle';
+        if (action.pollTimer) clearTimeout(action.pollTimer);
+        action.pollTimer = null;
+        updatePrepareButtons();
         return;
       }
-      if (!loadedMediaPath || !loadedAnalysisValid || stemsAvailable) {
-        stemPrepareAvailable = false;
-        stemPrepareState = 'idle';
-        updatePrepareStemsButton();
+      if (!loadedMediaPath || !loadedAnalysisValid) {
+        action.available = false;
+        action.state = 'idle';
+        updatePrepareButtons();
         return;
       }
-      fetch('/stem_preparation_status', {
+      fetch(action.statusUrl, {
         headers: { 'Cache-Control': 'no-store' }
       })
       .then(response => response.ok ? response.json() : null)
       .then(data => {
         if (!data) {
-          updatePrepareStemsButton();
+          updatePrepareButtons();
           return;
         }
-        stemPrepareAvailable = data.available === true;
-        stemPrepareState = data.state || 'idle';
-        if (stemsAvailable) {
-          updatePrepareStemsButton();
+        const previousState = action.state;
+        action.available = data.available === true;
+        action.state = name === 'stems' && stemsAvailable
+          ? 'ready' : (data.state || 'idle');
+        if (action.state === 'running') {
+          updatePrepareButtons();
+          schedulePreparationPoll(name);
           return;
         }
-        if (stemPrepareState === 'running') {
-          updatePrepareStemsButton();
-          scheduleStemPreparationPoll();
+        if (action.state === 'ready' && previousState === 'running') {
+          finishPreparation(name);
           return;
         }
-        if (stemPrepareState === 'ready') {
-          finishStemPreparation();
-          return;
+        if (action.state === 'error') {
+          console.error(`${action.label} preparation failed:`, data.message || 'unknown error');
+          fileStatus.innerText = `${action.label} preparation failed`;
         }
-        if (stemPrepareState === 'error' && data.message) {
-          fileStatus.innerText = data.message;
-        }
-        updatePrepareStemsButton();
+        updatePrepareButtons();
       })
       .catch(error => {
-        console.error('Error checking stem preparation:', error);
-        updatePrepareStemsButton();
+        console.error(`Error checking ${action.label} preparation:`, error);
+        updatePrepareButtons();
       });
     }
 
-    function prepareStems() {
-      if (!desktopStemPrepare.matches) return;
-      if (!loadedMediaPath || stemPrepareRequestInFlight) return;
-      stemPrepareRequestInFlight = true;
-      updatePrepareStemsButton();
-      fetch('/prepare_stems', {
+    function refreshPreparationStates() {
+      for (const name of Object.keys(prepareActions)) refreshPreparationState(name);
+    }
+
+    function refreshStemPreparationState() {
+      refreshPreparationState('stems');
+    }
+
+    function prepareCurrent(name) {
+      const action = prepareActions[name];
+      if (!desktopPrepare.matches) return;
+      if (!loadedMediaPath || action.requestInFlight || action.state === 'ready') return;
+      action.requestInFlight = true;
+      updatePrepareButtons();
+      fetch(action.startUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
@@ -3579,39 +3645,44 @@
       .then(response => response.json().then(data => ({ ok: response.ok, data })))
       .then(({ ok, data }) => {
         if (!ok) {
-          fileStatus.innerText = data.error || 'Stem preparation unavailable';
-          stemPrepareState = 'idle';
+          console.error(`${action.label} preparation rejected:`, data.error || data.status);
+          fileStatus.innerText = `${action.label} preparation unavailable`;
+          action.state = data.status === 'unavailable' ? 'idle' : 'error';
           return;
         }
         if (data.status === 'ready') {
-          finishStemPreparation();
+          action.state = 'ready';
+          finishPreparation(name);
           return;
         }
         if (data.status === 'accepted' || data.status === 'already_running') {
-          stemPrepareState = 'running';
-          updatePrepareStemsButton();
-          scheduleStemPreparationPoll();
+          action.state = 'running';
+          updatePrepareButtons();
+          schedulePreparationPoll(name);
           return;
         }
-        fileStatus.innerText = 'Another song is being prepared';
+        fileStatus.innerText = `Another ${action.label} preparation is running`;
       })
       .catch(error => {
-        console.error('Error preparing stems:', error);
-        fileStatus.innerText = 'Stem preparation failed';
-        stemPrepareState = 'idle';
+        console.error(`Error preparing ${action.label}:`, error);
+        fileStatus.innerText = `${action.label} preparation failed`;
+        action.state = 'error';
       })
       .finally(() => {
-        stemPrepareRequestInFlight = false;
-        updatePrepareStemsButton();
+        action.requestInFlight = false;
+        updatePrepareButtons();
       });
     }
 
-    function finishStemPreparation() {
-      if (stemPreparePollTimer) {
-        clearTimeout(stemPreparePollTimer);
-        stemPreparePollTimer = null;
-      }
-      fetch('/refresh_stems', {
+    function prepareLyrics() { prepareCurrent('lyrics'); }
+    function prepareBtc() { prepareCurrent('btc'); }
+    function prepareStems() { prepareCurrent('stems'); }
+
+    function finishPreparation(name) {
+      const action = prepareActions[name];
+      if (action.pollTimer) clearTimeout(action.pollTimer);
+      action.pollTimer = null;
+      fetch(action.refreshUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
@@ -3623,20 +3694,34 @@
         return response.json();
       })
       .then(data => {
-        updateStemsAvailability(data.stems);
-        stemPrepareState = 'idle';
-        fileStatus.innerText = stemsAvailable
-          ? (loadedFileName || 'Stems ready')
-          : 'Stem preparation did not produce a usable set';
+        if (name === 'lyrics') {
+          resetSongView(data.song_view_available);
+        } else if (name === 'btc') {
+          updateTrackSelectors(data);
+        } else {
+          updateStemsAvailability(data.stems);
+        }
+        const usable = name === 'lyrics' ? data.song_view_available === true
+          : name === 'btc'
+            ? (data.available_chord_tracks || []).some(track => track.id === 'btc')
+            : stemsAvailable;
+        action.state = usable ? 'ready' : 'error';
+        fileStatus.innerText = usable
+          ? (loadedFileName || `${action.label} ready`)
+          : `${action.label} preparation did not produce a usable result`;
       })
       .catch(error => {
-        console.error('Error refreshing stems:', error);
-        stemPrepareState = 'idle';
-        fileStatus.innerText = 'Stem preparation failed';
+        console.error(`Error refreshing ${action.label}:`, error);
+        action.state = 'error';
+        fileStatus.innerText = `${action.label} preparation failed`;
       })
       .finally(() => {
-        updatePrepareStemsButton();
+        updatePrepareButtons();
       });
+    }
+
+    function finishStemPreparation() {
+      finishPreparation('stems');
     }
 
     function stemCanPlay(el) {
@@ -4002,7 +4087,7 @@
         updateReanalyzeButton();
         updateTrackSelectors(data);
         updateStemsAvailability(data.stems);
-        refreshStemPreparationState();
+        refreshPreparationStates();
         if (autoplay) {
           video.play().catch(error => {
             console.error('Autoplay failed:', error);
@@ -4157,7 +4242,7 @@
         semitonesInput.value = data.semitones;
         updateTrackSelectors(data);
         updateStemsAvailability(data.stems);
-        refreshStemPreparationState();
+        refreshPreparationStates();
         updateReanalyzeButton();
         syncPlaybackPosition(true);
       })
@@ -4941,9 +5026,9 @@
       placePlaybackNavigation();
       navigationInPlaybackBar.addEventListener('change', placePlaybackNavigation);
       mobilePlaybackControls.addEventListener('change', placePlaybackNavigation);
-      desktopStemPrepare.addEventListener('change', () => {
+      desktopPrepare.addEventListener('change', () => {
         // Entering desktop may reveal Prepare; leaving it must cancel polling.
-        refreshStemPreparationState();
+        refreshPreparationStates();
       });
       const savedDirname = localStorage.getItem(storageKeys.dirname) || '';
       const savedFilter = localStorage.getItem(storageKeys.filter) || '';

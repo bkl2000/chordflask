@@ -195,14 +195,15 @@ in the chord header. For ordinary songs the control is hidden.
 - STEMS OFF/ON on the same song keeps the per-stem levels; loading a different
   song resets all four to 100%. Levels are session state only — nothing is
   persisted.
-- On desktop (1024 px and wider), a compact **Prepare** control appears in the
-  STEMS area when the song has no usable stem set and the external Demucs
-  runtime is usable. It runs one background preparation for the current media
+- On desktop (1024 px and wider), **Stems** appears in the compact **Prepare:**
+  group when the external Demucs runtime is usable. It runs one background
+  preparation for the current media
   without pausing, seeking, restarting, or switching playback; CUDA is used when
   available and CPU otherwise. When it finishes, the normal **STEMS** control
   appears; stems are not activated automatically. A failed attempt leaves
   playback and any existing data untouched and can be retried. Tablet and mobile
-  layouts never offer Prepare.
+  layouts never offer the Prepare group. Other available source-only actions
+  may share the group, while directory preparation remains a CLI workflow.
 
 Individual stem OFF intentionally uses an effectively silent nonzero gain
 instead of browser mute or exact-zero volume. Real Chromium playback timing

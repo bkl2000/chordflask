@@ -37,10 +37,16 @@ from .chordflask_config import (
 from .filerepr import FileRepr  # Import FileRepr class for file path management
 from .ffmpeg_runtime import require_system_ffmpeg
 from .media_library import preferred_media_files
+from .media_preparation import (
+    btc_capability,
+    lyrics_capability,
+    run_btc_preparation,
+    run_lyrics_preparation,
+)
 
 from .mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4PlayerFlask class
 from .playbackview import GRID_MODES
-from .stem_preparation import StemPreparationManager
+from .stem_preparation import BackgroundPreparationManager, StemPreparationManager
 
 from chordflask_base import DEMUCS_STEM_NAMES, transpose_chord_pitches
 
@@ -184,6 +190,16 @@ class FlaskMP4App:
         self.analysis_queue = AnalysisQueue()
         self.worker_supervisor = None
         self.stem_preparation = StemPreparationManager()
+        self.lyrics_preparation = BackgroundPreparationManager(
+            capability_probe=lyrics_capability,
+            runner=run_lyrics_preparation,
+            label="Lyrics",
+        )
+        self.btc_preparation = BackgroundPreparationManager(
+            capability_probe=btc_capability,
+            runner=run_btc_preparation,
+            label="BTC",
+        )
         self.allowed_roots = self._parse_allowed_roots(roots)
         self._resolve_ffmpeg()
         self.plugins_available = True
@@ -490,6 +506,12 @@ class FlaskMP4App:
         self.app.add_url_rule('/prepare_stems', 'prepare_stems', self.prepare_stems, methods=['POST'])
         self.app.add_url_rule('/stem_preparation_status', 'stem_preparation_status', self.stem_preparation_status, methods=['GET'])
         self.app.add_url_rule('/refresh_stems', 'refresh_stems', self.refresh_stems, methods=['POST'])
+        self.app.add_url_rule('/prepare_lyrics', 'prepare_lyrics', self.prepare_lyrics, methods=['POST'])
+        self.app.add_url_rule('/lyrics_preparation_status', 'lyrics_preparation_status', self.lyrics_preparation_status, methods=['GET'])
+        self.app.add_url_rule('/refresh_lyrics', 'refresh_lyrics', self.refresh_lyrics, methods=['POST'])
+        self.app.add_url_rule('/prepare_btc', 'prepare_btc', self.prepare_btc, methods=['POST'])
+        self.app.add_url_rule('/btc_preparation_status', 'btc_preparation_status', self.btc_preparation_status, methods=['GET'])
+        self.app.add_url_rule('/refresh_btc', 'refresh_btc', self.refresh_btc, methods=['POST'])
         self.app.add_url_rule('/get_song_sheet', 'get_song_sheet', self.get_song_sheet)
         self.app.add_url_rule('/get_callback_output', 'get_callback_output', self.get_callback_output, methods=['GET'])
         self.app.add_url_rule('/set_position', 'set_position', self.set_position, methods=['POST'])
@@ -1227,6 +1249,59 @@ class FlaskMP4App:
             return jsonify(status="unavailable", error=result.get("error", "")), 409
         return jsonify(result)
 
+    def _prepare_current_media(self, manager, ready):
+        """Start one optional producer after validating the active client media."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        state = self._client()
+        with state.lock:
+            media_or_error = self._active_editing_media(state, data)
+            if not isinstance(media_or_error, Path):
+                return media_or_error
+            media = media_or_error
+            if not self.__analysis_is_valid(state.file_repr.get("json")):
+                return jsonify(error="The active file has no valid analysis."), 409
+            if ready(state, media):
+                return jsonify(status="ready")
+        if self._media_is_queued(media):
+            return jsonify(error="The active file has queued analysis work."), 409
+
+        result = manager.start(media)
+        if result["status"] == "accepted":
+            return jsonify(result), 202
+        if result["status"] == "unavailable":
+            return jsonify(status="unavailable", error=result.get("error", "")), 409
+        return jsonify(result)
+
+    @staticmethod
+    def _btc_ready(state, _media):
+        return any(
+            track["id"] == "btc"
+            for track in state.player.analysis_track_state()["available_chord_tracks"]
+        )
+
+    def _lyrics_ready(self, _state, media):
+        sidecar = self._song_sidecar(media)
+        if sidecar is None:
+            return False
+        try:
+            read_chordpro(sidecar)
+        except ChordProSongError:
+            return False
+        return True
+
+    def prepare_lyrics(self):
+        """Start Lyrics generation for this client's active media only."""
+        return self._prepare_current_media(
+            self.lyrics_preparation,
+            self._lyrics_ready,
+        )
+
+    def prepare_btc(self):
+        """Start optional BTC inference for this client's active media only."""
+        return self._prepare_current_media(self.btc_preparation, self._btc_ready)
+
     def stem_preparation_status(self):
         """Return the preparation state for the active client's media."""
         state = self._client()
@@ -1237,6 +1312,29 @@ class FlaskMP4App:
                 return jsonify(state="idle", available=False, cuda=False, message="")
             media = Path(file_repr.get())
         return jsonify(self.stem_preparation.status(media))
+
+    def _current_preparation_status(self, manager, ready):
+        state = self._client()
+        with state.lock:
+            if state.player is None or state.file_repr is None:
+                return jsonify(state="idle", available=False, message="")
+            media = Path(state.file_repr.get())
+            is_ready = ready(state, media)
+        status = manager.status(media)
+        if is_ready:
+            status["state"] = "ready"
+        return jsonify(status)
+
+    def lyrics_preparation_status(self):
+        """Return Lyrics preparation state for this client's active media."""
+        return self._current_preparation_status(
+            self.lyrics_preparation,
+            self._lyrics_ready,
+        )
+
+    def btc_preparation_status(self):
+        """Return BTC preparation state for this client's active media."""
+        return self._current_preparation_status(self.btc_preparation, self._btc_ready)
 
     def refresh_stems(self):
         """Reload the active analysis from disk so newly prepared stems appear.
@@ -1266,6 +1364,44 @@ class FlaskMP4App:
             state.old_grid_mode = None
             stems = state.player.audio_stems_state(include_versions=self.__stem_cache)
         return jsonify({"success": True, "stems": stems})
+
+    def refresh_lyrics(self):
+        """Expose a newly generated sidecar without reloading the application."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        state = self._client()
+        with state.lock:
+            media_or_error = self._active_editing_media(state, data)
+            if not isinstance(media_or_error, Path):
+                return media_or_error
+            available = self._lyrics_ready(state, media_or_error)
+        return jsonify(success=True, song_view_available=available)
+
+    def refresh_btc(self):
+        """Reload analysis tracks so a newly generated BTC track is selectable."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        state = self._client()
+        with state.lock:
+            media_or_error = self._active_editing_media(state, data)
+            if not isinstance(media_or_error, Path):
+                return media_or_error
+            track_state = state.player.analysis_track_state()
+            try:
+                state.player.reload_chord_data(
+                    chord_track_id=track_state["active_chord_track_id"],
+                    rhythm_track_id=track_state["active_rhythm_track_id"],
+                    soft_fallback=True,
+                )
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                return jsonify(error=f"Could not reload BTC data: {error}"), 500
+            state.json_mtime_ns = self._json_mtime_ns(state.file_repr.get("json"))
+            state.old_current_position = None
+            state.old_grid_mode = None
+            refreshed = state.player.analysis_track_state()
+        return jsonify({"success": True, **refreshed})
 
 
     def get_callback_output(self):

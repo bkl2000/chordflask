@@ -139,11 +139,16 @@ The bundle contains only the small, dependency-free `chordflask_demucs`
 producer — no Torch, torchaudio, torchcodec, third-party `demucs`, or model
 weights. If the external Demucs runtime (`~/.venvs/chordflask-demucs`, created
 with `make setup-demucs` from a source checkout) exists and is usable, the
-desktop player (1024 px and wider) shows a compact **Prepare** control for the
-loaded song. CUDA is used when available and CPU otherwise, exactly like the
+desktop player (1024 px and wider) shows **Prepare: Stems** for the loaded
+song. CUDA is used when available and CPU otherwise, exactly like the
 CLI. Preparation runs in the background without interrupting playback. Without
 that external runtime
 the control is simply not offered. Tablet/mobile layouts never show it.
+
+The standalone never shows **Prepare: Lyrics** or **Prepare: BTC**: their
+source producers remain excluded. It can still display an existing `.cho` and
+select an existing `btc` track. If Demucs is also unavailable, the complete
+**Prepare:** group stays hidden.
 
 BTC inference is not available in the standalone. Existing Schema-v3 analysis
 that already contains a `btc` track remains readable and selectable, but the

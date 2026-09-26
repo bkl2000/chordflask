@@ -15,6 +15,7 @@ the CLI. The normal CLI ``auto``/CPU behavior is unchanged.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from pathlib import Path
@@ -100,12 +101,19 @@ def run_local_preparation(media_path: Path) -> int:
     return run(Path(media_path), replace=True, dry_run=False, device="auto")
 
 
-class StemPreparationManager:
-    """Track at most one background Demucs preparation job per process."""
+class BackgroundPreparationManager:
+    """Track at most one background preparation job of one kind per process."""
 
-    def __init__(self, capability_probe=gui_capability, runner=run_local_preparation):
+    def __init__(
+        self,
+        capability_probe=gui_capability,
+        runner=run_local_preparation,
+        *,
+        label="Demucs",
+    ):
         self._capability_probe = capability_probe
         self._runner = runner
+        self._label = label
         self._lock = threading.Lock()
         self._job = None
 
@@ -146,7 +154,7 @@ class StemPreparationManager:
             target=self._run,
             args=(media_path,),
             daemon=True,
-            name="stem-preparation",
+            name=f"{self._label.lower()}-preparation",
         )
         thread.start()
         return {"status": "accepted"}
@@ -155,8 +163,11 @@ class StemPreparationManager:
         try:
             returncode = self._runner(Path(media_path))
             if returncode != 0:
-                raise RuntimeError(f"Demucs preparation failed (exit code {returncode})")
+                raise RuntimeError(
+                    f"{self._label} preparation failed (exit code {returncode})"
+                )
         except Exception as error:  # noqa: BLE001 - background job boundary
+            logging.exception("%s preparation failed for %s", self._label, media_path)
             self._finish(media_path, "error", str(error))
         else:
             self._finish(media_path, "ready", "")
@@ -197,8 +208,13 @@ class StemPreparationManager:
         }
 
 
+class StemPreparationManager(BackgroundPreparationManager):
+    """Backward-compatible name for the existing Demucs manager."""
+
+
 __all__ = [
     "CAPABILITY_TTL_SECONDS",
+    "BackgroundPreparationManager",
     "StemPreparationManager",
     "gui_capability",
     "probe_capability",

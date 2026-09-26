@@ -43,6 +43,13 @@ integrated as the separate `btc` chord track while the existing Chordino and
 rhythm tracks remain available. Open the song and select BTC in the chord-track
 selector to compare it with Chordino or Edited data.
 
+In a source/virtualenv installation, desktop ChordFlask can also offer
+**Prepare: BTC** for the currently loaded song when this runtime is complete.
+The action invokes the same installed one-file analyzer helper in the
+background and refreshes the selector afterward. Directory analysis remains a
+CLI workflow. BTC generation stays excluded from the standalone, which can
+still read an existing `btc` track.
+
 Repeat runs reuse the existing BTC result. Use `--replace` only to regenerate
 that selected analyzer's track:
 

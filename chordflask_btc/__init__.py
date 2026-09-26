@@ -13,3 +13,13 @@ is loaded only by the ``btc-predict-raw`` subprocess in the dedicated BTC venv.
 from __future__ import annotations
 
 __version__ = "0.8.0"
+
+
+def capability() -> dict:
+    """Return the lightweight external-runtime completeness report."""
+    from .runtime import detect_btc_runtime
+
+    return detect_btc_runtime()
+
+
+__all__ = ["capability"]

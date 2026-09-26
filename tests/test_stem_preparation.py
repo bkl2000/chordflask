@@ -625,8 +625,8 @@ def test_prepare_button_and_js_contract():
 
     assert 'id="prepareStemsButton"' in body
     assert 'onclick="prepareStems()"' in body
-    assert ">Prepare</button>" in body
-    assert 'aria-label="Prepare vocal and instrument stems"' in body
+    assert ">Stems</button>" in body
+    assert 'aria-label="Prepare vocal and instrument stems for the current song"' in body
     for name in (
         "function prepareStems()",
         "function refreshStemPreparationState()",
@@ -635,40 +635,38 @@ def test_prepare_button_and_js_contract():
     ):
         assert name in body
 
-    finish = javascript_function(body, "finishStemPreparation")
+    finish = javascript_function(body, "finishPreparation")
     # Completion must reveal the existing controls, never auto-activate them.
     assert "updateStemsAvailability(data.stems);" in finish
     assert "activateStems" not in finish
     assert "toggleStems" not in finish
     assert "video.play" not in finish
 
-    prepare = javascript_function(body, "prepareStems")
-    assert "fetch('/prepare_stems'" in prepare
-    assert "fetch('/stem_preparation_status'" in body
-    assert "fetch('/refresh_stems'" in body
+    prepare = javascript_function(body, "prepareCurrent")
+    assert "fetch(action.startUrl" in prepare
+    assert "statusUrl: '/stem_preparation_status'" in body
+    assert "refreshUrl: '/refresh_stems'" in body
 
 
 def test_prepare_is_desktop_only():
     _, client = make_client()
     body = _index_body(client)
 
-    assert "let desktopStemPrepare = window.matchMedia('(min-width: 1024px)');" in body
+    assert "let desktopPrepare = window.matchMedia('(min-width: 1024px)');" in body
 
-    update = javascript_function(body, "updatePrepareStemsButton")
-    assert "desktopStemPrepare.matches" in update
+    update = javascript_function(body, "updatePrepareButtons")
+    assert "desktopPrepare.matches" in update
 
-    refresh = javascript_function(body, "refreshStemPreparationState")
-    assert "if (!desktopStemPrepare.matches)" in refresh
+    refresh = javascript_function(body, "refreshPreparationState")
+    assert "if (!desktopPrepare.matches)" in refresh
     # The mobile early-return happens before any capability request.
-    assert refresh.index("!desktopStemPrepare.matches") < refresh.index(
-        "fetch('/stem_preparation_status'"
-    )
+    assert refresh.index("!desktopPrepare.matches") < refresh.index("fetch(action.statusUrl")
 
-    prepare = javascript_function(body, "prepareStems")
-    assert "if (!desktopStemPrepare.matches) return;" in prepare
+    prepare = javascript_function(body, "prepareCurrent")
+    assert "if (!desktopPrepare.matches) return;" in prepare
 
     # Leaving desktop cancels polling through the breakpoint listener.
-    assert "desktopStemPrepare.addEventListener('change'" in body
+    assert "desktopPrepare.addEventListener('change'" in body
 
 
 def test_existing_stem_playback_controls_unchanged():

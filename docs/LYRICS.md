@@ -23,6 +23,15 @@ Open the song, then select **Grid | Lyrics**. In a source checkout, use
 `scripts/chordflask-analyze`, `scripts/chordflask-genlyrics`, and
 `scripts/chordflask` instead.
 
+In a source/virtualenv installation, desktop ChordFlask (1024 px and wider)
+also shows **Prepare: Lyrics** for the currently loaded song when the installed
+`chordflask-genlyrics` helper is available. It runs the helper in the
+background with its normal `.lrc` → embedded → LRCLIB defaults and makes the
+new `.cho` available without restarting ChordFlask. Directory generation
+remains a command-line workflow. The standalone can display existing sheets
+but does not contain this producer, and tablet/phone layouts show no Prepare
+control.
+
 The source media and analysis JSON are not modified. Generation writes a
 sidecar beside the media:
 
