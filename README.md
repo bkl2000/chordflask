@@ -22,6 +22,16 @@ Automatic chord recognition is not a perfect transcription, especially with dens
 
 Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro. The normal standalone bundle covers the interactive playback and analysis workflow, while additional preparation tools are available from a source installation through the command-line utilities.
 
+At a glance, ChordFlask lets you:
+
+- browse and play local MP3, MP4, and WebM collections;
+- analyze one song, a browser batch, or an entire directory;
+- follow detected chords and beats during playback;
+- transpose chords, repeat difficult passages with A/B loops, and correct detected chords;
+- add synchronized lyrics from LRC, embedded metadata, or LRCLIB;
+- prepare Demucs stems for karaoke and instrument practice; and
+- export analyses as Markdown, PDF, or ChordPro.
+
 <!-- standalone-download:start -->
 ## Download
 
