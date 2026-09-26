@@ -232,6 +232,12 @@
       display: none;
     }
 
+    .prepare-toolbar-status {
+      display: none;
+      color: #7fc4ff;
+      text-transform: none;
+    }
+
     #reanalyzeButton {
       width: 22px;
       min-width: 22px;
@@ -256,7 +262,8 @@
     }
 
     #editButton,
-    #saveButton {
+    #saveButton,
+    #prepareButton {
       width: auto;
       min-width: 22px;
       height: 20px;
@@ -270,14 +277,16 @@
     }
 
     #editButton:hover:not(:disabled),
-    #saveButton:hover:not(:disabled) {
+    #saveButton:hover:not(:disabled),
+    #prepareButton:hover:not(:disabled) {
       border-color: #9eabb8;
       background: #313944;
       color: #fff;
     }
 
     #editButton:disabled,
-    #saveButton:disabled {
+    #saveButton:disabled,
+    #prepareButton:disabled {
       cursor: default;
       opacity: 0.4;
     }
@@ -1019,6 +1028,15 @@
       text-transform: none;
     }
 
+    .chord-display-controls,
+    .chord-action-row {
+      display: contents;
+    }
+
+    .action-status {
+      display: contents;
+    }
+
     .track-selectors {
       display: flex;
       align-items: center;
@@ -1123,8 +1141,7 @@
       min-width: 0;
     }
 
-    #stemsButton,
-    .prepare-group button {
+    #stemsButton {
       width: auto;
       min-width: 22px;
       height: 20px;
@@ -1137,31 +1154,97 @@
       text-transform: none;
     }
 
-    #stemsButton:hover:not(:disabled),
-    .prepare-group button:hover:not(:disabled) {
+    #stemsButton:hover:not(:disabled) {
       border-color: #9eabb8;
       background: #313944;
       color: #fff;
     }
 
-    .prepare-group button:disabled {
-      opacity: 0.65;
-      cursor: default;
-    }
-
-    /* Prepare actions stay distinct from the STEMS playback/mixing toggle. */
-    .prepare-group button {
-      border-color: #7fc4ff;
-      background: #1767a822;
-    }
-
-    .prepare-group {
+    .prepare-control {
       display: none;
-      align-items: center;
-      gap: 4px;
+      position: relative;
+    }
+
+    .prepare-popover {
+      position: absolute;
+      z-index: 20;
+      top: calc(100% + 4px);
+      right: 0;
+      width: max-content;
+      min-width: 210px;
+      max-width: min(300px, calc(100cqw - 24px));
+      padding: 6px;
+      border: 1px solid #3b4652;
+      border-radius: 5px;
+      background: #1c2128;
+      box-shadow: 0 6px 18px #0008;
+      color: #d0d8e0;
+      text-transform: none;
+    }
+
+    .prepare-popover[hidden] {
+      display: none;
+    }
+
+    .prepare-popover-title {
+      display: block;
+      padding: 2px 6px 6px;
       color: var(--chord-muted);
-      font-size: 12px;
-      white-space: nowrap;
+      font-size: 11px;
+    }
+
+    .prepare-action {
+      display: grid;
+      grid-template-columns: 14px minmax(70px, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      min-height: 28px;
+      padding: 3px 6px;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      text-transform: none;
+    }
+
+    .prepare-action[hidden] {
+      display: none;
+    }
+
+    .prepare-action:hover:not(:disabled),
+    .prepare-action:focus-visible {
+      background: #313944;
+      color: #fff;
+    }
+
+    .prepare-action:disabled {
+      cursor: default;
+      opacity: 0.8;
+    }
+
+    .prepare-check {
+      color: #68c58b;
+      font-weight: 700;
+    }
+
+    .prepare-check[hidden] {
+      visibility: hidden;
+      display: inline;
+    }
+
+    .prepare-state {
+      color: var(--chord-muted);
+      font-size: 11px;
+    }
+
+    .prepare-action.prepare-error .prepare-state {
+      color: #e08b82;
+    }
+
+    .desktop-action-label {
+      display: none;
     }
 
     #stemsButton.stem-on {
@@ -1336,8 +1419,101 @@
 
     /* The 801–1023px tablet layout retains its existing ratio and controls. */
     @media (min-width: 1024px) {
-      .prepare-group:not([hidden]) {
-        display: inline-flex;
+      .chord-tools-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+      }
+
+      .chord-display-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-width: 0;
+        justify-content: flex-start;
+      }
+
+      .track-field:first-child .track-label {
+        display: none;
+      }
+
+      .chord-panel .transpose-control {
+        grid-template-columns: 18px minmax(36px, 40px) 18px;
+        gap: 0;
+        overflow: hidden;
+        border: 1px solid #69727d;
+        border-radius: 3px;
+      }
+
+      .chord-panel .transpose-control button {
+        width: 18px;
+        min-width: 18px;
+        height: 20px;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .chord-panel .transpose-control #semitones {
+        width: 100%;
+        min-width: 0;
+        height: 20px;
+        border-top: 0;
+        border-right: 1px solid #3b4652;
+        border-bottom: 0;
+        border-left: 1px solid #3b4652;
+      }
+
+      .chord-action-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        justify-content: flex-end;
+        width: 100%;
+      }
+
+      .action-status {
+        display: block;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .action-status > span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .chord-actions {
+        flex: 0 0 auto;
+      }
+
+      #reanalyzeButton {
+        width: auto;
+        min-width: 22px;
+        padding: 0 6px;
+        font-size: 12px;
+      }
+
+      .desktop-action-label {
+        display: inline;
+      }
+
+      .compact-action-label {
+        display: none;
+      }
+
+      .prepare-control:not([hidden]) {
+        display: block;
+      }
+
+      .prepare-toolbar-status:not([hidden]) {
+        display: block;
       }
 
       .app,
@@ -1429,6 +1605,19 @@
 
       .chord-light:not(.song-view-active) #queueStatus {
         color: #805900;
+      }
+
+      .chord-light .prepare-popover {
+        border-color: #a5b1bd;
+        background: #fff;
+        box-shadow: 0 6px 18px #0003;
+        color: #20242a;
+      }
+
+      .chord-light .prepare-action:hover:not(:disabled),
+      .chord-light .prepare-action:focus-visible {
+        background: #e7edf3;
+        color: #20242a;
       }
 
       .chord-light:not(.song-view-active) .track-selectors select,
@@ -1900,61 +2089,88 @@
             <span id="fileStatus">No file loaded</span>
           </div>
           <div class="chord-tools-row">
-            <span class="track-selectors" data-grid-only>
-              <span class="track-field">
-                <span class="track-label" hidden>Chord</span>
-                <select id="chordTrackSelect" hidden onchange="switchTrack('chord')"
-                        aria-label="Select chord analysis source"></select>
+            <span class="chord-display-controls">
+              <span class="track-selectors" data-grid-only>
+                <span class="track-field">
+                  <span class="track-label" hidden>Chord</span>
+                  <select id="chordTrackSelect" hidden onchange="switchTrack('chord')"
+                          aria-label="Select chord analysis source"></select>
+                </span>
+                <span class="track-field">
+                  <span class="track-label" hidden>Rhythm</span>
+                  <select id="rhythmTrackSelect" hidden onchange="switchTrack('rhythm')"
+                          aria-label="Select rhythm analysis source"></select>
+                </span>
               </span>
-              <span class="track-field">
-                <span class="track-label" hidden>Rhythm</span>
-                <select id="rhythmTrackSelect" hidden onchange="switchTrack('rhythm')"
-                        aria-label="Select rhythm analysis source"></select>
+              <span class="display-tools">
+                <span class="transpose-control">
+                  <button type="button" onclick="stepSemitones(-1)" aria-label="Transpose down"
+                          title="Transpose down one semitone">-</button>
+                  <input type="number" id="semitones" value="0" oninput="updateSemitones()" />
+                  <button type="button" onclick="stepSemitones(1)" aria-label="Transpose up"
+                          title="Transpose up one semitone">+</button>
+                </span>
+                <button id="repeatDisplayButton" data-grid-only type="button" onclick="toggleRepeatDisplay()"
+                        title="Show every beat" aria-label="Show every beat" aria-pressed="true">Changes</button>
+                <button id="accidentalButton" type="button" onclick="toggleAccidentals()"
+                        title="Use flat chord names" aria-label="Use flat chord names">Flats ♭</button>
               </span>
-            </span>
-            <span class="display-tools">
-              <span class="transpose-control">
-                <button type="button" onclick="stepSemitones(-1)" aria-label="Transpose down"
-                        title="Transpose down one semitone">-</button>
-                <input type="number" id="semitones" value="0" oninput="updateSemitones()" />
-                <button type="button" onclick="stepSemitones(1)" aria-label="Transpose up"
-                        title="Transpose up one semitone">+</button>
-              </span>
-              <button id="repeatDisplayButton" data-grid-only type="button" onclick="toggleRepeatDisplay()"
-                      title="Show every beat" aria-label="Show every beat" aria-pressed="true">Changes</button>
-              <button id="accidentalButton" type="button" onclick="toggleAccidentals()"
-                      title="Use flat chord names" aria-label="Use flat chord names">Flats ♭</button>
-            </span>
-            <select id="chordThemeSelect" aria-label="Chord panel theme" title="Chord panel theme" data-grid-only>
-              <option value="dark" selected>Dark</option>
-              <option value="light">Light</option>
-            </select>
-            <span class="chord-actions">
-              <button id="editButton" data-grid-only type="button" title="Edit detected chords beat by beat"
-                      aria-label="Edit detected chords" hidden disabled>Edit</button>
-              <button id="saveButton" data-grid-only type="button" title="Download the current chord sheet (Markdown, PDF, ChordPro)"
-                      aria-label="Download the current chord sheet (Markdown, PDF, ChordPro)" hidden disabled>Save</button>
-              <span id="queueStatus"></span>
-              <button id="reanalyzeButton" data-grid-only type="button" title="Refresh the automatic Chordino/QM analysis for this file"
-                      aria-label="Refresh the Chordino/QM analysis" hidden disabled>↻</button>
+              <select id="chordThemeSelect" aria-label="Chord panel theme" title="Chord panel theme" data-grid-only>
+                <option value="dark" selected>Dark</option>
+                <option value="light">Light</option>
+              </select>
               <button id="stemsButton" type="button" title="Enable or disable stem playback"
                       aria-label="Enable or disable stem playback" aria-pressed="false" hidden
                       onclick="toggleStems()">STEMS</button>
-              <span id="prepareGroup" class="prepare-group" hidden
-                    aria-label="Prepare current song">
-                <span>Prepare:</span>
-                <button id="prepareLyricsButton" type="button" hidden
-                        title="Prepare lyrics for the current song"
-                        aria-label="Prepare lyrics for the current song"
-                        onclick="prepareLyrics()">Lyrics</button>
-                <button id="prepareBtcButton" type="button" hidden
-                        title="Prepare BTC analysis for the current song"
-                        aria-label="Prepare BTC analysis for the current song"
-                        onclick="prepareBtc()">BTC</button>
-                <button id="prepareStemsButton" type="button" hidden
-                        title="Prepare vocal and instrument stems for the current song"
-                        aria-label="Prepare vocal and instrument stems for the current song"
-                        onclick="prepareStems()">Stems</button>
+            </span>
+            <span class="chord-action-row">
+              <span class="action-status">
+                <span id="prepareToolbarStatus" class="prepare-toolbar-status" hidden></span>
+                <span id="queueStatus"></span>
+              </span>
+              <span class="chord-actions">
+                <button id="editButton" data-grid-only type="button" title="Edit detected chords beat by beat"
+                        aria-label="Edit detected chords" hidden disabled>Edit</button>
+                <button id="saveButton" data-grid-only type="button" title="Export the current chord sheet (Markdown, PDF, ChordPro)"
+                        aria-label="Export the current chord sheet (Markdown, PDF, ChordPro)" hidden disabled>
+                  <span class="desktop-action-label">Export</span><span class="compact-action-label">Save</span>
+                </button>
+                <button id="reanalyzeButton" data-grid-only type="button" title="Reanalyze this file with automatic Chordino/QM analysis"
+                        aria-label="Reanalyze with Chordino/QM" hidden disabled>
+                  <span class="desktop-action-label">Reanalyze</span><span class="compact-action-label" aria-hidden="true">↻</span>
+                </button>
+                <span id="prepareGroup" class="prepare-control" hidden>
+                  <button id="prepareButton" type="button" aria-expanded="false"
+                          aria-controls="prepareMenu" title="Prepare data for the current song"
+                          aria-label="Prepare data for the current song">
+                    Prepare <span aria-hidden="true">▾</span>
+                  </button>
+                  <span id="prepareMenu" class="prepare-popover" role="menu"
+                        aria-label="Prepare current song" hidden>
+                    <span class="prepare-popover-title">Prepare current song</span>
+                    <button id="prepareLyricsButton" class="prepare-action" role="menuitem"
+                            type="button" hidden title="Prepare lyrics for the current song"
+                            aria-label="Lyrics: Prepare" onclick="prepareLyrics()">
+                      <span class="prepare-check" aria-hidden="true" hidden>✓</span>
+                      <span class="prepare-name">Lyrics</span>
+                      <span id="prepareLyricsState" class="prepare-state">Prepare</span>
+                    </button>
+                    <button id="prepareBtcButton" class="prepare-action" role="menuitem"
+                            type="button" hidden title="Prepare BTC analysis for the current song"
+                            aria-label="BTC: Prepare" onclick="prepareBtc()">
+                      <span class="prepare-check" aria-hidden="true" hidden>✓</span>
+                      <span class="prepare-name">BTC</span>
+                      <span id="prepareBtcState" class="prepare-state">Prepare</span>
+                    </button>
+                    <button id="prepareStemsButton" class="prepare-action" role="menuitem"
+                            type="button" hidden title="Prepare vocal and instrument stems for the current song"
+                            aria-label="Stems: Prepare" onclick="prepareStems()">
+                      <span class="prepare-check" aria-hidden="true" hidden>✓</span>
+                      <span class="prepare-name">Stems</span>
+                      <span id="prepareStemsState" class="prepare-state">Prepare</span>
+                    </button>
+                  </span>
+                </span>
               </span>
             </span>
           </div>
@@ -2275,7 +2491,12 @@
     let stemMixerLabel = document.getElementById('stemMixerLabel');
     let stemMixerValue = document.getElementById('stemMixerValue');
     let stemMixerSlider = document.getElementById('stemMixerSlider');
+    let chordDisplayControls = document.querySelector('.chord-display-controls');
+    let chordActions = document.querySelector('.chord-actions');
     let prepareGroup = document.getElementById('prepareGroup');
+    let prepareButton = document.getElementById('prepareButton');
+    let prepareMenu = document.getElementById('prepareMenu');
+    let prepareToolbarStatus = document.getElementById('prepareToolbarStatus');
     let prepareLyricsButton = document.getElementById('prepareLyricsButton');
     let prepareBtcButton = document.getElementById('prepareBtcButton');
     let prepareStemsButton = document.getElementById('prepareStemsButton');
@@ -2385,21 +2606,29 @@
     let stemWasMasterMuted = false;
     let stemsActivationToken = 0;
     let stemMixerStem = null;
+    let prepareTransientStatus = '';
+    let prepareStatusTimer = null;
     const prepareActions = {
       lyrics: {
         label: 'Lyrics', button: prepareLyricsButton,
+        check: prepareLyricsButton.querySelector('.prepare-check'),
+        status: document.getElementById('prepareLyricsState'),
         startUrl: '/prepare_lyrics', statusUrl: '/lyrics_preparation_status',
         refreshUrl: '/refresh_lyrics', available: false, state: 'idle',
         pollTimer: null, requestInFlight: false,
       },
       btc: {
         label: 'BTC', button: prepareBtcButton,
+        check: prepareBtcButton.querySelector('.prepare-check'),
+        status: document.getElementById('prepareBtcState'),
         startUrl: '/prepare_btc', statusUrl: '/btc_preparation_status',
         refreshUrl: '/refresh_btc', available: false, state: 'idle',
         pollTimer: null, requestInFlight: false,
       },
       stems: {
         label: 'Stems', button: prepareStemsButton,
+        check: prepareStemsButton.querySelector('.prepare-check'),
+        status: document.getElementById('prepareStemsState'),
         startUrl: '/prepare_stems', statusUrl: '/stem_preparation_status',
         refreshUrl: '/refresh_stems', available: false, state: 'idle',
         pollTimer: null, requestInFlight: false,
@@ -3515,6 +3744,8 @@
 
     function resetStemsForSongChange() {
       teardownStems();
+      setPrepareMenuOpen(false);
+      showPrepareToolbarStatus('', 0);
       resetStemVolumes();
       stemsAvailable = false;
       for (const action of Object.values(prepareActions)) {
@@ -3545,6 +3776,56 @@
       updatePrepareButtons();
     }
 
+    function setPrepareMenuOpen(open, returnFocus = false) {
+      const shouldOpen = Boolean(
+        open && desktopPrepare.matches && !prepareGroup.hidden
+      );
+      prepareMenu.hidden = !shouldOpen;
+      prepareButton.setAttribute('aria-expanded', String(shouldOpen));
+      if (!shouldOpen && returnFocus) prepareButton.focus();
+    }
+
+    function togglePrepareMenu() {
+      setPrepareMenuOpen(prepareMenu.hidden);
+    }
+
+    function placeStemsControl() {
+      if (desktopPrepare.matches) {
+        chordDisplayControls.appendChild(stemsButton);
+      } else {
+        chordActions.insertBefore(stemsButton, prepareGroup);
+      }
+    }
+
+    function updatePrepareToolbarStatus() {
+      const running = Object.values(prepareActions).find(
+        action => action.state === 'running'
+      );
+      const message = desktopPrepare.matches
+        ? (running
+          ? `Preparing ${running.label} — ${loadedFileName}`
+          : prepareTransientStatus)
+        : '';
+      prepareToolbarStatus.textContent = message;
+      prepareToolbarStatus.title = message;
+      prepareToolbarStatus.hidden = !message;
+      queueStatus.hidden = Boolean(message);
+    }
+
+    function showPrepareToolbarStatus(message, timeoutMs = 5000) {
+      prepareTransientStatus = message;
+      if (prepareStatusTimer) clearTimeout(prepareStatusTimer);
+      prepareStatusTimer = null;
+      if (message && timeoutMs > 0) {
+        prepareStatusTimer = setTimeout(() => {
+          prepareTransientStatus = '';
+          prepareStatusTimer = null;
+          updatePrepareToolbarStatus();
+        }, timeoutMs);
+      }
+      updatePrepareToolbarStatus();
+    }
+
     function updatePrepareButtons() {
       let anyVisible = false;
       for (const action of Object.values(prepareActions)) {
@@ -3552,15 +3833,19 @@
           && Boolean(loadedMediaPath) && loadedAnalysisValid && action.available;
         action.button.hidden = !visible;
         anyVisible = anyVisible || visible;
-        action.button.textContent = action.state === 'running'
-          ? `${action.label}…`
-          : action.state === 'ready'
-            ? `${action.label} Ready`
-            : action.state === 'error' ? `${action.label} Failed` : action.label;
+        const status = action.state === 'running' ? 'Preparing…'
+          : action.state === 'ready' ? 'Ready'
+            : action.state === 'error' ? 'Failed / Retry' : 'Prepare';
+        action.status.textContent = status;
+        action.check.hidden = action.state !== 'ready';
+        action.button.classList.toggle('prepare-error', action.state === 'error');
+        action.button.setAttribute('aria-label', `${action.label}: ${status}`);
         action.button.disabled = action.state === 'running'
           || action.state === 'ready' || action.requestInFlight;
       }
       prepareGroup.hidden = !anyVisible;
+      if (!anyVisible || !desktopPrepare.matches) setPrepareMenuOpen(false);
+      updatePrepareToolbarStatus();
     }
 
     function updatePrepareStemsButton() {
@@ -3613,7 +3898,7 @@
         }
         if (action.state === 'error') {
           console.error(`${action.label} preparation failed:`, data.message || 'unknown error');
-          fileStatus.innerText = `${action.label} preparation failed`;
+          showPrepareToolbarStatus(`${action.label} preparation failed`);
         }
         updatePrepareButtons();
       })
@@ -3646,7 +3931,7 @@
       .then(({ ok, data }) => {
         if (!ok) {
           console.error(`${action.label} preparation rejected:`, data.error || data.status);
-          fileStatus.innerText = `${action.label} preparation unavailable`;
+          showPrepareToolbarStatus(`${action.label} preparation unavailable`);
           action.state = data.status === 'unavailable' ? 'idle' : 'error';
           return;
         }
@@ -3661,11 +3946,11 @@
           schedulePreparationPoll(name);
           return;
         }
-        fileStatus.innerText = `Another ${action.label} preparation is running`;
+        showPrepareToolbarStatus(`Another ${action.label} preparation is running`);
       })
       .catch(error => {
         console.error(`Error preparing ${action.label}:`, error);
-        fileStatus.innerText = `${action.label} preparation failed`;
+        showPrepareToolbarStatus(`${action.label} preparation failed`);
         action.state = 'error';
       })
       .finally(() => {
@@ -3706,14 +3991,15 @@
             ? (data.available_chord_tracks || []).some(track => track.id === 'btc')
             : stemsAvailable;
         action.state = usable ? 'ready' : 'error';
-        fileStatus.innerText = usable
-          ? (loadedFileName || `${action.label} ready`)
-          : `${action.label} preparation did not produce a usable result`;
+        showPrepareToolbarStatus(usable
+          ? `${action.label} ready`
+          : `${action.label} preparation did not produce a usable result`
+        );
       })
       .catch(error => {
         console.error(`Error refreshing ${action.label}:`, error);
         action.state = 'error';
-        fileStatus.innerText = `${action.label} preparation failed`;
+        showPrepareToolbarStatus(`${action.label} preparation failed`);
       })
       .finally(() => {
         updatePrepareButtons();
@@ -4792,13 +5078,19 @@
     setInterval(stemDriftCheck, STEM_DRIFT_INTERVAL_MS);
 
     document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !prepareMenu.hidden) {
+        setPrepareMenuOpen(false, true);
+      }
       if (event.key === 'Escape' && stemMixerStem) {
         closeStemMixer();
       }
     });
     document.addEventListener('click', event => {
-      if (!stemMixerStem) return;
       const target = event.target instanceof Element ? event.target : null;
+      if (!target || !target.closest('.prepare-control')) {
+        setPrepareMenuOpen(false);
+      }
+      if (!stemMixerStem) return;
       if (target && (target.closest('.stem-mixer') || target.closest('.stem-level'))) return;
       closeStemMixer();
     });
@@ -5024,10 +5316,13 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       placePlaybackNavigation();
+      placeStemsControl();
       navigationInPlaybackBar.addEventListener('change', placePlaybackNavigation);
       mobilePlaybackControls.addEventListener('change', placePlaybackNavigation);
       desktopPrepare.addEventListener('change', () => {
         // Entering desktop may reveal Prepare; leaving it must cancel polling.
+        placeStemsControl();
+        if (!desktopPrepare.matches) setPrepareMenuOpen(false);
         refreshPreparationStates();
       });
       const savedDirname = localStorage.getItem(storageKeys.dirname) || '';
@@ -5060,6 +5355,7 @@
       desktopSongView.addEventListener('change', handleSongViewportChange);
       resetSongView(false);
       reanalyzeButton.addEventListener('click', reanalyzeCurrentFile);
+      prepareButton.addEventListener('click', togglePrepareMenu);
       updateReanalyzeButton();
       editButton.addEventListener('click', toggleEditMode);
       saveButton.addEventListener('click', downloadChords);

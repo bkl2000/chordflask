@@ -575,7 +575,7 @@ def _index_body(client):
     return client.get("/").get_data(as_text=True)
 
 
-def test_theme_selector_moved_to_second_row():
+def test_theme_selector_stays_in_display_row():
     _, client = make_client()
     body = _index_body(client)
 
@@ -586,8 +586,9 @@ def test_theme_selector_moved_to_second_row():
 
     assert 'id="chordThemeSelect"' not in title_row
     assert 'id="chordThemeSelect"' in tools_row
-    # Theme selector stays immediately before the Edit/Save actions.
-    assert tools_row.index('id="chordThemeSelect"') < tools_row.index('class="chord-actions"')
+    display_end = tools_row.index('class="chord-action-row"')
+    assert tools_row.index('id="chordThemeSelect"') < display_end
+    assert tools_row.index('id="editButton"') > display_end
 
 
 def test_theme_selector_is_available_on_desktop_and_phone_css():
@@ -625,8 +626,8 @@ def test_prepare_button_and_js_contract():
 
     assert 'id="prepareStemsButton"' in body
     assert 'onclick="prepareStems()"' in body
-    assert ">Stems</button>" in body
-    assert 'aria-label="Prepare vocal and instrument stems for the current song"' in body
+    assert '<span class="prepare-name">Stems</span>' in body
+    assert 'title="Prepare vocal and instrument stems for the current song"' in body
     for name in (
         "function prepareStems()",
         "function refreshStemPreparationState()",
@@ -667,6 +668,7 @@ def test_prepare_is_desktop_only():
 
     # Leaving desktop cancels polling through the breakpoint listener.
     assert "desktopPrepare.addEventListener('change'" in body
+    assert "if (!desktopPrepare.matches) setPrepareMenuOpen(false);" in body
 
 
 def test_existing_stem_playback_controls_unchanged():
@@ -678,3 +680,7 @@ def test_existing_stem_playback_controls_unchanged():
     assert "function stemDriftCheck()" in body
     assert "function toggleStem(name)" in body
     assert body.count('id="stemMixerSlider"') == 1
+    prepare_menu = body[
+        body.index('id="prepareMenu"'):body.index('id="stemTogglesRow"')
+    ]
+    assert 'id="stemsButton"' not in prepare_menu

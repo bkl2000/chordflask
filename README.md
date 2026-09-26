@@ -22,10 +22,11 @@ Automatic chord recognition is not a perfect transcription, especially with dens
 
 Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro. The normal standalone bundle covers the interactive playback and analysis workflow, while additional preparation tools are available from a source installation through the command-line utilities.
 
-On desktop (1024 px and wider), the compact **Prepare: Lyrics / BTC / Stems**
-group can run the available optional producers for the currently loaded song.
-Only installed capabilities are shown. Tablet and phone layouts have no
-Prepare controls; directory and batch preparation remains a CLI workflow.
+On desktop (1024 px and wider), a compact **Prepare** menu can run the
+available optional producers for the currently loaded song. Depending on the
+installation, it can prepare Lyrics, BTC analysis, or Demucs stems. Only
+installed capabilities are shown. Tablet and phone layouts have no Prepare
+controls; directory and batch preparation remains a CLI workflow.
 
 At a glance, ChordFlask lets you:
 
@@ -236,7 +237,7 @@ chordflask-export --format chordpro song.mp3
 - PDF is a printable A4 layout.
 - ChordPro is a reusable chord-grid file without lyrics.
 
-The browser **Save** control downloads the current display as a ZIP. Export
+The browser **Export** control downloads the current display as a ZIP. Export
 options, track selection, naming, and storage locations are documented in
 [docs/ANALYSIS.md](docs/ANALYSIS.md#command-line-export).
 
@@ -311,10 +312,10 @@ acknowledgement, runtime matrix, Python/PyTorch/CUDA details, limitations, and
 standalone status are in the
 [BTC runtime documentation](chordflask_btc/model/README.md).
 
-In a source installation, the desktop **Prepare: BTC** action runs this same
-one-file helper in the background when the isolated BTC runtime is complete.
+In a source installation, the desktop **Prepare** menu can run this same
+one-file BTC helper in the background when the isolated BTC runtime is complete.
 It reloads the track list on completion; Chordino and Edited data remain
-separate. The action is not present in the standalone.
+separate. BTC preparation is not offered in the standalone.
 
 ## LAN, phone, and tablet use
 

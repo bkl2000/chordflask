@@ -543,18 +543,21 @@ def test_index_contains_accessible_file_sorting_controls():
     assert "chordifier.sortDirection" in body
 
 
-def test_index_contains_small_accessible_reanalysis_control():
+def test_index_contains_clear_desktop_reanalysis_control():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="reanalyzeButton"' in body
-    assert 'title="Refresh the automatic Chordino/QM analysis for this file"' in body
-    assert 'aria-label="Refresh the Chordino/QM analysis"' in body
-    assert "hidden disabled>↻</button>" in body
+    assert 'title="Reanalyze this file with automatic Chordino/QM analysis"' in body
+    assert 'aria-label="Reanalyze with Chordino/QM"' in body
+    assert '<span class="desktop-action-label">Reanalyze</span>' in body
+    assert '<span class="compact-action-label" aria-hidden="true">↻</span>' in body
     assert "#reanalyzeButton" in body
     assert "width: 22px" in body
     assert "height: 20px" in body
+    assert ".desktop-action-label {\n        display: inline;" in body
+    assert ".compact-action-label {\n        display: none;" in body
     assert "window.confirm" in body
     assert "queuedAnalysisPaths.has(loadedMediaPath)" in body
     assert "loadedAnalysisValid" in body
@@ -2961,9 +2964,66 @@ def test_index_groups_song_playback_and_analysis_zones():
     assert 'class="playback-controls"' in body
     assert 'id="playPauseButton"' in body
     assert 'class="chord-tools-row"' in body
+    assert 'class="chord-display-controls"' in body
+    assert 'class="chord-action-row"' in body
     assert 'class="display-tools"' in body
     # Transpose now lives beside the chord display.
     assert 'id="semitones"' in body
+
+
+def test_desktop_chord_header_separates_display_controls_and_actions():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    tools = body[
+        body.index('<div class="chord-tools-row">'):
+        body.index('<div class="stem-toggles"')
+    ]
+    display = tools[
+        tools.index('<span class="chord-display-controls">'):
+        tools.index('<span class="chord-action-row">')
+    ]
+    actions = tools[tools.index('<span class="chord-action-row">'):]
+
+    for control_id in (
+        "chordTrackSelect", "rhythmTrackSelect", "semitones",
+        "repeatDisplayButton", "accidentalButton", "chordThemeSelect",
+        "stemsButton",
+    ):
+        assert f'id="{control_id}"' in display
+        assert f'id="{control_id}"' not in actions
+    for control_id in (
+        "editButton", "saveButton", "reanalyzeButton", "prepareButton",
+    ):
+        assert f'id="{control_id}"' in actions
+    assert 'id="stemsButton"' not in actions
+    assert actions.index('id="queueStatus"') < actions.index('class="chord-actions"')
+    assert '<span class="desktop-action-label">Export</span>' in actions
+
+
+def test_desktop_chord_header_compacts_track_and_transpose_controls():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    desktop = body[body.index("@media (min-width: 1024px) {"):]
+
+    assert 'aria-label="Select chord analysis source"' in body
+    assert ".track-field:first-child .track-label {\n        display: none;" in desktop
+    assert "grid-template-columns: 18px minmax(36px, 40px) 18px;" in desktop
+    assert ".chord-panel .transpose-control #semitones" in desktop
+    assert "min-width: 0;" in desktop
+
+
+def test_stems_returns_to_existing_action_position_below_desktop():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    placement = javascript_function(body, "placeStemsControl")
+
+    assert "if (desktopPrepare.matches)" in placement
+    assert "chordDisplayControls.appendChild(stemsButton);" in placement
+    assert "chordActions.insertBefore(stemsButton, prepareGroup);" in placement
+    assert "desktopPrepare.addEventListener('change'" in body
 
 
 def test_index_contains_mobile_menu_markup_and_rules():

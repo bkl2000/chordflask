@@ -683,13 +683,14 @@ def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path
 # ── browser contract ─────────────────────────────────────────────────
 
 
-def test_index_contains_save_control_and_download_contract():
+def test_index_contains_export_control_and_download_contract():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="saveButton"' in body
-    assert 'aria-label="Download the current chord sheet (Markdown, PDF, ChordPro)"' in body
+    assert 'aria-label="Export the current chord sheet (Markdown, PDF, ChordPro)"' in body
+    assert '<span class="desktop-action-label">Export</span>' in body
     assert "'chords.zip'" in body
     assert "#saveButton" in body
     assert "fetch('/download_chords'" in body

@@ -284,17 +284,73 @@ def test_prepare_requires_valid_analysis_and_reports_background_failure(tmp_path
     assert "exit code 1" in status["message"]
 
 
-def test_prepare_group_is_compact_capability_driven_and_desktop_only():
+def test_prepare_menu_is_compact_capability_driven_and_desktop_only():
     _, client = _client()
     body = client.get("/").get_data(as_text=True)
-    assert 'id="prepareGroup" class="prepare-group" hidden' in body
+    assert 'id="prepareGroup" class="prepare-control" hidden' in body
+    assert body.count('id="prepareButton"') == 1
+    assert 'aria-expanded="false"' in body
+    assert 'aria-controls="prepareMenu"' in body
+    assert 'id="prepareMenu" class="prepare-popover" role="menu"' in body
+    assert "Prepare current song" in body
     for action in ("Lyrics", "Btc", "Stems"):
         assert f'id="prepare{action}Button"' in body
     assert "action.button.hidden = !visible" in body
     assert "prepareGroup.hidden = !anyVisible" in body
     assert "let desktopPrepare = window.matchMedia('(min-width: 1024px)');" in body
-    assert ".prepare-group {\n      display: none;" in body
+    assert ".prepare-control {\n      display: none;" in body
     assert "@media (min-width: 1024px)" in body
-    assert ".prepare-group:not([hidden])" in body
+    assert ".prepare-control:not([hidden])" in body
     assert 'id="stemsButton"' in body
     assert 'onclick="toggleStems()">STEMS</button>' in body
+
+
+def test_prepare_menu_renders_states_without_relabeling_trigger():
+    _, client = _client()
+    body = client.get("/").get_data(as_text=True)
+    update = body[
+        body.index("    function updatePrepareButtons()"):
+        body.index("    function updatePrepareStemsButton()")
+    ]
+
+    assert "action.state === 'running' ? 'Preparing…'" in update
+    assert "action.state === 'ready' ? 'Ready'" in update
+    assert "action.state === 'error' ? 'Failed / Retry'" in update
+    assert "action.check.hidden = action.state !== 'ready'" in update
+    assert "action.button.disabled = action.state === 'running'" in update
+    assert "|| action.state === 'ready'" in update
+    assert "prepareButton.textContent" not in update
+    assert body.count("Prepare <span aria-hidden=\"true\">▾</span>") == 1
+
+
+def test_prepare_progress_uses_ellipsized_action_status_area():
+    _, client = _client()
+    body = client.get("/").get_data(as_text=True)
+    updater = body[
+        body.index("    function updatePrepareToolbarStatus()"):
+        body.index("    function showPrepareToolbarStatus(")
+    ]
+    desktop = body[body.index("@media (min-width: 1024px) {"):]
+
+    assert 'id="prepareToolbarStatus" class="prepare-toolbar-status" hidden' in body
+    assert "`Preparing ${running.label} — ${loadedFileName}`" in updater
+    assert "queueStatus.hidden = Boolean(message);" in updater
+    assert "prepareButton.textContent" not in updater
+    assert ".action-status {" in desktop
+    assert "flex: 1 1 auto;" in desktop
+    assert "min-width: 0;" in desktop
+    assert "overflow: hidden;" in desktop
+    assert "text-overflow: ellipsis;" in desktop
+    assert "white-space: nowrap;" in desktop
+
+
+def test_prepare_menu_closes_on_escape_outside_click_and_narrow_viewport():
+    _, client = _client()
+    body = client.get("/").get_data(as_text=True)
+
+    assert "function togglePrepareMenu()" in body
+    assert "prepareButton.addEventListener('click', togglePrepareMenu);" in body
+    assert "event.key === 'Escape' && !prepareMenu.hidden" in body
+    assert "!target.closest('.prepare-control')" in body
+    assert "setPrepareMenuOpen(false, true);" in body
+    assert "if (!desktopPrepare.matches) setPrepareMenuOpen(false);" in body
