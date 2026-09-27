@@ -4948,7 +4948,7 @@
     let playbackSyncGeneration = 0;
     const positionSyncIntervalMs = 90;
     const positionSyncTimeoutMs = 5000;
-    const pollingLeadSeconds = positionSyncIntervalMs / 2000;
+    const pollingLeadSeconds = positionSyncIntervalMs / 2000 + 0.002;
     let estimatedRoundTripSeconds = 0;
 
     function isNarrowViewport() {
