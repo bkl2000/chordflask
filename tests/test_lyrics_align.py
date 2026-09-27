@@ -8,6 +8,16 @@ from chordflask_lyrics.align import (
 from chordflask_lyrics.lrclib import LyricsRecord, TimedLyricLine
 
 
+def marker_offsets(row):
+    offset = 0
+    markers = []
+    for run in row.runs:
+        if run.chord:
+            markers.append((run.chord, offset, run.beat_index))
+        offset += len(run.lyric)
+    return markers
+
+
 def test_plain_lyrics_are_distributed_over_existing_beat_times():
     assert time_plain_lyrics("first\n\nsecond", [0.0, 1.0, 2.0, 3.0]) == (
         TimedLyricLine(0.0, "first"),
@@ -40,13 +50,89 @@ def test_uneven_chord_times_remain_uneven_inside_lyric_interval():
         ("G", 1.0),
         ("Am", 8.7),
     ]
-    lyric_offset = 0
-    chord_offsets = []
-    for run in first_row:
-        if run.chord:
-            chord_offsets.append(lyric_offset)
-        lyric_offset += len(run.lyric)
-    assert chord_offsets[:3] == [0, 0, 20]
+    # With no usable word boundaries, physical timing supplies distinct,
+    # proportional text-unit positions instead of collapsing at both ends.
+    assert [offset for _chord, offset, _beat in marker_offsets(rows[0])[:3]] == [
+        0, 2, 17,
+    ]
+
+
+def test_no_space_text_distributes_markers_proportionally():
+    text = "abcdefghijklmnopqrst"
+    rows = align_lyrics(
+        (TimedLyricLine(0, text), TimedLyricLine(10, "next")),
+        beat_times=[0.0, 2.0, 5.0, 8.0, 10.0],
+        beat_numbers=[1, 2, 3, 4, 1],
+        meter=4,
+        beat_chords=["C", "G", "Am", "F", "C"],
+    )
+
+    offsets = [offset for _chord, offset, _beat in marker_offsets(rows[0])]
+    assert offsets == [0, 4, 10, 16]
+    assert len(set(offsets)) == 4
+
+
+def test_thai_markers_use_general_no_space_fallback_and_keep_romanization():
+    text = "ขนาดแค่คิดหัวใจยังสั่น จริงๆ นะเธอ"
+    beat_times = [float(index) for index in range(301)]
+    beat_chords = ["N"] * len(beat_times)
+    for start, end, chord in (
+        (207, 208, "Em"),
+        (208, 212, "Am7"),
+        (212, 216, "B"),
+        (216, 218, "E"),
+        (218, 220, "E6"),
+        (220, 301, "Em"),
+    ):
+        beat_chords[start:end] = [chord] * (end - start)
+    lines = (TimedLyricLine(207, text), TimedLyricLine(300, "next"))
+    rows = align_lyrics(
+        lines,
+        beat_times=beat_times,
+        beat_numbers=[index % 4 + 1 for index in range(len(beat_times))],
+        meter=4,
+        beat_chords=beat_chords,
+    )
+
+    markers = marker_offsets(rows[0])
+    assert [(chord, beat) for chord, _offset, beat in markers] == [
+        ("Em", 207), ("Am7", 208), ("B", 212),
+        ("E", 216), ("E6", 218), ("Em", 220),
+    ]
+    assert [offset for _chord, offset, _beat in markers] == [0, 2, 10, 21, 26, 29]
+
+    content = render_chordpro(
+        LyricsRecord(1, "แม้ว่า", "Sek Loso", None, 301, lines),
+        rows,
+        romanize=lambda value: (
+            "khanat khae khit huachai yang san chingo na thoe"
+            if value == text else None
+        ),
+    )
+    block = next(
+        block for block in parse_chordpro(content)["blocks"]
+        if block["type"] == "line"
+    )
+    assert block["romanized"] == (
+        "khanat khae khit huachai yang san chingo na thoe"
+    )
+    assert "".join(run["lyric"] for run in block["runs"]) == text
+
+
+def test_proportional_fallback_does_not_split_combining_sequences():
+    text = "a\u0301b\u0327c\u0301d"
+    rows = align_lyrics(
+        (TimedLyricLine(0, text), TimedLyricLine(8, "next")),
+        beat_times=[float(index) for index in range(9)],
+        beat_numbers=[index % 4 + 1 for index in range(9)],
+        meter=4,
+        beat_chords=["C", "G", "Am", "F", "C", "G", "Am", "F", "C"],
+    )
+
+    offsets = [offset for _chord, offset, _beat in marker_offsets(rows[0])]
+    assert set(offsets) <= {0, 2, 4, 6, 7}
+    assert not set(offsets) & {1, 3, 5}
+    assert "".join(run.lyric for run in rows[0].runs) == text
 
 
 def test_chord_is_not_moved_before_its_analyzed_beat():
@@ -414,7 +500,7 @@ def test_interpolated_markers_snap_to_word_boundaries():
             marker_offsets.append(offset)
         offset += len(run.lyric)
     text = lines[0].text
-    assert marker_offsets
+    assert marker_offsets == [0, 5, 11, 12]
     assert all(
         position in {0, len(text)}
         or text[position - 1].isspace()

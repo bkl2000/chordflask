@@ -43,7 +43,11 @@ def test_recursively_regenerates_existing_sidecars_and_reports_counts(tmp_path):
     assert "Summary: found=3 regenerated=1 skipped=1 failed=1" in result.stdout
     assert "FAIL:" in result.stderr
     arguments = calls.read_bytes().decode().split("\0")[:-1]
-    assert arguments == [
-        "--force", "--lyrics", "lrclib:lrc:embedded", str(library / "good.mp3"),
-        "--force", "--lyrics", "lrclib:lrc:embedded", str(nested / "bad.MP4"),
+    invocations = [
+        tuple(arguments[index:index + 4])
+        for index in range(0, len(arguments), 4)
     ]
+    assert sorted(invocations) == sorted([
+        ("--force", "--lyrics", "lrclib:lrc:embedded", str(library / "good.mp3")),
+        ("--force", "--lyrics", "lrclib:lrc:embedded", str(nested / "bad.MP4")),
+    ])

@@ -2715,13 +2715,24 @@ def test_song_renderer_keeps_each_chord_and_lyric_line_in_one_nonwrapping_unit()
         r"\.song-line-pair\s*\{(?P<rule>[^}]*)\}", body
     )
     run_match = re.search(r"\.song-run\s*\{(?P<rule>[^}]*)\}", body)
+    chord_match = re.search(
+        r"\.song-chord:not\(:empty\)\s*\{(?P<rule>[^}]*)\}", body
+    )
     line_match = re.search(r"\.song-line\s*\{(?P<rule>[^}]*)\}", body)
-    assert pair_match and run_match and line_match
+    assert pair_match and run_match and chord_match and line_match
     assert "display: flex;" in pair_match.group("rule")
     assert "flex-wrap: nowrap;" in pair_match.group("rule")
+    # Thai can place several chord markers at one text boundary. Those runs
+    # have no lyric height, so top alignment is what keeps every chord at the
+    # chord level beside a taller chord-plus-native-text run.
+    assert "align-items: flex-start;" in pair_match.group("rule")
+    assert "align-items: flex-end;" not in pair_match.group("rule")
     assert "width: max-content;" in pair_match.group("rule")
     assert "flex: 0 0 auto;" in run_match.group("rule")
     assert "white-space: pre;" in run_match.group("rule")
+    # Chord-row sizing supplies a small visual gap without changing chord text
+    # or inserting generated ChordPro whitespace.
+    assert "padding-right: 0.35em;" in chord_match.group("rule")
     assert "break-inside: avoid;" in line_match.group("rule")
 
     # Every parsed line owns exactly one pair. All chord/lyric run columns go
@@ -2737,6 +2748,24 @@ def test_song_renderer_keeps_each_chord_and_lyric_line_in_one_nonwrapping_unit()
     assert renderer.index("if (block.romanized)") < renderer.index(
         "fragment.appendChild(line)"
     )
+
+
+def test_song_renderer_leaves_chord_only_lines_compact():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    renderer = javascript_function(body, "renderSongSheet")
+
+    lyric_match = re.search(r"\.song-lyric\s*\{(?P<rule>[^}]*)\}", body)
+    romanized_match = re.search(
+        r"\.song-romanized\s*\{(?P<rule>[^}]*)\}", body
+    )
+    assert lyric_match and romanized_match
+    # An empty lyric span has no reserved height, and romanization is emitted
+    # only when supplied. Thus [C][G][Am][F] remains one compact chord row.
+    assert "min-height" not in lyric_match.group("rule")
+    assert "height" not in lyric_match.group("rule")
+    assert "if (block.romanized)" in renderer
+    assert "appendSongText(line, 'song-romanized', block.romanized)" in renderer
 
 
 def test_song_mode_switch_isolated_from_player_and_grid_display_state():

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import bisect
 from collections.abc import Callable
+import unicodedata
 
 from chordflask.chord_markdown import group_beats_into_measures
 
@@ -83,6 +84,78 @@ def _word_boundary(text: str, position: int) -> int:
     return min(boundaries, key=lambda index: (abs(index - position), index > position))
 
 
+def _text_unit_boundaries(text: str) -> list[int]:
+    """Return lightweight grapheme-like boundaries without an NLP dependency.
+
+    Python's standard library does not expose full Unicode grapheme clustering.
+    Keeping marks, variation selectors, emoji modifiers, and ZWJ sequences with
+    their preceding base nevertheless protects the common combining sequences
+    that proportional lyric placement must not split.
+    """
+    if not text:
+        return [0]
+    boundaries = [0]
+    for index in range(1, len(text)):
+        character = text[index]
+        previous = text[index - 1]
+        category = unicodedata.category(character)
+        extends_previous = (
+            category.startswith("M")
+            or character == "\u200d"
+            or previous == "\u200d"
+            or "\ufe00" <= character <= "\ufe0f"
+            or "\U000e0100" <= character <= "\U000e01ef"
+            or "\U0001f3fb" <= character <= "\U0001f3ff"
+        )
+        if not extends_previous:
+            boundaries.append(index)
+    boundaries.append(len(text))
+    return boundaries
+
+
+def _proportional_boundaries(text, event_times, start_time, end_time):
+    """Map events to safe boundaries, keeping positions distinct when possible."""
+    boundaries = _text_unit_boundaries(text)
+    unit_count = len(boundaries) - 1
+    if not event_times or unit_count == 0 or end_time <= start_time:
+        return [0] * len(event_times)
+
+    targets = [
+        round(
+            max(0.0, min(1.0, (event_time - start_time) / (end_time - start_time)))
+            * unit_count
+        )
+        for event_time in event_times
+    ]
+    if len(targets) <= len(boundaries):
+        previous = -1
+        for index, target in enumerate(targets):
+            remaining = len(targets) - index - 1
+            targets[index] = max(previous + 1, min(target, unit_count - remaining))
+            previous = targets[index]
+    return [boundaries[target] for target in targets]
+
+
+def _marker_positions(text, events, line_start, line_end, coverage_end):
+    """Prefer word boundaries, falling back when they collapse timed events."""
+    word_positions = []
+    for event_time, _chord, _chord_time, _beat_index in events:
+        fraction = 0.0
+        if line_end > line_start:
+            fraction = (event_time - line_start) / (line_end - line_start)
+        word_positions.append(_word_boundary(text, round(fraction * len(text))))
+
+    proportional = _proportional_boundaries(
+        text,
+        [event[0] for event in events],
+        events[0][0] if events else line_start,
+        coverage_end,
+    )
+    if len(set(word_positions)) < len(set(proportional)):
+        return proportional
+    return word_positions
+
+
 def _row_runs(lines, end_times, beat_times, beat_chords, row_end_beat):
     runs = []
     previous_chord = None
@@ -127,15 +200,22 @@ def _row_runs(lines, end_times, beat_times, beat_chords, row_end_beat):
                 (beat_times[beat_index], chord, beat_times[beat_index], beat_index)
             )
             previous_chord = chord
+        coverage_end = (
+            beat_times[row_end_beat]
+            if row_end_beat < len(beat_times)
+            else end_time
+        )
+        positions = _marker_positions(
+            line.text,
+            events,
+            line.timestamp,
+            end_time,
+            min(end_time, coverage_end),
+        )
         cursor = 0
-        for event_time, chord, chord_time, beat_index in events:
-            fraction = 0.0
-            if end_time > line.timestamp:
-                fraction = (event_time - line.timestamp) / (end_time - line.timestamp)
-            position = _word_boundary(
-                line.text,
-                round(fraction * len(line.text)),
-            )
+        for (_event_time, chord, chord_time, beat_index), position in zip(
+            events, positions, strict=True
+        ):
             if position < cursor:
                 position = cursor
             lyric = line.text[cursor:position]
