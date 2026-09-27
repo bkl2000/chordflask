@@ -156,16 +156,8 @@ def test_playback_sync_coalesces_in_flight_updates_without_overlap():
     )
     clear_pending = sync.index("positionSyncPending = false;", remember_force)
     clear_force = sync.index("positionSyncForcePending = false;", clear_pending)
-    retry = sync.index(
-        "syncPlaybackPosition(forcePendingSync, skippedPendingResponse);",
-        clear_force,
-    )
-    assert (
-        sync.count(
-            "syncPlaybackPosition(forcePendingSync, skippedPendingResponse);"
-        )
-        == 1
-    )
+    retry = sync.index("syncPlaybackPosition(forcePendingSync);", clear_force)
+    assert sync.count("syncPlaybackPosition(forcePendingSync);") == 1
     assert (
         completion
         < clear_in_flight
@@ -188,35 +180,7 @@ def test_playback_sync_follow_up_reads_latest_position_and_preserves_force():
     request_body = sync.index("position: position,", current_position)
     assert in_flight_gate < current_position < request_body
     assert "positionSyncForcePending = positionSyncForcePending || force;" in sync
-    assert (
-        "syncPlaybackPosition(forcePendingSync, skippedPendingResponse);" in sync
-    )
-
-
-def test_playback_sync_skips_one_stale_response_without_render_starvation():
-    _, client = make_client()
-
-    body = client.get("/").get_data(as_text=True)
-    sync = javascript_function(body, "syncPlaybackPosition")
-
-    assert "syncPlaybackPosition(force = false, renderIfPending = false)" in sync
-    generation_guard = sync.index(
-        "if (requestGeneration !== playbackSyncGeneration)"
-    )
-    stale_guard = sync.index(
-        "if (!force && !renderIfPending && positionSyncPending)",
-        generation_guard,
-    )
-    mark_skipped = sync.index("skippedPendingResponse = true;", stale_guard)
-    skip_return = sync.index("return;", mark_skipped)
-    render = sync.index("renderCallbackData(data);", skip_return)
-    assert generation_guard < stale_guard < mark_skipped < skip_return < render
-
-    retry = "syncPlaybackPosition(forcePendingSync, skippedPendingResponse);"
-    assert retry in sync
-    assert "let skippedPendingResponse = false;" in sync
-    assert "!renderIfPending" in sync
-    assert "!force" in sync
+    assert "syncPlaybackPosition(forcePendingSync);" in sync
 
 
 def test_playback_sync_lifecycle_hooks_request_forced_resync():
