@@ -23,14 +23,16 @@ Open the song, then select **Grid | Lyrics**. In a source checkout, use
 `scripts/chordflask-analyze`, `scripts/chordflask-genlyrics`, and
 `scripts/chordflask` instead.
 
-In a source/virtualenv installation, desktop ChordFlask (1024 px and wider)
-also shows **Prepare: Lyrics** for the currently loaded song when the installed
-`chordflask-genlyrics` helper is available. It runs the helper in the
+Desktop ChordFlask (1024 px and wider) shows **Prepare: Lyrics** for the
+currently loaded song when a usable Lyrics helper is available. Set up the
+standard external runtime with `make setup-lyrics`; diagnose it with
+`make lyrics-check`. The default location is `~/.venvs/chordflask-lyrics`,
+overridable with `CHORDFLASK_LYRICS_VENV`. The application runs its helper in the
 background with its normal `.lrc` → embedded → LRCLIB defaults and makes the
 new `.cho` available without restarting ChordFlask. Directory generation
-remains a command-line workflow. The standalone can display existing sheets
-but does not contain this producer, and tablet/phone layouts show no Prepare
-control.
+remains a command-line workflow. Source installations also accept the helper
+beside their current Python interpreter for compatibility. Frozen builds use
+only the external runtime. Tablet/phone layouts show no Prepare control.
 
 The source media and analysis JSON are not modified. Generation writes a
 sidecar beside the media:
@@ -177,7 +179,7 @@ reported per file; later files in a directory continue.
 chordflask-genlyrics [--dry-run] [--force] [--tag SEARCH_TEXT]
                      [--lyrics SOURCES] [--track TRACK_ID]
                      [--romanize]
-                     [--romanize-engine thai2rom_onnx|tltk|royin]
+                     [--romanize-engine thai2rom_onnx|royin]
                      TARGET
 ```
 
@@ -226,31 +228,37 @@ realignment.
 Synchronized LRC or embedded timestamps map each lyric start to the first
 analyzed beat that does not precede it. Plain lyric lines have no timestamps,
 so they are placed in order at equal spans across the beat list. Lyrics are
-grouped around analyzed measures, normally four measures per displayed row and
-two when text or chord density is high.
+rendered as distinct lines so every source timestamp retains its own activation
+range. Whitespace-only timed entries close the preceding range and create an
+instrumental gap without becoming visible lyric rows.
 
 Within a mapped lyric passage, chord markers represent actual analyzed chord
-changes. Repeated unchanged beats are suppressed. Each generated marker is
-mapped to its analyzed beat range, which lets playback highlight the correct
-occurrence even when chord names repeat. A genuine instrumental gap is left
-unmapped, so the highlight clears until the next mapped passage. Seek and view
-switches use the same player position synchronization as Grid; Lyrics adds no
-second playback clock.
+changes. A chord already sounding when a new timed line starts is repeated at
+that line's mapped beat, so lyric activation does not depend on a musical chord
+change. Later marker positions retain their time-based estimate but snap to a
+word boundary. Each generated marker is mapped to its analyzed beat range,
+which lets playback highlight the correct occurrence even when chord names
+repeat. A genuine instrumental gap is left unmapped, so the highlight clears
+until the next mapped passage. Seek and view switches use the same player
+position synchronization as Grid; Lyrics adds no second playback clock.
 
 Generated files contain ordinary ChordPro markers plus non-display provenance
 and synchronization directives:
 
 - `x_chordflask_track` records the selected chord-track snapshot;
+- `x_chordflask_line` records the next lyric line's exclusive beat range;
 - `x_chordflask_beats` maps markers on the next line to analyzed beat indexes;
 - `x_chordflask_end` closes the final marker's exclusive beat range;
 - `x_lrclib_search` records an explicit LRCLIB hint when used;
 - `x_chordflask_romanized` belongs to the immediately following original lyric
   line.
 
-Other ChordPro readers can ignore these unknown directives. Hand editing that
-changes the number of chord markers without updating its mapping disables
-precise synchronization for that line only; the line still renders. The
-analysis JSON always remains authoritative.
+Other ChordPro readers can ignore these unknown directives. Older and
+hand-written `.cho` files without `x_chordflask_line` retain their existing
+chord-marker synchronization behavior. Hand editing that changes the number of
+chord markers without updating its mapping disables precise chord
+synchronization for that line only; the line still renders. The analysis JSON
+always remains authoritative.
 
 ## Thai romanization
 
@@ -277,22 +285,18 @@ Available engines:
 
 | Engine | Role and availability |
 | --- | --- |
-| `thai2rom_onnx` | Default PyThaiNLP neural transliteration; installed by source setup with ONNX Runtime and no PyTorch requirement. |
-| `tltk` | Alternative transliteration with a different dependency stack; installed on supported Python 3.12 and 3.13 source setups. |
-| `royin` | PyThaiNLP's RTGS-oriented alternative; available on supported source setups, including Python 3.14. |
+| `thai2rom_onnx` | Default PyThaiNLP neural transliteration; installed in the external Lyrics runtime with ONNX Runtime and no PyTorch requirement. |
+| `royin` | PyThaiNLP's RTGS-oriented alternative; available from the same external runtime. |
 
 Select one explicitly:
 
 ```bash
 chordflask-genlyrics --romanize --romanize-engine thai2rom_onnx song.mp3
-chordflask-genlyrics --romanize --romanize-engine tltk song.mp3
 chordflask-genlyrics --romanize --romanize-engine royin song.mp3
 ```
 
 There is no silent engine fallback. An unavailable or failing requested engine
-reports an error for that file. Python 3.14 does not install TLTK because its
-current dependency stack is incompatible; use `thai2rom_onnx` or `royin`.
-Details of the supported Python matrix are in
+reports an error for that file. Details of the supported Python matrix are in
 [COMPATIBILITY.md](COMPATIBILITY.md#python-version-policy).
 
 Romanization is experimental pronunciation assistance, not IPA and not an
@@ -302,10 +306,11 @@ the original lyric as the reference.
 
 ## Standalone behavior
 
-The standalone contains the core `.cho` parser and desktop Lyrics display. It
-can display a sidecar generated elsewhere, including stored romanization and
-follow metadata. It does not contain `chordflask-genlyrics`, the LRCLIB client,
-PyThaiNLP, ONNX Runtime, TLTK, or lyric-generation network functionality. See
+The standalone contains the core `.cho` parser and desktop Lyrics display, but
+not `chordflask_lyrics`, an LRCLIB client, PyThaiNLP, or ONNX Runtime.
+When `~/.venvs/chordflask-lyrics/bin/chordflask-genlyrics` is installed, the
+desktop Prepare action invokes that external helper, so local LRC, embedded,
+LRCLIB, and any romanization supported by that runtime remain available. See
 [STANDALONE.md](STANDALONE.md) for the complete source/standalone comparison.
 
 ## Data, privacy, and copyright
@@ -330,6 +335,21 @@ the rights applicable to their collection.
   as format tags; raw SYLT data may not be available through that interface.
 - **The wrong LRCLIB version matches:** use a more specific one-file `--tag`, or
   supply a correctly timed local `.lrc`.
+- **Lyrics follow consistently but several seconds late or early:** a
+  syntactically valid, monotonic local LRC is not necessarily synchronized to
+  the actual media. Audio and lyrics from different releases, masters, or
+  providers can have incompatible timelines. Before changing ChordFlask's
+  synchronization code, compare another lyrics source. To replace one `.cho`
+  using LRCLIB only:
+
+  ```bash
+  chordflask-genlyrics --force --lyrics lrclib "Artist - Song.mp3"
+  ```
+
+  For an existing library of `.cho` files, `scripts/regenerate-lyrics.sh`
+  recursively regenerates only sidecars with same-stem media, using the
+  deliberate bulk priority `lrclib:lrc:embedded`. The normal
+  `chordflask-genlyrics` default remains `.lrc` → embedded → LRCLIB.
 - **The existing `.cho` is not updated:** rerun with `--force` only when replacing
   that user-owned sidecar is intended.
 - **Lyrics displays but does not follow playback:** hand-written sheets and

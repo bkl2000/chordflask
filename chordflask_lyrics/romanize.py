@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 
 DEFAULT_ENGINE = "thai2rom_onnx"
-SUPPORTED_ENGINES = ("thai2rom_onnx", "tltk", "royin")
+SUPPORTED_ENGINES = ("thai2rom_onnx", "royin")
 
 _THAI_RUN_RE = re.compile(r"[\u0E00-\u0E7F]+")
 
@@ -45,8 +45,8 @@ def romanize_thai(
             from pythainlp.tokenize import word_tokenize
         except ImportError as error:
             raise RomanizationError(
-                "Thai romanization requires the source-installation lyrics "
-                "dependencies; rerun make setup"
+                "Thai romanization requires the external Lyrics runtime "
+                "dependencies; rerun make setup-lyrics"
             ) from error
         romanize = pythainlp_romanize
         def tokenize(value: str) -> list[str]:

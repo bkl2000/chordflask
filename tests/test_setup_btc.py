@@ -67,6 +67,7 @@ def test_supported_python_installs_new_torch(btc_setup, version, existing):
     assert "'torch==2.10.0', '--index-url', 'https://download.pytorch.org/whl/cu128'" in calls
     assert ("'-m', 'venv'" in calls) == (not existing)
     assert (venv / "bin/python").exists()
+    assert (venv.parent / "missing-model" / "predict_raw.py").is_file()
     assert "'numpy', 'librosa'" not in calls
 
 
@@ -88,3 +89,12 @@ def test_current_torch_is_reused(btc_setup):
     assert "PyTorch 2.10.0 already installed" in result.stdout
     assert "pip " not in calls
     assert "without an explicit opt-in" in result.stderr
+
+
+def test_setup_default_runtime_layout_is_self_contained():
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    assert 'BTC_DIR="${CHORDFLASK_BTC_DIR:-${VENV_DIR}/share/chordflask-btc}"' in script
+    assert 'WRAPPER_SOURCE="${BTC_DIR}/predict_raw.py"' in script
+    assert 'install -m 0644' in script
+    assert '"${BTC_SOURCE_DIR}/predict_raw.py"' in script

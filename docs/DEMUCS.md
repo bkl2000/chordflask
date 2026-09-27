@@ -202,8 +202,8 @@ in the chord header. For ordinary songs the control is hidden.
   available and CPU otherwise. When it finishes, the normal **STEMS** control
   appears; stems are not activated automatically. A failed attempt leaves
   playback and any existing data untouched and can be retried. Tablet and mobile
-  layouts never offer the Prepare group. Other available source-only actions
-  may share the group, while directory preparation remains a CLI workflow.
+  layouts never offer the Prepare group. Other available external-runtime
+  actions may share the group, while directory preparation remains a CLI workflow.
 
 Individual stem OFF intentionally uses an effectively silent nonzero gain
 instead of browser mute or exact-zero volume. Real Chromium playback timing

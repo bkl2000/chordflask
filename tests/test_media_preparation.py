@@ -3,7 +3,6 @@
 import sys
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -74,95 +73,122 @@ def _wait_status(client, endpoint, expected, timeout=5):
     raise AssertionError(f"{endpoint} did not reach {expected}")
 
 
-def test_source_command_prefers_current_venv_and_frozen_disables_it(
-    monkeypatch, tmp_path
-):
+def _executable(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def test_source_lyrics_falls_back_to_current_venv(monkeypatch, tmp_path):
     venv_bin = tmp_path / "venv" / "bin"
     venv_bin.mkdir(parents=True)
     python = venv_bin / "python"
     python.write_text("", encoding="utf-8")
-    helper = venv_bin / "chordflask-genlyrics"
-    helper.write_text("#!/bin/sh\n", encoding="utf-8")
-    helper.chmod(0o755)
+    helper = _executable(venv_bin / "chordflask-genlyrics")
+    monkeypatch.setenv("CHORDFLASK_LYRICS_VENV", str(tmp_path / "missing"))
     monkeypatch.setattr(sys, "executable", str(python))
     monkeypatch.setattr(sys, "frozen", False, raising=False)
 
-    assert media_preparation.source_command("chordflask-genlyrics") == helper
+    assert media_preparation.lyrics_command() == helper
     assert media_preparation.lyrics_capability()["available"] is True
 
-    media_preparation.clear_capability_cache()
+
+@pytest.mark.parametrize("frozen", [False, True])
+def test_external_lyrics_runtime_is_available_in_source_and_frozen(
+    monkeypatch, tmp_path, frozen
+):
+    runtime = tmp_path / "lyrics"
+    helper = _executable(runtime / "bin" / "chordflask-genlyrics")
+    monkeypatch.setenv("CHORDFLASK_LYRICS_VENV", str(runtime))
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+
+    assert media_preparation.lyrics_command() == helper
+    assert media_preparation.lyrics_capability()["available"] is True
+
+
+def test_frozen_without_external_lyrics_runtime_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHORDFLASK_LYRICS_VENV", str(tmp_path / "missing"))
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     assert media_preparation.lyrics_capability()["available"] is False
 
 
-def test_missing_lyrics_helper_is_unavailable(monkeypatch):
-    monkeypatch.setattr(media_preparation, "source_command", lambda _name: None)
-    assert media_preparation.lyrics_capability()["available"] is False
-
-
-def test_btc_capability_requires_source_helper_and_complete_lightweight_runtime(
-    monkeypatch
+@pytest.mark.parametrize("frozen", [False, True])
+def test_btc_capability_uses_external_runtime_in_source_and_frozen(
+    monkeypatch, tmp_path, frozen
 ):
-    import chordflask_btc.runtime as btc_runtime
-
-    monkeypatch.setattr(sys, "frozen", False, raising=False)
-    monkeypatch.setattr(
-        media_preparation, "source_command", lambda _name: Path("/venv/bin/analyze")
+    runtime = tmp_path / "btc"
+    (runtime / "bin").mkdir(parents=True)
+    (runtime / "share" / "chordflask-btc").mkdir(parents=True)
+    _executable(runtime / "bin" / "python")
+    _executable(runtime / "bin" / "btc-predict-raw")
+    for filename in (
+        "btc_model.py", "features.py", "predict_raw.py",
+        "transformer_modules.py", "vocabulary.py",
+    ):
+        (runtime / "share" / "chordflask-btc" / filename).write_text(
+            "# external predictor\n", encoding="utf-8"
+        )
+    (runtime / "share" / "chordflask-btc" / "btc_model_large_voca.pt").write_bytes(
+        b"checkpoint"
     )
+    monkeypatch.setenv("CHORDFLASK_BTC_VENV", str(runtime))
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     torch_before = sys.modules.get("torch")
-    monkeypatch.setattr(
-        btc_runtime, "detect_btc_runtime", lambda: {"complete": True, "missing": []}
-    )
+
     assert media_preparation.btc_capability()["available"] is True
     assert sys.modules.get("torch") is torch_before
 
-    media_preparation.clear_capability_cache()
-    monkeypatch.setattr(
-        btc_runtime,
-        "detect_btc_runtime",
-        lambda: {"complete": False, "missing": ["checkpoint"]},
-    )
-    assert media_preparation.btc_capability()["available"] is False
 
-    media_preparation.clear_capability_cache()
+def test_frozen_without_external_btc_runtime_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHORDFLASK_BTC_VENV", str(tmp_path / "missing"))
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     assert media_preparation.btc_capability()["available"] is False
 
 
-@pytest.mark.parametrize(
-    ("runner", "expected"),
-    [
-        (
-            media_preparation.run_lyrics_preparation,
-            ["/venv/bin/chordflask-genlyrics", "/music/A & B song.mp3"],
-        ),
-        (
-            media_preparation.run_btc_preparation,
-            [
-                "/venv/bin/chordflask-analyze",
-                "--analyzer",
-                "btc",
-                "/music/A & B song.mp3",
-            ],
-        ),
-    ],
-)
-def test_source_helpers_use_safe_argv_without_shell(monkeypatch, runner, expected):
+def test_lyrics_helper_uses_safe_argv_without_shell(monkeypatch):
     calls = []
-
-    def command(name):
-        return Path("/venv/bin") / name
 
     def run(argv, **kwargs):
         calls.append((argv, kwargs))
-        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+        return type("Result", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
 
-    monkeypatch.setattr(media_preparation, "source_command", command)
+    monkeypatch.setattr(
+        media_preparation,
+        "lyrics_command",
+        lambda: Path("/lyrics/bin/chordflask-genlyrics"),
+    )
     monkeypatch.setattr(media_preparation.subprocess, "run", run)
 
-    assert runner(Path("/music/A & B song.mp3")) == 0
-    assert calls[0][0] == expected
+    assert media_preparation.run_lyrics_preparation(Path("/music/A & B song.mp3")) == 0
+    assert calls[0][0] == [
+        "/lyrics/bin/chordflask-genlyrics", "/music/A & B song.mp3"
+    ]
     assert calls[0][1]["shell"] is False
+
+
+def test_btc_preparation_uses_bundled_lightweight_connector(monkeypatch):
+    import chordflask_btc.predictor as predictor
+
+    calls = []
+    monkeypatch.setattr(predictor, "predict_btc_media", lambda path: calls.append(path))
+
+    assert media_preparation.run_btc_preparation(Path("/music/song.mp3")) == 0
+    assert calls == [Path("/music/song.mp3")]
+
+
+def test_source_lyrics_capability_reaches_prepare_status(monkeypatch, tmp_path):
+    runtime = tmp_path / "lyrics-runtime"
+    _executable(runtime / "bin" / "chordflask-genlyrics")
+    monkeypatch.setenv("CHORDFLASK_LYRICS_VENV", str(runtime))
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    app, client = _client()
+    _song(tmp_path)
+    _load(client, tmp_path)
+
+    payload = client.get("/lyrics_preparation_status").get_json()
+    assert payload["available"] is True
+    assert payload["state"] == "idle"
 
 
 def test_lyrics_prepare_refreshes_song_sheet_without_restart(tmp_path):

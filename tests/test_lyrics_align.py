@@ -46,7 +46,7 @@ def test_uneven_chord_times_remain_uneven_inside_lyric_interval():
         if run.chord:
             chord_offsets.append(lyric_offset)
         lyric_offset += len(run.lyric)
-    assert chord_offsets[:3] == [0, 2, 17]
+    assert chord_offsets[:3] == [0, 0, 20]
 
 
 def test_chord_is_not_moved_before_its_analyzed_beat():
@@ -65,10 +65,10 @@ def test_chord_is_not_moved_before_its_analyzed_beat():
             first_chord_offset = lyric_offset
         lyric_offset += len(run.lyric)
     assert first_chord_offset is not None
-    assert first_chord_offset >= len("pickup ")
+    assert first_chord_offset == len("pickup")
 
 
-def test_active_repeated_chord_is_not_reemitted_between_lines_in_one_row():
+def test_active_repeated_chord_is_reanchored_for_each_timed_line():
     rows = align_lyrics(
         (TimedLyricLine(0, "one"), TimedLyricLine(1, "two"), TimedLyricLine(2, "three")),
         beat_times=[0.0, 1.0, 2.0, 3.0],
@@ -77,10 +77,14 @@ def test_active_repeated_chord_is_not_reemitted_between_lines_in_one_row():
         beat_chords=["C", "C", "C", "C"],
     )
 
-    assert [run.chord for run in rows[0].runs if run.chord] == ["C"]
+    assert len(rows) == 3
+    assert [
+        [run.chord for run in row.runs if run.chord]
+        for row in rows
+    ] == [["C"], ["C"], ["C"]]
 
 
-def test_active_repeated_chord_is_not_split_at_a_contiguous_row_boundary():
+def test_active_repeated_chord_transfers_at_a_timed_line_boundary():
     beat_times = [float(index) for index in range(32)]
     beat_chords = ["N"] * 15 + ["C"] * 5 + ["D"] * 12
     lines = (TimedLyricLine(15, "one"), TimedLyricLine(17, "two"))
@@ -103,8 +107,8 @@ def test_active_repeated_chord_is_not_split_at_a_contiguous_row_boundary():
     assert [
         (run["chord"], run["start_beat"], run["end_beat"])
         for run in markers
-    ] == [("C", 15, 20), ("D", 20, 32)]
-    assert content.count("[C]") == 1
+    ] == [("C", 15, 17), ("C", 17, 20), ("D", 20, 32)]
+    assert content.count("[C]") == 2
 
 
 def test_held_chord_ownership_transfers_without_overlapping_later_row():
@@ -132,7 +136,7 @@ def test_held_chord_ownership_transfers_without_overlapping_later_row():
     ]
     ranges = [(run["start_beat"], run["end_beat"]) for run in markers]
 
-    assert ranges == [(0, 32), (32, 48)]
+    assert ranges == [(0, 16), (16, 32), (32, 48)]
     assert all(0 <= start < end <= len(beat_times) for start, end in ranges)
     assert ranges == sorted(ranges)
     assert all(
@@ -178,7 +182,7 @@ def test_all_changes_survive_a_contiguous_lyrics_row_boundary():
     assert [
         (run["chord"], run["start_beat"])
         for run in markers
-    ] == [("C", 15), ("Am", 16), ("F", 18), ("G", 20)]
+    ] == [("C", 15), ("Am", 16), ("Am", 17), ("F", 18), ("G", 20)]
     assert [
         next(
             run["chord"]
@@ -214,7 +218,7 @@ def test_final_marker_ends_at_chord_run_when_mapped_coverage_continues():
     ] == [("C", 20, 24)]
 
 
-def test_four_measure_grouping_splits_dense_rows_to_two_measures():
+def test_each_timed_lyric_retains_its_own_rendered_row():
     beats = [float(index) for index in range(16)]
     numbers = [index % 4 + 1 for index in range(16)]
     sparse = align_lyrics(
@@ -224,7 +228,10 @@ def test_four_measure_grouping_splits_dense_rows_to_two_measures():
         meter=4,
         beat_chords=["C"] * 16,
     )
-    assert [(row.measure_start, row.measure_count) for row in sparse] == [(0, 4)]
+    assert [(row.measure_start, row.measure_count) for row in sparse] == [
+        (0, 1),
+        (3, 1),
+    ]
 
     dense = align_lyrics(
         (TimedLyricLine(0, "x" * 121), TimedLyricLine(12, "two")),
@@ -233,7 +240,10 @@ def test_four_measure_grouping_splits_dense_rows_to_two_measures():
         meter=4,
         beat_chords=["C"] * 16,
     )
-    assert [(row.measure_start, row.measure_count) for row in dense] == [(0, 2), (2, 2)]
+    assert [(row.measure_start, row.measure_count) for row in dense] == [
+        (0, 1),
+        (3, 1),
+    ]
 
 
 def test_repeated_chords_are_suppressed_and_output_is_deterministic_and_escaped():
@@ -255,14 +265,16 @@ def test_repeated_chords_are_suppressed_and_output_is_deterministic_and_escaped(
     assert "[G]" in content
     assert "[C@" not in content
     assert "[G@" not in content
-    assert "{x_chordflask_beats: 0,2}" in content
-    assert "{x_chordflask_end: 4}" in content
+    assert "{x_chordflask_line: 0,2}" in content
+    assert "{x_chordflask_beats: 0}" in content
+    assert "{x_chordflask_line: 2,4}" in content
+    assert "{x_chordflask_beats: 2}" in content
     parsed = parse_chordpro(content)
     assert parsed["metadata"] == {"title": "T{itle}", "artist": "A[rtist]"}
     visible = "".join(
         run["lyric"] for block in parsed["blocks"] if block["type"] == "line" for run in block["runs"]
     )
-    assert visible == r"a[b] {c} \\ d next"
+    assert visible == r"a[b] {c} \\ dnext"
     assert "exact" not in visible
     assert "T\\{itle\\}" not in visible
     assert "x_chordflask" not in visible
@@ -298,14 +310,123 @@ def test_marker_metadata_uses_musical_position_for_repeated_chord_names():
         run["lyric"] for block in parsed["blocks"] if block["type"] == "line"
         for run in block["runs"]
     )
-    assert visible == "abcdef ghijkl"
+    assert visible == "abcdefghijkl"
     assert "@" not in visible
+
+
+def test_close_to_me_pattern_preserves_lines_and_skips_timed_whitespace():
+    beat_times = [0.139319728 + index * 0.65015873 for index in range(314)]
+    lines = (
+        TimedLyricLine(42.53, "I've waited hours for this"),
+        TimedLyricLine(44.83, "I've made myself so sick"),
+        TimedLyricLine(47.38, "I wish I'd stayed asleep today"),
+        TimedLyricLine(63.54, " "),
+        TimedLyricLine(73.56, "Just try to see in the dark"),
+    )
+    rows = align_lyrics(
+        lines,
+        beat_times=beat_times,
+        beat_numbers=[index % 4 + 1 for index in range(len(beat_times))],
+        meter=4,
+        beat_chords=["C"] * len(beat_times),
+    )
+    content = render_chordpro(LyricsRecord(1, "T", "A", None, 203, lines), rows)
+    blocks = [
+        block for block in parse_chordpro(content)["blocks"]
+        if block["type"] == "line"
+    ]
+
+    assert [
+        "".join(run["lyric"] for run in block["runs"])
+        for block in blocks
+    ] == [line.text for line in lines if line.text.strip()]
+    starts = [block["line_start_beat"] for block in blocks]
+    assert starts == [
+        beat_at_or_after_index(line.timestamp, beat_times)
+        for line in lines if line.text.strip()
+    ]
+    assert len(set(starts)) == len(starts)
+    assert [
+        next(run["start_beat"] for run in block["runs"] if run["chord"])
+        for block in blocks
+    ] == starts
+    assert all(
+        next(run["chord"] for run in block["runs"] if run["chord"]) == "C"
+        for block in blocks
+    )
+
+
+def test_generated_short_lines_own_their_continuing_and_changed_chords():
+    lines = (
+        TimedLyricLine(0, "I've waited hours for this"),
+        TimedLyricLine(3, "So sick"),
+        TimedLyricLine(6, "I wish I'd stayed asleep today"),
+    )
+    beat_chords = ["Abm", "Abm", "Gb6", "Gb6", "E7", "B", "B", "B", "Abm"]
+    rows = align_lyrics(
+        lines,
+        beat_times=[float(index) for index in range(len(beat_chords))],
+        beat_numbers=[index % 4 + 1 for index in range(len(beat_chords))],
+        meter=4,
+        beat_chords=beat_chords,
+    )
+    content = render_chordpro(LyricsRecord(1, "T", "A", None, 9, lines), rows)
+    blocks = [
+        block for block in parse_chordpro(content)["blocks"]
+        if block["type"] == "line"
+    ]
+
+    assert [
+        "".join(run["lyric"] for run in block["runs"])
+        for block in blocks
+    ] == [line.text for line in lines]
+    assert [
+        [run["chord"] for run in block["runs"] if run["chord"]]
+        for block in blocks
+    ] == [["Abm", "Gb6"], ["Gb6", "E7", "B"], ["B", "Abm"]]
+    assert [
+        (block["line_start_beat"], block["line_end_beat"])
+        for block in blocks
+    ] == [(0, 3), (3, 6), (6, 9)]
+    assert [
+        next(run["start_beat"] for run in block["runs"] if run["chord"])
+        for block in blocks
+    ] == [0, 3, 6]
+
+
+def test_interpolated_markers_snap_to_word_boundaries():
+    lines = (
+        TimedLyricLine(0, "alpha bravo charlie"),
+        TimedLyricLine(10, "next line"),
+    )
+    rows = align_lyrics(
+        lines,
+        beat_times=[0.0, 2.0, 5.0, 8.0, 10.0, 11.0],
+        beat_numbers=[1, 2, 3, 4, 1, 2],
+        meter=4,
+        beat_chords=["C", "G", "Am", "F", "C", "C"],
+    )
+
+    offset = 0
+    marker_offsets = []
+    for run in rows[0].runs:
+        if run.chord:
+            marker_offsets.append(offset)
+        offset += len(run.lyric)
+    text = lines[0].text
+    assert marker_offsets
+    assert all(
+        position in {0, len(text)}
+        or text[position - 1].isspace()
+        or text[position].isspace()
+        for position in marker_offsets
+    )
 
 
 def test_instrumental_gap_is_unmapped_and_sync_resumes_at_next_line():
     # One lyric line, then a long constant-chord instrumental span, then a
-    # second lyric line. Each rendered row owns only its own measures, so the
-    # gap is not mapped to the previous line's chord marker.
+    # second lyric line. Generated line coverage is capped at four measures, so
+    # the gap is not mapped to the previous line's chord marker.
     beat_times = [index * 0.5 for index in range(100)]
     beat_numbers = [index % 4 + 1 for index in range(100)]
     beat_chords = ["C"] * 90 + ["G"] * 10
@@ -327,17 +448,17 @@ def test_instrumental_gap_is_unmapped_and_sync_resumes_at_next_line():
     assert "{x_chordflask_end: 16}" in content
 
     parsed = parse_chordpro(content)
-    ranges = [
-        (run["start_beat"], run["end_beat"])
+    line_ranges = [
+        (block["line_start_beat"], block["line_end_beat"])
         for block in parsed["blocks"] if block["type"] == "line"
-        for run in block["runs"] if "start_beat" in run
     ]
+    assert line_ranges == [(0, 16), (84, 100)]
 
     def active(beat):
         # Mirrors the browser rule: the mapped range must contain the beat.
-        return next((start for start, end in ranges if start <= beat < end), None)
+        return next((start for start, end in line_ranges if start <= beat < end), None)
 
     assert active(0) == 0
     assert active(70) is None  # unmapped instrumental gap: highlight clears
     assert active(84) == 84    # seek/resume at the next mapped line
-    assert active(90) == 90
+    assert active(90) == 84

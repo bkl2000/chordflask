@@ -4,7 +4,7 @@
 and installation state. It is a framework-free tool: it uses only the
 `chordflask_base` model/schema layer and the Python standard library, so it
 works without the web app, the analysis engine, or any audio library.
-It neither imports nor requires PyThaiNLP, ONNX Runtime, or TLTK.
+It neither imports nor requires PyThaiNLP or ONNX Runtime.
 
 All commands are run from the repository root:
 
@@ -154,12 +154,12 @@ Reports the installation state without changing anything:
 - the global queue directory and whether it is writable
 
 `doctor` intentionally checks only dependencies required for the core runtime.
-It does not report the source-only lyrics/romanization packages. Those packages
-are optional at application runtime and intentionally absent from standalone
-builds; treating them as doctor failures would incorrectly mark a healthy
-standalone as incomplete. The generator itself reports a clear error when a
-requested romanization engine is unavailable, without importing or loading ML
-packages during maintenance.
+It does not report the external Lyrics/romanization runtime. Those packages
+are optional and intentionally absent from standalone builds; treating them as
+doctor failures would incorrectly mark a healthy standalone as incomplete.
+The generator itself reports a clear error when a requested romanization
+engine is unavailable, without importing or loading ML packages during
+maintenance.
 
 ## Diagnosis and repair workflows
 

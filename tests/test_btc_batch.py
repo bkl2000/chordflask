@@ -154,11 +154,15 @@ _WRAPPER_OK = "#!/bin/sh\necho '[{\"timestamp\": 0.0, \"chord\": \"N\"}]'\n"
 def runtime(tmp_path, monkeypatch):
     btc_dir = tmp_path / "btc"
     btc_dir.mkdir()
-    (btc_dir / "predict_raw.py").write_text("# stub\n")
+    for filename in (
+        "btc_model.py", "features.py", "predict_raw.py",
+        "transformer_modules.py", "vocabulary.py",
+    ):
+        (btc_dir / filename).write_text("# stub\n")
     (btc_dir / "btc_model_large_voca.pt").write_bytes(b"fake-checkpoint")
     venv = tmp_path / "venv"
     (venv / "bin").mkdir(parents=True)
-    (venv / "bin" / "python").write_text("#!/bin/sh\n")
+    _write_executable(venv / "bin" / "python", "#!/bin/sh\n")
     _write_executable(venv / "bin" / "btc-predict-raw", _WRAPPER_OK)
     monkeypatch.setenv("CHORDFLASK_BTC_DIR", str(btc_dir))
     monkeypatch.setenv("CHORDFLASK_BTC_VENV", str(venv))
@@ -235,11 +239,15 @@ def test_batch_creates_btc_for_unanalyzed_file(tmp_path, runtime):
 def test_batch_isolates_failures(tmp_path, monkeypatch):
     btc_dir = tmp_path / "btc"
     btc_dir.mkdir()
-    (btc_dir / "predict_raw.py").write_text("# stub\n")
+    for filename in (
+        "btc_model.py", "features.py", "predict_raw.py",
+        "transformer_modules.py", "vocabulary.py",
+    ):
+        (btc_dir / filename).write_text("# stub\n")
     (btc_dir / "btc_model_large_voca.pt").write_bytes(b"fake-checkpoint")
     venv = tmp_path / "venv"
     (venv / "bin").mkdir(parents=True)
-    (venv / "bin" / "python").write_text("#!/bin/sh\n")
+    _write_executable(venv / "bin" / "python", "#!/bin/sh\n")
     _write_executable(venv / "bin" / "btc-predict-raw", _WRAPPER_OK)
     monkeypatch.setenv("CHORDFLASK_BTC_DIR", str(btc_dir))
     monkeypatch.setenv("CHORDFLASK_BTC_VENV", str(venv))

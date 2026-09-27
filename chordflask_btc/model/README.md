@@ -18,8 +18,10 @@ make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1
 make btc-check
 ```
 
-Setup creates the isolated `~/.venvs/chordflask-btc` environment and downloads
-the model checkpoint only after the explicit acknowledgement. The checkpoint
+Setup creates the isolated `~/.venvs/chordflask-btc` environment, copies the
+predictor code into `share/chordflask-btc`, and obtains the checkpoint there
+only after the explicit acknowledgement. The resulting runtime does not refer
+back to the source checkout. The checkpoint
 has no clearly documented redistribution licence, so it is neither committed
 to this repository nor included in releases or standalone bundles. Setup checks
 its fixed size and SHA-256 before it can be loaded.
@@ -43,12 +45,10 @@ integrated as the separate `btc` chord track while the existing Chordino and
 rhythm tracks remain available. Open the song and select BTC in the chord-track
 selector to compare it with Chordino or Edited data.
 
-In a source/virtualenv installation, desktop ChordFlask can also offer
-**Prepare: BTC** for the currently loaded song when this runtime is complete.
-The action invokes the same installed one-file analyzer helper in the
-background and refreshes the selector afterward. Directory analysis remains a
-CLI workflow. BTC generation stays excluded from the standalone, which can
-still read an existing `btc` track.
+Desktop ChordFlask can offer **Prepare: BTC** in both source and standalone
+runs when this runtime is complete. The bundled Torch-free connector invokes
+the external `btc-predict-raw` subprocess and refreshes the selector afterward.
+Directory analysis remains a source CLI workflow.
 
 Repeat runs reuse the existing BTC result. Use `--replace` only to regenerate
 that selected analyzer's track:
@@ -111,9 +111,8 @@ validation, not full application or standalone acceptance across the matrix.
   CPU fallback is expected when CUDA is unavailable.
 - Model download is a one-time external network operation and requires the
   explicit weights acknowledgement.
-- BTC generation is source-installation only and is not part of the standalone
-  bundle. A standalone can read an already stored compatible `btc` track but
-  cannot install the runtime or run inference.
+- The standalone bundles only Torch-free BTC orchestration. Predictor code,
+  checkpoint weights, NumPy/librosa, and Torch stay in the external runtime.
 
 ## Files
 

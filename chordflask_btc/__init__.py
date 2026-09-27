@@ -5,9 +5,8 @@ isolated BTC inference runtime (``~/.venvs/chordflask-btc/bin/btc-predict-raw``)
 as a subprocess, normalizes labels, and writes a ``btc`` chord track into an
 existing Schema-v3 analysis file.
 
-It never imports torch, and it is only reachable when the user has installed the
-BTC runtime with ``make setup-btc``. The model code under :mod:`chordflask_btc.model`
-is loaded only by the ``btc-predict-raw`` subprocess in the dedicated BTC venv.
+It never imports torch. The model code and checkpoint are installed inside the
+dedicated BTC venv and loaded only by the ``btc-predict-raw`` subprocess.
 """
 
 from __future__ import annotations

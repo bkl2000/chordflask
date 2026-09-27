@@ -20,7 +20,7 @@ During playback, the detected chords and beats follow the song in the browser. T
 
 Automatic chord recognition is not a perfect transcription, especially with dense arrangements or unusual harmony. It is intended as a practical starting point for playing, orientation, and improvisation. When the analysis is close but not quite right, you can correct it beat by beat instead of starting over.
 
-Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro. The normal standalone bundle covers the interactive playback and analysis workflow, while additional preparation tools are available from a source installation through the command-line utilities.
+Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro. Lyrics, BTC, and Demucs keep their optional heavy runtimes outside both source and standalone application processes.
 
 On desktop (1024 px and wider), a compact **Prepare** menu can run the
 available optional producers for the currently loaded song. Depending on the
@@ -44,7 +44,7 @@ At a glance, ChordFlask lets you:
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.16.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.16/chordflask-mint22-x86_64-py3.12-v0.9.16.tar.gz)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.17.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.17/chordflask-mint22-x86_64-py3.12-v0.9.17.tar.gz)**
 
 The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is based on Ubuntu 24.04.
 
@@ -200,10 +200,18 @@ on the same timeline, not a separate transcription. Lyrics and chord markers
 are joined to the existing chord/beat timeline; an instrumental gap can remain
 unhighlighted.
 
-The generator is part of source installations. A standalone bundle can display
-an existing `.cho`, including stored romanization, but does not generate or
-fetch lyrics. Source priority, embedded-tag limits, LRCLIB matching, all CLI
-options, alignment, romanization engines, and copyright considerations are in
+Install the isolated Lyrics runtime for desktop Prepare in either a source or
+standalone run:
+
+```bash
+make setup-lyrics
+make lyrics-check
+```
+
+Source installations retain their installed `chordflask-genlyrics` command;
+the standalone invokes only the external runtime helper. Source priority,
+embedded-tag limits, LRCLIB matching, all CLI options, alignment, romanization
+engines, and copyright considerations are in
 [docs/LYRICS.md](docs/LYRICS.md).
 
 ### Prepare karaoke or instrument practice
@@ -312,10 +320,10 @@ acknowledgement, runtime matrix, Python/PyTorch/CUDA details, limitations, and
 standalone status are in the
 [BTC runtime documentation](chordflask_btc/model/README.md).
 
-In a source installation, the desktop **Prepare** menu can run this same
-one-file BTC helper in the background when the isolated BTC runtime is complete.
+The desktop **Prepare** menu in source and standalone runs can use the bundled
+lightweight connector when the isolated BTC runtime is complete.
 It reloads the track list on completion; Chordino and Edited data remain
-separate. BTC preparation is not offered in the standalone.
+separate. Torch, predictor code, and weights remain in the external runtime.
 
 ## LAN, phone, and tablet use
 

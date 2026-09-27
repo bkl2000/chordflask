@@ -3,9 +3,8 @@ set -euo pipefail
 
 # Diagnose the isolated BTC runtime. Read-only; never installs or downloads.
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BTC_DIR="${CHORDFLASK_BTC_DIR:-${ROOT_DIR}/chordflask_btc/model}"
 VENV_DIR="${CHORDFLASK_BTC_VENV:-${HOME}/.venvs/chordflask-btc}"
+BTC_DIR="${CHORDFLASK_BTC_DIR:-${VENV_DIR}/share/chordflask-btc}"
 VENV_PY="${VENV_DIR}/bin/python"
 CHECKPOINT="${BTC_DIR}/btc_model_large_voca.pt"
 CHECKPOINT_SIZE=12229576

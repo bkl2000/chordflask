@@ -111,6 +111,41 @@ def test_chordflask_beat_directives_are_hidden_sync_metadata():
     ]
 
 
+def test_generated_line_range_is_optional_hidden_sync_metadata():
+    parsed = parse_chordpro(
+        "{x_chordflask_line: 12,20}\n"
+        "{x_chordflask_beats: 12}\n"
+        "{x_chordflask_end: 20}\n"
+        "[C]Hello"
+    )
+
+    assert parsed["blocks"] == [{
+        "type": "line",
+        "line_start_beat": 12,
+        "line_end_beat": 20,
+        "runs": [{
+            "chord": "C",
+            "lyric": "Hello",
+            "start_beat": 12,
+            "end_beat": 20,
+        }],
+    }]
+    assert parse_chordpro("[C]Legacy")["blocks"][0] == {
+        "type": "line",
+        "runs": [{"chord": "C", "lyric": "Legacy"}],
+    }
+
+
+@pytest.mark.parametrize("value", ["", "12", "12,12", "20,12", "x,20", "1,2,3"])
+def test_invalid_generated_line_range_is_ignored(value):
+    block = parse_chordpro(
+        f"{{x_chordflask_line: {value}}}\n[C]Hello"
+    )["blocks"][0]
+
+    assert "line_start_beat" not in block
+    assert "line_end_beat" not in block
+
+
 def test_romanization_attaches_to_same_synced_logical_line():
     parsed = parse_chordpro(
         "{x_chordflask_romanized: chan rak thoe}\n"

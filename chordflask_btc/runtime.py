@@ -13,14 +13,17 @@ from pathlib import Path
 
 DEFAULT_VENV = Path.home() / ".venvs" / "chordflask-btc"
 CHECKPOINT_NAME = "btc_model_large_voca.pt"
+PREDICTOR_FILES = (
+    "btc_model.py",
+    "features.py",
+    "predict_raw.py",
+    "transformer_modules.py",
+    "vocabulary.py",
+)
 
 
 class BtcRuntimeError(RuntimeError):
     """The BTC runtime is not installed or is incomplete."""
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
 
 
 def btc_venv_dir() -> Path:
@@ -30,7 +33,7 @@ def btc_venv_dir() -> Path:
 
 def btc_dir() -> Path:
     override = os.environ.get("CHORDFLASK_BTC_DIR")
-    return Path(override) if override else _repo_root() / "chordflask_btc" / "model"
+    return Path(override) if override else btc_venv_dir() / "share" / "chordflask-btc"
 
 
 def checkpoint_path() -> Path:
@@ -52,10 +55,12 @@ def venv_python() -> Path:
 def detect_btc_runtime() -> dict:
     """Return the runtime status; ``complete`` is False when anything is missing."""
     missing: list[str] = []
-    if not venv_python().is_file():
+    if not venv_python().is_file() or not os.access(venv_python(), os.X_OK):
         missing.append(f"venv python ({venv_python()})")
-    if not raw_script_path().is_file():
-        missing.append(f"wrapper source ({raw_script_path()})")
+    for filename in PREDICTOR_FILES:
+        path = btc_dir() / filename
+        if not path.is_file():
+            missing.append(f"predictor source ({path})")
     if not wrapper_path().is_file() or not os.access(wrapper_path(), os.X_OK):
         missing.append(f"executable wrapper ({wrapper_path()})")
     checkpoint = checkpoint_path()

@@ -65,6 +65,7 @@ def _run_raw(wrapper: Path, media_path: Path) -> list[dict[str, Any]]:
             capture_output=True,
             text=True,
             check=False,
+            shell=False,
         )
     except OSError as exc:
         raise BtcPredictionError(f"Could not execute BTC wrapper: {exc}") from exc

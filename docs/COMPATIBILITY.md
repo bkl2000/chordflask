@@ -57,12 +57,9 @@ compatible-version ranges from the requirements files without a separate pinned
 constraints file. Constraints improve repeatability for a reviewed dependency
 combination; they are not a prerequisite for a Python version to be supported.
 
-Source lyrics setup installs TLTK 1.10 on supported Python versions where its
-dependency stack is compatible, currently Python 3.12 and 3.13. Python 3.14
-does not install or verify TLTK because its gensim dependency cannot build
-there; the default PyThaiNLP `thai2rom_onnx` engine and the `royin` engine
-remain available. Explicitly selecting unavailable `tltk` fails without an
-engine fallback.
+The external Lyrics runtime supports the default PyThaiNLP `thai2rom_onnx`
+engine and the `royin` engine throughout its supported Python range. Its
+optional language stack is not installed into the normal ChordFlask runtime.
 
 To add support for a new Python version:
 
@@ -100,17 +97,14 @@ upgrades, and remaining warnings. Core runtime dependencies are unchanged.
 the core supported CPython 3.12–3.14 range. Ordinary LRC, embedded-lyrics, and
 LRCLIB generation does not load a romanization model.
 
-Source setup installs `pythainlp[onnx]>=5.3.3,<6`, including ONNX Runtime, for
-the default `thai2rom_onnx` engine without installing PyTorch. The `royin`
-engine uses the same PyThaiNLP installation. TLTK 1.10 is installed only where
-its dependency stack is compatible, currently Python 3.12 and 3.13; it is not
-installed on Python 3.14 because its gensim dependency cannot currently build
-there. Explicitly selecting an unavailable engine fails, with no silent
-fallback. See [LYRICS.md](LYRICS.md#thai-romanization) for behavior and quality
-limits.
+External Lyrics setup installs `pythainlp[onnx]>=5.3.3,<6`, including ONNX
+Runtime, for the default `thai2rom_onnx` engine without installing PyTorch. The
+`royin` engine uses the same PyThaiNLP installation. An unavailable engine
+fails with no silent fallback. See [LYRICS.md](LYRICS.md#thai-romanization) for
+behavior and quality limits.
 
-The standalone excludes the generator, LRCLIB client, PyThaiNLP, ONNX Runtime,
-and TLTK. It can still parse and display `.cho` files and romanization generated
+The standalone excludes the generator, LRCLIB client, PyThaiNLP, and ONNX
+Runtime. It can still parse and display `.cho` files and romanization generated
 elsewhere because that reader has no model dependency.
 
 ## System FFmpeg

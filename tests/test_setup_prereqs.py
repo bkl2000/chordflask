@@ -324,12 +324,11 @@ def test_healthy_venv_is_reused_and_verifies_available_runtime(tmp_path):
     calls = call_log.read_text()
     assert "-m venv" not in calls
     assert f"-m pip install --no-deps --editable {REPO_ROOT}" in calls
-    assert f"-r {REPO_ROOT / 'requirements-lyrics.txt'}" in calls
-    assert f"--no-deps -r {REPO_ROOT / 'requirements-lyrics.txt'}" not in calls
+    assert f"-r {REPO_ROOT / 'requirements-lyrics.txt'}" not in calls
     assert "import chordflask.analysis_queue" in calls
-    assert "import onnxruntime" in calls
-    assert "import pythainlp" in calls
-    assert "import tltk" in calls
+    assert "import onnxruntime" not in calls
+    assert "import pythainlp" not in calls
+    assert "import tltk" not in calls
     assert "chordflask --version" in calls
     assert "chordflask --help" in calls
     assert "chordflask-analyze --help" in calls
@@ -341,31 +340,6 @@ def test_healthy_venv_is_reused_and_verifies_available_runtime(tmp_path):
     assert marker.read_text() == "yes"
     assert "make check" in cp.stdout
     assert "make run" in cp.stdout
-
-
-def test_python3_14_setup_does_not_verify_tltk(tmp_path):
-    mock_dir = _mock_dpkg(tmp_path)
-    venv_dir, call_log = _healthy_mock_venv(tmp_path, python_version="3.14")
-    cp = _run_setup(
-        extra_env={
-            "PATH": f"{mock_dir}:/usr/bin:/bin",
-            "CHORDFLASK_VENV": str(venv_dir),
-        }
-    )
-
-    assert cp.returncode == 0, cp.stderr
-    calls = call_log.read_text()
-    assert f"-r {REPO_ROOT / 'requirements-lyrics.txt'}" in calls
-    assert "import onnxruntime" in calls
-    assert "import pythainlp" in calls
-    assert "import tltk" not in calls
-
-
-def test_source_lyrics_requirements_include_all_supported_engines():
-    requirements = (REPO_ROOT / "requirements-lyrics.txt").read_text(encoding="utf-8")
-
-    assert "pythainlp[onnx]>=5.3.3,<6" in requirements
-    assert 'tltk>=1.10,<1.11; python_version < "3.14"' in requirements
 
 
 def test_pip_failure_reports_command_and_retry(tmp_path):

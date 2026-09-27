@@ -203,7 +203,9 @@ def test_build_script_excludes_batch_helper_but_keeps_shared_formatter():
         '--add-data "${PROJECT_ROOT}/chordflask/assets:chordflask/assets"'
         in content
     )
-    assert "--exclude-module=chordflask_btc" in content
+    assert "--hidden-import=chordflask_btc.predictor" in content
+    assert "--exclude-module=chordflask_btc.model" in content
+    assert "--exclude-module=chordflask_btc " not in content
     assert "--exclude-module=chordflask_lyrics" in content
     assert "--exclude-module=pythainlp" in content
     assert "--exclude-module=onnxruntime" in content

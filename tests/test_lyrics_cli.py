@@ -125,12 +125,16 @@ def test_romanize_cli_is_optional_and_default_engine_is_onnx():
 
     plain = parser.parse_args(["song.mp3"])
     enabled = parser.parse_args(["--romanize", "song.mp3"])
-    selected = parser.parse_args(["--romanize-engine", "tltk", "song.mp3"])
+    selected = parser.parse_args(["--romanize-engine", "royin", "song.mp3"])
 
     assert plain.romanize is False
     assert enabled.romanize is True
     assert enabled.romanize_engine == "thai2rom_onnx"
-    assert selected.romanize_engine == "tltk"
+    assert selected.romanize_engine == "royin"
+
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args(["--romanize-engine", "tltk", "song.mp3"])
+    assert error.value.code == 2
 
 
 def test_thai_detection_mixed_text_and_requested_engine():
@@ -142,9 +146,9 @@ def test_thai_detection_mixed_text_and_requested_engine():
 
     assert romanize_thai("Latin only", romanize=fake_romanize) is None
     assert romanize_thai(
-        "ฉันรักเธอ very มาก!", engine="tltk", romanize=fake_romanize
+        "ฉันรักเธอ very มาก!", engine="royin", romanize=fake_romanize
     ) == "chan rak thoe very mak!"
-    assert calls == [("ฉันรักเธอ", "tltk"), ("มาก", "tltk")]
+    assert calls == [("ฉันรักเธอ", "royin"), ("มาก", "royin")]
 
 
 def test_thai_words_are_segmented_for_readable_spacing():
@@ -370,7 +374,7 @@ def test_generation_writes_only_thai_romanization_metadata(monkeypatch, tmp_path
 
     def fake_romanize(text, *, engine):
         calls.append((text, engine))
-        return "chan rak thoe Latin only" if "ฉัน" in text else None
+        return "chan rak thoe" if "ฉัน" in text else None
 
     monkeypatch.setattr(cli, "romanize_thai", fake_romanize)
 
@@ -385,9 +389,10 @@ def test_generation_writes_only_thai_romanization_metadata(monkeypatch, tmp_path
     parsed = read_chordpro(media.with_suffix(".cho"))
     lyric_blocks = [block for block in parsed["blocks"] if block["type"] == "line"]
     assert content.count("{x_chordflask_romanized:") == 1
-    assert lyric_blocks[0]["romanized"] == "chan rak thoe Latin only"
-    assert "".join(run["lyric"] for run in lyric_blocks[0]["runs"]) == "ฉันรักเธอ Latin only"
-    assert calls == [("ฉันรักเธอ Latin only", "royin")]
+    assert lyric_blocks[0]["romanized"] == "chan rak thoe"
+    assert "".join(run["lyric"] for run in lyric_blocks[0]["runs"]) == "ฉันรักเธอ"
+    assert "".join(run["lyric"] for run in lyric_blocks[1]["runs"]) == "Latin only"
+    assert calls == [("ฉันรักเธอ", "royin"), ("Latin only", "royin")]
 
 
 def test_enabled_romanization_adds_nothing_to_latin_only_generation(
@@ -407,7 +412,10 @@ def test_enabled_romanization_adds_nothing_to_latin_only_generation(
     cli.generate_file(media, client=FakeClient(lyrics_record()), romanize=True)
 
     assert "x_chordflask_romanized" not in media.with_suffix(".cho").read_text()
-    assert calls == [("first second", "thai2rom_onnx")]
+    assert calls == [
+        ("first", "thai2rom_onnx"),
+        ("second", "thai2rom_onnx"),
+    ]
 
 
 def test_romanization_failure_is_clear_and_does_not_write(monkeypatch, tmp_path, capsys):
@@ -421,15 +429,15 @@ def test_romanization_failure_is_clear_and_does_not_write(monkeypatch, tmp_path,
         cli,
         "romanize_thai",
         lambda *a, **k: (_ for _ in ()).throw(
-            RomanizationError('Thai romanization engine "tltk" is unavailable')
+            RomanizationError('Thai romanization engine "royin" is unavailable')
         ),
     )
 
     assert cli.run(
-        args(media, romanize=True, romanize_engine="tltk"),
+        args(media, romanize=True, romanize_engine="royin"),
         client=FakeClient(record),
     ) == 1
-    assert 'engine "tltk" is unavailable' in capsys.readouterr().err
+    assert 'engine "royin" is unavailable' in capsys.readouterr().err
     assert not media.with_suffix(".cho").exists()
 
 
@@ -443,7 +451,7 @@ def test_missing_base_dependency_points_to_normal_setup(monkeypatch):
 
     monkeypatch.setattr("builtins.__import__", fail_pythainlp)
 
-    with pytest.raises(RomanizationError, match="rerun make setup"):
+    with pytest.raises(RomanizationError, match="rerun make setup-lyrics"):
         romanize_thai("ภาษาไทย")
 
 
@@ -683,7 +691,12 @@ def test_embedded_synced_lyrics_keep_their_timestamps(monkeypatch, tmp_path):
         for run in block["runs"]
         if run["chord"]
     ]
-    assert chord_runs == [("C", 0), ("G", 4)]
+    assert chord_runs == [("C", 1), ("G", 4), ("G", 5)]
+    lyric_blocks = [block for block in parsed["blocks"] if block["type"] == "line"]
+    assert [
+        (block["line_start_beat"], block["line_end_beat"])
+        for block in lyric_blocks
+    ] == [(1, 5), (5, 8)]
 
 
 def test_generated_sidecar_preserves_sync_metadata_and_hides_it(monkeypatch, tmp_path):
@@ -707,7 +720,7 @@ def test_generated_sidecar_preserves_sync_metadata_and_hides_it(monkeypatch, tmp
         isinstance(start, int) and isinstance(end, int) and 0 <= start < end
         for _, start, end in chord_runs
     )
-    assert chord_runs == [("C", 0, 4), ("G", 4, 8)]
+    assert chord_runs == [("C", 1, 4), ("G", 4, 5), ("G", 5, 8)]
     content = media.with_suffix(".cho").read_text(encoding="utf-8")
     assert "[C@0]" not in content
     assert "{x_chordflask_beats:" in content

@@ -10,16 +10,17 @@ set -euo pipefail
 #
 # Runtime layout (kept entirely outside the normal chordflask venv):
 #   venv:       ~/.venvs/chordflask-btc        (override: CHORDFLASK_BTC_VENV)
-#   model code: chordflask_btc/model/          (tracked, MIT-adapted)
-#   checkpoint: chordflask_btc/model/btc_model_large_voca.pt  (git-ignored, 12,229,576 B)
-#   pin:        chordflask_btc/model/checkpoint.sha256        (tracked expected SHA-256)
+#   model code: ~/.venvs/chordflask-btc/share/chordflask-btc/
+#   checkpoint: same runtime-owned directory (12,229,576 B)
+#   source:     chordflask_btc/model/ (copied; never referenced at runtime)
 #
 # PyTorch 2.10.0 (cu128) is shared across Python 3.12–3.14 runtimes;
 # inference falls back to CPU automatically when CUDA is unavailable.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BTC_DIR="${CHORDFLASK_BTC_DIR:-${ROOT_DIR}/chordflask_btc/model}"
 VENV_DIR="${CHORDFLASK_BTC_VENV:-${HOME}/.venvs/chordflask-btc}"
+BTC_SOURCE_DIR="${ROOT_DIR}/chordflask_btc/model"
+BTC_DIR="${CHORDFLASK_BTC_DIR:-${VENV_DIR}/share/chordflask-btc}"
 PYTHON_BIN="${CHORDFLASK_BTC_PYTHON:-python3}"
 
 TORCH_VERSION="2.10.0"
@@ -28,6 +29,7 @@ CHECKPOINT_NAME="btc_model_large_voca.pt"
 CHECKPOINT_SIZE=12229576
 CHECKPOINT_URL="https://raw.githubusercontent.com/benasterisk/stemtube-desktop-app/main/external/BTC-ISMIR19/test/btc_model_large_voca.pt"
 CHECKPOINT="${BTC_DIR}/${CHECKPOINT_NAME}"
+SOURCE_CHECKPOINT="${BTC_SOURCE_DIR}/${CHECKPOINT_NAME}"
 SHA_FILE="${BTC_DIR}/checkpoint.sha256"
 WRAPPER_SOURCE="${BTC_DIR}/predict_raw.py"
 WRAPPER_BIN="${VENV_DIR}/bin/btc-predict-raw"
@@ -86,6 +88,19 @@ fi
 
 # ── 4. Checkpoint weights ────────────────────────────────────────────
 
+mkdir -p "$BTC_DIR"
+if [[ "$(readlink -f "$BTC_SOURCE_DIR")" != "$(readlink -f "$BTC_DIR")" ]]; then
+    info "Installing BTC predictor code into the external runtime"
+    install -m 0644 \
+        "${BTC_SOURCE_DIR}/btc_model.py" \
+        "${BTC_SOURCE_DIR}/features.py" \
+        "${BTC_SOURCE_DIR}/predict_raw.py" \
+        "${BTC_SOURCE_DIR}/transformer_modules.py" \
+        "${BTC_SOURCE_DIR}/vocabulary.py" \
+        "${BTC_SOURCE_DIR}/checkpoint.sha256" \
+        "$BTC_DIR/"
+fi
+
 need_download=0
 if [[ ! -f "$CHECKPOINT" ]]; then
     need_download=1
@@ -111,14 +126,20 @@ To proceed, acknowledge the provenance and rerun:
 EOF
         exit 1
     fi
-    if ! command -v curl >/dev/null 2>&1; then
-        fail "curl is required to download the checkpoint (sudo apt install curl)"
-    fi
-    info "Downloading checkpoint (${CHECKPOINT_SIZE} bytes)"
     tmp="${CHECKPOINT}.download.$$"
     trap 'rm -f "${tmp}"' EXIT
-    curl -fL --retry 3 -o "$tmp" "$CHECKPOINT_URL" || \
-        fail "Checkpoint download failed from ${CHECKPOINT_URL}"
+    if [[ -f "$SOURCE_CHECKPOINT" \
+        && "$(stat -c%s "$SOURCE_CHECKPOINT" 2>/dev/null || echo 0)" == "$CHECKPOINT_SIZE" ]]; then
+        info "Copying the existing checkpoint into the external runtime"
+        cp "$SOURCE_CHECKPOINT" "$tmp"
+    else
+        if ! command -v curl >/dev/null 2>&1; then
+            fail "curl is required to download the checkpoint (sudo apt install curl)"
+        fi
+        info "Downloading checkpoint (${CHECKPOINT_SIZE} bytes)"
+        curl -fL --retry 3 -o "$tmp" "$CHECKPOINT_URL" || \
+            fail "Checkpoint download failed from ${CHECKPOINT_URL}"
+    fi
     size="$(stat -c%s "$tmp")"
     [[ "$size" == "$CHECKPOINT_SIZE" ]] || \
         fail "Checkpoint size ${size} != expected ${CHECKPOINT_SIZE}"

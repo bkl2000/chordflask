@@ -2706,6 +2706,39 @@ def test_song_renderer_keeps_romanization_in_the_original_logical_row():
     assert re.search(r"\.song-romanized\s*\{\s*display: none;", narrow_rule)
 
 
+def test_song_renderer_keeps_each_chord_and_lyric_line_in_one_nonwrapping_unit():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    renderer = javascript_function(body, "renderSongSheet")
+
+    pair_match = re.search(
+        r"\.song-line-pair\s*\{(?P<rule>[^}]*)\}", body
+    )
+    run_match = re.search(r"\.song-run\s*\{(?P<rule>[^}]*)\}", body)
+    line_match = re.search(r"\.song-line\s*\{(?P<rule>[^}]*)\}", body)
+    assert pair_match and run_match and line_match
+    assert "display: flex;" in pair_match.group("rule")
+    assert "flex-wrap: nowrap;" in pair_match.group("rule")
+    assert "width: max-content;" in pair_match.group("rule")
+    assert "flex: 0 0 auto;" in run_match.group("rule")
+    assert "white-space: pre;" in run_match.group("rule")
+    assert "break-inside: avoid;" in line_match.group("rule")
+
+    # Every parsed line owns exactly one pair. All chord/lyric run columns go
+    # into that pair before the optional romanization and before the complete
+    # line unit is appended to the sheet.
+    assert "linePair.className = 'song-line-pair'" in renderer
+    assert "linePair.appendChild(runElement)" in renderer
+    assert "line.appendChild(linePair)" in renderer
+    assert "line.appendChild(runElement)" not in renderer
+    assert renderer.index("line.appendChild(linePair)") < renderer.index(
+        "if (block.romanized)"
+    )
+    assert renderer.index("if (block.romanized)") < renderer.index(
+        "fragment.appendChild(line)"
+    )
+
+
 def test_song_mode_switch_isolated_from_player_and_grid_display_state():
     _, client = make_client()
 
@@ -2859,11 +2892,15 @@ def test_lyrics_view_reuses_grid_sync_state_for_chord_highlight():
     )
     assert "Number.isInteger(run.end_beat)" in renderer
     assert "lyricChordMarkers.push" in renderer
+    assert "lyricLineMarkers.push" in renderer
+    assert "block.line_start_beat" in renderer
+    assert "block.line_end_beat" in renderer
     assert "endBeat" in renderer
     assert "marker.startBeat > activeLyricBeatIndex" in highlighter
     assert "activeLyricBeatIndex < marker.endBeat" in highlighter
     assert "classList.add('song-chord-active')" in highlighter
     assert "classList.remove('song-chord-active')" in highlighter
+    assert "keepLyricLineVisible(lyricLineMarkers[foundLine].element)" in highlighter
 
 
 def test_lyrics_highlight_clears_in_unmapped_instrumental_gap():
@@ -2887,7 +2924,7 @@ def test_lyrics_highlight_and_scroll_are_desktop_song_mode_only():
 
     body = client.get("/").get_data(as_text=True)
     highlighter = javascript_function(body, "updateLyricsHighlight")
-    scroller = javascript_function(body, "keepLyricMarkerVisible")
+    scroller = javascript_function(body, "keepLyricLineVisible")
 
     # The existing desktop-only switch forces songViewMode back to 'grid' below
     # 801px, and the highlighter refuses to run outside song mode.

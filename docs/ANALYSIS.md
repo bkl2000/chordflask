@@ -79,6 +79,9 @@ BTC runs a pretrained model in an isolated environment and adds its result as a
 separate `btc` chord track to an existing ChordFlask analysis; it never
 replaces Chordino. Without the runtime, `--analyzer btc` reports the optional
 setup and diagnostic commands while Chordino remains available.
+The runtime owns its predictor code and checkpoint under
+`~/.venvs/chordflask-btc`, so the desktop Prepare action can use the same
+Torch-free connector from either a source installation or a standalone.
 Chordino and BTC are both stored in the analysis file and can be switched in
 the browser with the chord-track selector.
 

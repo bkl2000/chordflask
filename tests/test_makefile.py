@@ -70,6 +70,8 @@ def test_default_make_target_only_shows_documented_commands():
         "status",
         "clean",
         "clean-report",
+        "setup-lyrics",
+        "lyrics-check",
         "setup-demucs",
         "demucs-check",
     )
@@ -87,6 +89,14 @@ def test_public_makefile_has_btc_runtime_targets():
     # The public BTC package is linted/compiled like the other top-level packages.
     assert "chordflask_btc" in text
     assert "EXTRA_HELP_ARGS" in text
+
+
+def test_public_makefile_has_lyrics_runtime_targets():
+    text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "make setup-lyrics" in text
+    assert "make lyrics-check" in text
+    assert "scripts/setup-lyrics.sh" in text
+    assert "scripts/lyrics-check.sh" in text
 
 
 def test_public_makefile_has_optional_demucs_targets():
@@ -318,6 +328,8 @@ def test_permission_contract_matches_repair_targets():
         "scripts/fix_permissions.sh",
         "scripts/run_tests.sh",
         "scripts/setup_venv.sh",
+        "scripts/setup-lyrics.sh",
+        "scripts/lyrics-check.sh",
         "scripts/metric_chords_diff.py",
         "scripts/chordflask-demucs",
         "scripts/setup-demucs.sh",

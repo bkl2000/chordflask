@@ -25,6 +25,7 @@ _DIRECTIVE_RE = re.compile(
 #
 #     {x_chordflask_beats: 17,23}
 #     {x_chordflask_end: 40}
+#     {x_chordflask_line: 17,40}
 #     {x_chordflask_romanized: some lyric}
 #     [G]some lyric [Am]more lyric
 #
@@ -36,6 +37,7 @@ _DIRECTIVE_RE = re.compile(
 # JSON remains the only chord/rhythm truth.
 _SYNC_BEATS_DIRECTIVE = "x_chordflask_beats"
 _SYNC_END_DIRECTIVE = "x_chordflask_end"
+_SYNC_LINE_DIRECTIVE = "x_chordflask_line"
 _ROMANIZED_DIRECTIVE = "x_chordflask_romanized"
 _ESCAPED_CHARACTERS = frozenset("[]{}\\")
 _METADATA_DIRECTIVES = frozenset(
@@ -99,6 +101,13 @@ def _parse_beat_end(value):
     except ValueError:
         return None
     return end if end >= 0 else None
+
+
+def _parse_line_range(value):
+    values = _parse_beat_list(value)
+    if values is None or len(values) != 2 or values[0] >= values[1]:
+        return None
+    return values
 
 
 def _attach_sync_map(block, beats, end):
@@ -191,6 +200,7 @@ def parse_chordpro(text):
     section_stack = []
     pending_beats = None
     pending_end = None
+    pending_line = None
     pending_romanized = None
 
     for source_line in text.splitlines():
@@ -198,6 +208,7 @@ def parse_chordpro(text):
             blocks.append({"type": "blank"})
             pending_beats = None
             pending_end = None
+            pending_line = None
             pending_romanized = None
             continue
 
@@ -207,6 +218,7 @@ def parse_chordpro(text):
                 blocks.append(_literal_line(source_line))
                 pending_beats = None
                 pending_end = None
+                pending_line = None
                 pending_romanized = None
                 continue
             name = match.group(1).lower()
@@ -217,11 +229,15 @@ def parse_chordpro(text):
             if name == _SYNC_END_DIRECTIVE:
                 pending_end = _parse_beat_end(value)
                 continue
+            if name == _SYNC_LINE_DIRECTIVE:
+                pending_line = _parse_line_range(value)
+                continue
             if name == _ROMANIZED_DIRECTIVE:
                 pending_romanized = value if value.strip() else None
                 continue
             pending_beats = None
             pending_end = None
+            pending_line = None
             pending_romanized = None
             if name in _METADATA_DIRECTIVES:
                 if match.group(2) is None:
@@ -256,11 +272,14 @@ def parse_chordpro(text):
 
         block = _parse_lyric_line(source_line)
         _attach_sync_map(block, pending_beats, pending_end)
+        if block.get("type") == "line" and pending_line is not None:
+            block["line_start_beat"], block["line_end_beat"] = pending_line
         if block.get("type") == "line" and pending_romanized is not None:
             block["romanized"] = pending_romanized
         blocks.append(block)
         pending_beats = None
         pending_end = None
+        pending_line = None
         pending_romanized = None
 
     return {"metadata": metadata, "blocks": blocks}

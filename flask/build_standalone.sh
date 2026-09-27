@@ -89,11 +89,12 @@ pyinstaller \
     --hidden-import=numba.core.types \
     --hidden-import=llvmlite \
     --hidden-import=chordflask_demucs.cli \
+    --hidden-import=chordflask_btc.predictor \
     --copy-metadata=imageio \
     --copy-metadata=moviepy \
     --additional-hooks-dir="${SCRIPT_DIR}/pyinstaller_hooks" \
     --exclude-module=imageio_ffmpeg.binaries \
-    --exclude-module=chordflask_btc \
+    --exclude-module=chordflask_btc.model \
     --exclude-module=chordflask_lyrics \
     --exclude-module=pythainlp \
     --exclude-module=onnxruntime \

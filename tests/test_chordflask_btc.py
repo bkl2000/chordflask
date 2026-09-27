@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from chordflask_btc import analyze, schema
-from chordflask_btc.runtime import detect_btc_runtime, wrapper_path
+from chordflask_btc.runtime import btc_dir, detect_btc_runtime, wrapper_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -376,6 +376,7 @@ def test_runtime_resolves_installed_wrapper():
     # ~/.venvs/chordflask-btc), never a private source-tree script.
     assert wrapper_path().name == "btc-predict-raw"
     assert ".venvs/chordflask-btc" in str(wrapper_path())
+    assert btc_dir() == wrapper_path().parents[1] / "share" / "chordflask-btc"
 
 
 def test_runtime_requires_executable_wrapper(monkeypatch, tmp_path):

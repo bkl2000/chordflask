@@ -25,8 +25,8 @@ EXTRA_PYTHONPATH ?=
 
 .PHONY: help all install setup setup-runtime setup-dev setup-recreate \
 	fix-permissions test check lint run worker standalone standalone-run \
-	plugins analyze demucs export maintain setup-btc btc-check setup-demucs \
-	demucs-check status clean clean-report
+	plugins analyze demucs export maintain setup-lyrics lyrics-check setup-btc \
+	btc-check setup-demucs demucs-check status clean clean-report
 
 help:
 	@printf '%s\n' \
@@ -48,6 +48,8 @@ help:
 		'  make demucs              Create Demucs FLAC stem sets (optional runtime)' \
 		'  make export              Export leadsheets (chordflask-export)' \
 		'  make maintain            Maintain data/installation (chordflask-maintain)' \
+		'  make setup-lyrics        Set up the optional Lyrics runtime [installs]' \
+		'  make lyrics-check        Diagnose the optional Lyrics runtime' \
 		'  make setup-btc           Set up the optional BTC analyzer runtime [installs]' \
 		'  make btc-check           Diagnose the optional BTC analyzer runtime' \
 		'  make setup-demucs        Set up the optional Demucs runtime [installs]' \
@@ -129,6 +131,12 @@ export:
 
 maintain:
 	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask-maintain" $(MAINTAIN_ARGS)
+
+setup-lyrics:
+	@bash "$(ROOT_DIR)/scripts/setup-lyrics.sh"
+
+lyrics-check:
+	@bash "$(ROOT_DIR)/scripts/lyrics-check.sh"
 
 setup-btc:
 	@bash "$(ROOT_DIR)/scripts/setup-btc.sh"

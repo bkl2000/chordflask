@@ -122,18 +122,37 @@ before exposing it beyond localhost.
 | FFmpeg | System installation | System installation |
 | Vamp plugins | Installed separately with `make plugins` | Installed separately with `install_vamp.sh` |
 | Display existing same-stem `.cho` Lyrics | Included | Included |
-| Generate/fetch Lyrics and Thai romanization | `chordflask-genlyrics` included | Not included |
+| Generate/fetch Lyrics and Thai romanization | Installed helper or optional external Lyrics venv | Optional external Lyrics venv |
 | Display romanization already stored in `.cho` | Included | Included |
-| BTC model runtime and generation | Optional external BTC venv | Not available from the bundle |
+| BTC model runtime and generation | Optional external BTC venv | Lightweight connector bundled; model runtime remains external |
 | Demucs runtime/model | Optional external Demucs venv | Not bundled; an existing compatible external runtime can serve desktop Prepare |
 | Maintenance and separate helper commands | Installed console commands | Not shipped as separate commands |
 
 The standalone can use previously generated analysis and `.cho` data that
-travel with the media collection. It cannot fetch lyrics or create
-romanization. Generate those sidecars in a source installation first; see
-[LYRICS.md](LYRICS.md#standalone-behavior).
+travel with the media collection. It can also prepare Lyrics or BTC when their
+external runtimes have been installed from a source checkout. See
+[LYRICS.md](LYRICS.md#standalone-behavior) and the
+[BTC runtime guide](../chordflask_btc/model/README.md).
 
-## Optional on-demand stem preparation
+## Optional desktop preparation runtimes
+
+Prepare is shown only on desktop layouts (1024 px and wider), and only usable
+actions are listed. Install and check the desired external runtimes from a
+source checkout before copying or running the standalone:
+
+```bash
+make setup-lyrics
+make lyrics-check
+make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1
+make btc-check
+make setup-demucs
+make demucs-check
+```
+
+Lyrics defaults to `~/.venvs/chordflask-lyrics` and supports
+`CHORDFLASK_LYRICS_VENV`. BTC defaults to `~/.venvs/chordflask-btc` and supports
+`CHORDFLASK_BTC_VENV`. These runtimes are self-contained and do not require the
+source checkout after setup.
 
 The bundle contains only the small, dependency-free `chordflask_demucs`
 producer — no Torch, torchaudio, torchcodec, third-party `demucs`, or model
@@ -143,17 +162,15 @@ desktop player (1024 px and wider) offers **Stems** in its compact **Prepare**
 menu for the loaded song. CUDA is used when available and CPU otherwise,
 exactly like the CLI. Preparation runs in the background without interrupting
 playback. Without that external runtime the Prepare control is not offered.
-Tablet/mobile layouts never show it.
+Tablet/mobile layouts never show Prepare.
 
-The standalone does not offer Lyrics or BTC preparation because their source
-producers remain excluded. It can still display an existing `.cho` and select
-an existing `btc` track. If Demucs is also unavailable, the complete
-**Prepare** control stays hidden.
-
-BTC inference is not available in the standalone. Existing Schema-v3 analysis
-that already contains a `btc` track remains readable and selectable, but the
-bundle does not contain the BTC command, weights, PyTorch runtime, or setup
-workflow.
+The bundle excludes the Lyrics generator and its optional language runtimes,
+but can invoke the external `chordflask-genlyrics` helper. It bundles the
+lightweight BTC connector needed to validate the external runtime, decode
+audio, normalize predictions, and publish a BTC track. Torch, BTC predictor
+code and weights, PyThaiNLP, ONNX Runtime, Demucs, and all optional model
+weights remain outside the executable. If no external runtime is usable, the
+complete **Prepare** control stays hidden.
 
 ## Compatibility and glibc
 
@@ -185,16 +202,13 @@ plugin installer and diagnostic procedure are documented in
 - `THIRD_PARTY_NOTICES.md` — dependency licences and provenance
 
 The standalone reads and displays same-stem lowercase `.cho` song sheets in
-the Lyrics view, including chord-follow synchronization when the `.cho` already
-contains ChordFlask range metadata. It does not include
-`chordflask-genlyrics`, the `chordflask_lyrics` package, an LRCLIB client,
-lyric-generation network functionality, PyThaiNLP, ONNX Runtime, TLTK, or
-romanization generation. Experimental romanization already stored in a `.cho`
-still displays beneath its canonical original Thai lyric in desktop Lyrics
-because the lightweight core parser and UI remain bundled; it is never
-recomputed. Narrow/mobile layout remains Grid-only. Generate `.cho` files with
-a normal source/virtualenv installation and keep them beside the media when
-using the standalone.
+the Lyrics view, including chord-follow synchronization. It does not include
+`chordflask_lyrics`, an LRCLIB client, PyThaiNLP, or ONNX Runtime. With
+the external Lyrics runtime installed, desktop Prepare invokes that helper for
+LRC, embedded, or LRCLIB generation and whatever romanization engines the
+runtime supports. Experimental romanization already stored in a `.cho` still
+displays beneath its canonical original Thai lyric. Narrow/mobile layout
+remains Grid-only.
 
 ## Troubleshooting and diagnostics
 
@@ -215,9 +229,9 @@ using the standalone.
   `--roots` restriction.
 - **Analysis cannot be saved:** the user needs write access to the media
   directory so `.chordflask` can be created.
-- **Lyrics generation or BTC commands are missing:** these producers are not
-  bundled. Use a source installation; existing compatible results can still be
-  displayed by the standalone.
+- **Lyrics or BTC is absent from Prepare:** run `make lyrics-check` or
+  `make btc-check` from a source checkout. The standalone intentionally does
+  not contain those heavy runtimes.
 
 For build identity, run `./chordflask --version`. For a complete core dependency
 check in a source installation, use `chordflask-maintain doctor`.

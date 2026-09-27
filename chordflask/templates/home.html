@@ -553,18 +553,25 @@
     }
 
     .song-line {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
       min-height: 1.5em;
       margin-bottom: 3px;
+      break-inside: avoid;
+    }
+
+    .song-line-pair {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: flex-end;
+      width: max-content;
+      min-width: 100%;
     }
 
     .song-run {
       display: inline-flex;
+      flex: 0 0 auto;
       flex-direction: column;
       min-width: 0.7em;
-      white-space: pre-wrap;
+      white-space: pre;
     }
 
     .song-chord {
@@ -2575,7 +2582,9 @@
     let songSheetRequestInFlight = false;
     let songViewGeneration = 0;
     let lyricChordMarkers = [];
+    let lyricLineMarkers = [];
     let activeLyricMarkerIndex = -1;
+    let activeLyricLineIndex = -1;
     let activeLyricBeatIndex = null;
 
     const STEM_NAMES = ['vocals', 'drums', 'bass', 'other'];
@@ -2704,7 +2713,9 @@
       songSheetRequestInFlight = false;
       songSheet.replaceChildren();
       lyricChordMarkers = [];
+      lyricLineMarkers = [];
       activeLyricMarkerIndex = -1;
+      activeLyricLineIndex = -1;
       activeLyricBeatIndex = null;
       applySongViewMode();
       if (songViewMode === 'song') loadSongSheet();
@@ -2721,7 +2732,9 @@
     function renderSongSheet(song) {
       const fragment = document.createDocumentFragment();
       lyricChordMarkers = [];
+      lyricLineMarkers = [];
       activeLyricMarkerIndex = -1;
+      activeLyricLineIndex = -1;
       const metadata = song.metadata || {};
       if (metadata.title) appendSongText(fragment, 'song-sheet-title', metadata.title);
       if (metadata.artist) appendSongText(fragment, 'song-sheet-artist', metadata.artist);
@@ -2755,6 +2768,8 @@
         if (block.type !== 'line') return;
         const line = document.createElement('div');
         line.className = 'song-line';
+        const linePair = document.createElement('div');
+        linePair.className = 'song-line-pair';
         (block.runs || []).forEach(run => {
           const runElement = document.createElement('span');
           runElement.className = 'song-run';
@@ -2774,14 +2789,28 @@
               endBeat: run.end_beat,
             });
           }
-          line.appendChild(runElement);
+          linePair.appendChild(runElement);
         });
+        line.appendChild(linePair);
         if (block.romanized) {
           appendSongText(line, 'song-romanized', block.romanized);
+        }
+        if (
+          Number.isInteger(block.line_start_beat)
+          && Number.isInteger(block.line_end_beat)
+          && block.line_start_beat >= 0
+          && block.line_end_beat > block.line_start_beat
+        ) {
+          lyricLineMarkers.push({
+            element: line,
+            startBeat: block.line_start_beat,
+            endBeat: block.line_end_beat,
+          });
         }
         fragment.appendChild(line);
       });
       lyricChordMarkers.sort((a, b) => a.startBeat - b.startBeat);
+      lyricLineMarkers.sort((a, b) => a.startBeat - b.startBeat);
       songSheet.replaceChildren(fragment);
       updateLyricsHighlight(activeLyricBeatIndex);
     }
@@ -2870,8 +2899,23 @@
       if (
         songViewMode !== 'song'
         || activeLyricBeatIndex === null
-        || !lyricChordMarkers.length
+        || (!lyricChordMarkers.length && !lyricLineMarkers.length)
       ) return;
+      let foundLine = -1;
+      for (let index = 0; index < lyricLineMarkers.length; index += 1) {
+        const marker = lyricLineMarkers[index];
+        if (marker.startBeat > activeLyricBeatIndex) break;
+        if (activeLyricBeatIndex < marker.endBeat) {
+          foundLine = index;
+          break;
+        }
+      }
+      if (foundLine !== activeLyricLineIndex) {
+        activeLyricLineIndex = foundLine;
+        if (foundLine >= 0) {
+          keepLyricLineVisible(lyricLineMarkers[foundLine].element);
+        }
+      }
       // Musical position, not chord text, identifies the active marker: the
       // marker's mapped beat range must contain the active analyzed beat. If
       // the position falls in an unmapped instrumental gap no range matches and
@@ -2893,12 +2937,15 @@
       if (found < 0) return;
       const marker = lyricChordMarkers[found];
       marker.element.classList.add('song-chord-active');
-      keepLyricMarkerVisible(marker);
+      if (activeLyricLineIndex < 0) keepLyricMarkerVisible(marker);
     }
 
     function keepLyricMarkerVisible(marker) {
+      keepLyricLineVisible(marker.line);
+    }
+
+    function keepLyricLineVisible(line) {
       const container = callbackContainer;
-      const line = marker.line;
       if (!line || !container.clientHeight) return;
       const containerRect = container.getBoundingClientRect();
       const lineRect = line.getBoundingClientRect();

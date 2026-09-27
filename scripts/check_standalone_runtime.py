@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Reject excluded optional packages and model weights from a standalone bundle.
+"""Reject heavy optional packages and model weights from a standalone bundle.
 
-The lightweight ChordFlask Demucs producer (``chordflask_demucs`` and its
-submodules) is intentionally bundled. The third-party ``demucs`` package,
-Torch, torchaudio, torchcodec, Demucs model weights, and any bundled model
-cache must stay external instead.
+The lightweight ChordFlask Demucs producer and BTC connector are intentionally
+bundled. Heavy third-party runtimes, Lyrics generation, and model assets stay
+external.
 
 Usage:
     check_standalone_runtime.py <standalone-executable>
@@ -24,7 +23,8 @@ import sys
 HEAVY_PACKAGE = re.compile(r"^(?:torch|torchaudio|torchcodec|demucs)(?:[./-]|$)")
 MODEL_WEIGHT = re.compile(r"\.(?:pt|pth|th|onnx|safetensors|ckpt)$")
 MODEL_CACHE = re.compile(r"(?:^|/)(?:htdemucs|htdemucs_ft|mdx_extra)(?:[./-]|$)")
-SOURCE_ONLY_PACKAGE = re.compile(r"^chordflask_lyrics(?:[./-]|$)")
+EXTERNAL_LYRICS_PACKAGE = re.compile(r"^chordflask_lyrics(?:[./-]|$)")
+BTC_MODEL_PACKAGE = re.compile(r"^chordflask_btc[./-]model(?:[./-]|$)")
 ROMANIZATION_PACKAGE = re.compile(r"^(?:pythainlp|onnxruntime|tltk)(?:[./-]|$)")
 
 
@@ -54,7 +54,8 @@ def find_offenders(listing: str) -> list[str]:
             HEAVY_PACKAGE.match(name)
             or MODEL_WEIGHT.search(name)
             or MODEL_CACHE.search(name)
-            or SOURCE_ONLY_PACKAGE.match(name)
+            or EXTERNAL_LYRICS_PACKAGE.match(name)
+            or BTC_MODEL_PACKAGE.match(name)
             or ROMANIZATION_PACKAGE.match(name)
         ):
             offenders.append(name)

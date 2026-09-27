@@ -50,13 +50,13 @@ services. Completed Schema-v3 JSON is published beside the media.
 An optional external ChordPro Lyrics sheet has a generation-time path:
 
 ```text
-existing analysis + embedded/LRCLIB lyrics + optional source-only PyThaiNLP
+existing analysis + embedded/LRCLIB lyrics + optional external-runtime PyThaiNLP
    -> chordflask-genlyrics
    -> same-stem .cho with presentation and local sync metadata
 ```
 
-The source-installation generator selects one chord-track snapshot and contacts
-LRCLIB only on explicit invocation. Analysis JSON remains authoritative for
+The external generator selects one chord-track snapshot and contacts LRCLIB
+only on explicit invocation. Analysis JSON remains authoritative for
 musical chords and timing; the `.cho` holds song-sheet presentation plus local
 mapping metadata. Experimental `x_chordflask_romanized` presentation metadata
 belongs to the immediately following original lyric line, has no independent
@@ -146,8 +146,10 @@ the analysis engines.
 Optional BTC analyzer orchestration and Schema-v3 integration. The normal
 package side decodes/prepares input, invokes `btc-predict-raw` in the dedicated
 `~/.venvs/chordflask-btc` environment, normalizes its output, and atomically
-writes a separate `btc` chord track. Model inference and its heavy dependencies
-are loaded only in that subprocess.
+writes a separate `btc` chord track. The venv also owns the predictor sources
+and checkpoint, so the lightweight connector works from source or frozen
+operation without a checkout. Model inference and its heavy dependencies are
+loaded only in that subprocess.
 
 ### `chordflask_demucs`
 
@@ -196,15 +198,16 @@ selected venv, preserves the caller's working directory, and does not construct
 `.chordflask-root` inside the venv for compatibility and diagnostics; normal
 imports and startup do not depend on it.
 
-`chordflask_lyrics/` is an optional source-installation package in this normal
-environment. It performs explicit generation-time LRCLIB requests and writes
-external `.cho` song-sheet data without changing the analysis schema or
-importing into the web application. Its experimental Thai romanization path
-uses the source-installed PyThaiNLP/ONNX Runtime or TLTK dependencies and stores
-the result once in the sidecar. It has no separate virtual environment and is
-excluded from the standalone, which retains only the core ChordPro reader and
-desktop Lyrics display for already-stored romanization. No generation or model
-loading occurs in the browser or standalone.
+`chordflask_lyrics/` provides the lightweight generator installed by source
+setups and in the separate external Lyrics runtime. It performs explicit
+generation-time LRCLIB requests and writes external `.cho` song-sheet data
+without changing the analysis schema or importing into the web application.
+Its experimental Thai romanization path uses PyThaiNLP/ONNX Runtime dependencies
+installed only in the external runtime and stores the result once in the
+sidecar. The package and language runtime are excluded from the standalone,
+which invokes the external helper and retains the core ChordPro reader and
+desktop Lyrics display for stored romanization. No model loading occurs in the
+browser or standalone.
 
 The source selection, LRCLIB matching, line alignment, CLI, and romanization
 contracts exposed to users are documented in [LYRICS.md](LYRICS.md); this page

@@ -18,12 +18,16 @@ def _write_executable(path: Path, content: str) -> None:
 def _runtime(tmp_path, wrapper_script, checkpoint=b"fake-checkpoint"):
     btc_dir = tmp_path / "btc"
     btc_dir.mkdir()
-    (btc_dir / "predict_raw.py").write_text("# stub\n")
+    for filename in (
+        "btc_model.py", "features.py", "predict_raw.py",
+        "transformer_modules.py", "vocabulary.py",
+    ):
+        (btc_dir / filename).write_text("# stub\n")
     (btc_dir / "btc_model_large_voca.pt").write_bytes(checkpoint)
 
     venv = tmp_path / "venv"
     (venv / "bin").mkdir(parents=True)
-    (venv / "bin" / "python").write_text("#!/bin/sh\n")
+    _write_executable(venv / "bin" / "python", "#!/bin/sh\n")
     _write_executable(venv / "bin" / "btc-predict-raw", wrapper_script)
     return btc_dir, venv
 

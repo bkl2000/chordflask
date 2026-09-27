@@ -18,19 +18,28 @@ def _listing(*names):
     return "\n".join(f" 0, 1, 1, '{name}'" for name in names)
 
 
-def test_lightweight_producer_is_allowed():
+def test_lightweight_connectors_are_allowed():
     offenders = module.find_offenders(
         _listing(
             "chordflask_demucs",
             "chordflask_demucs.cli",
             "chordflask_demucs.runtime",
             "chordflask_demucs.storage",
+            "chordflask_btc",
+            "chordflask_btc.predictor",
+            "chordflask_btc.runtime",
+            "chordflask_btc.schema",
             "chordflask_base",
             "chordflask_base.model",
         )
     )
 
     assert offenders == []
+
+
+def test_btc_model_namespace_is_rejected():
+    names = ("chordflask_btc.model", "chordflask_btc/model/predict_raw.py")
+    assert module.find_offenders(_listing(*names)) == list(names)
 
 
 def test_heavy_packages_are_rejected():

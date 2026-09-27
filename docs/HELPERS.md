@@ -36,7 +36,7 @@ These are kept as usable command-line tools and have smoke-test coverage.
   scripts/chordflask-export /path/to/collection
   ```
 
-- `chordflask_lyrics/` - the source-installation-only
+- `chordflask_lyrics/` - the externally runnable
   `chordflask-genlyrics` command. Its default lyrics priority is
   `lrc:embedded:lrclib`: a usable synchronized same-stem `.lrc`, embedded
   lyrics, then an on-demand LRCLIB lookup using standard-library HTTP. External
@@ -56,23 +56,21 @@ These are kept as usable command-line tools and have smoke-test coverage.
   is supplied.
 
   Thai romanization is **experimental in 0.9.16**. `--romanize` uses the
-  source-only PyThaiNLP `thai2rom_onnx` engine by default; `--romanize-engine
-  tltk` selects the TLTK alternative and `--romanize-engine royin` selects the
-  RTGS-oriented engine. Engines never silently fall back. Romanization is
+  external-runtime PyThaiNLP `thai2rom_onnx` engine by default;
+  `--romanize-engine royin` selects the RTGS-oriented alternative. Engines
+  never silently fall back. Romanization is
   generated once as non-timed presentation metadata in the `.cho`; it is not
   recomputed by the browser or standalone, and the original Thai lyric remains
   canonical. It is intended as pronunciation assistance rather than IPA or
   authoritative tone notation, and results may vary for wording and names.
-  Source setup installs `pythainlp[onnx]>=5.3.3,<6` without PyTorch. TLTK 1.10
-  is also installed on supported Python versions where its dependency stack is
-  compatible, currently Python 3.12 and 3.13. On Python 3.14, use
-  `thai2rom_onnx` (the default) or `royin`; explicitly requesting unavailable
-  `tltk` fails without falling back.
+  The external Lyrics setup installs `pythainlp[onnx]>=5.3.3,<6` without
+  PyTorch. Its supported engines are `thai2rom_onnx` and `royin`.
 
-  Wrapper: `scripts/chordflask-genlyrics`. This package is explicitly excluded
-  from the standalone and uses the normal ChordFlask environment rather than a
-  separate LRCLIB environment. Normal LRCLIB lookup needs no API key, and
-  generated lyrics remain local user data.
+  Wrapper: `scripts/chordflask-genlyrics`. This package is excluded from the
+  standalone. Desktop Prepare can instead invoke it from the isolated
+  `~/.venvs/chordflask-lyrics` environment created by `make setup-lyrics`.
+  Normal LRCLIB lookup needs no API key, and generated lyrics remain local user
+  data.
 
   ```bash
   scripts/chordflask-genlyrics song.mp3
@@ -85,7 +83,6 @@ These are kept as usable command-line tools and have smoke-test coverage.
   scripts/chordflask-genlyrics --force --track user_edited song.mp3
   scripts/chordflask-genlyrics --romanize song.mp3
   scripts/chordflask-genlyrics --romanize --romanize-engine thai2rom_onnx song.mp3
-  scripts/chordflask-genlyrics --romanize --romanize-engine tltk song.mp3
   scripts/chordflask-genlyrics --romanize --romanize-engine royin song.mp3
   scripts/chordflask-genlyrics --force --romanize /music/thai-album
   scripts/chordflask-genlyrics --dry-run /music/album

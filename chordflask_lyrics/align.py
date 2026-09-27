@@ -24,7 +24,9 @@ class AlignedRow:
     measure_start: int
     measure_count: int
     runs: tuple[AlignedRun, ...]
+    start_beat: int | None = None
     end_beat: int | None = None
+    chord_end_beat: int | None = None
 
 
 def time_plain_lyrics(value: str, beat_times: list[float]) -> tuple[TimedLyricLine, ...]:
@@ -69,6 +71,18 @@ def _measure_map(beat_times, beat_numbers, meter):
     return measures, mapping
 
 
+def _word_boundary(text: str, position: int) -> int:
+    """Snap an estimated marker offset without splitting an ordinary word."""
+    position = max(0, min(len(text), position))
+    boundaries = [0, len(text)]
+    boundaries.extend(
+        index
+        for index in range(1, len(text))
+        if text[index - 1].isspace() or text[index].isspace()
+    )
+    return min(boundaries, key=lambda index: (abs(index - position), index > position))
+
+
 def _row_runs(lines, end_times, beat_times, beat_chords, row_end_beat):
     runs = []
     previous_chord = None
@@ -78,15 +92,21 @@ def _row_runs(lines, end_times, beat_times, beat_chords, row_end_beat):
         end_time = end_times[line_index]
         events = []
 
-        # Preserve the chord already active at the lyric timestamp. Subsequent
-        # events retain their analyzed beat times; event count never controls
-        # their placement.
-        active_beat = bisect.bisect_right(beat_times, line.timestamp) - 1
-        if active_beat >= 0:
-            chord = beat_chords[active_beat]
-            if chord not in {"", "N", "X"} and chord != previous_chord:
+        # Anchor the chord authoritative at the mapped lyric-start beat. This
+        # deliberately repeats a held chord on each new timed lyric line.
+        # Subsequent events retain their analyzed beat times; event count never
+        # controls their placement.
+        line_start_beat = beat_at_or_after_index(line.timestamp, beat_times)
+        if line_start_beat < row_end_beat:
+            chord = beat_chords[line_start_beat]
+            if chord not in {"", "N", "X"}:
                 events.append(
-                    (line.timestamp, chord, beat_times[active_beat], active_beat)
+                    (
+                        beat_times[line_start_beat],
+                        chord,
+                        beat_times[line_start_beat],
+                        line_start_beat,
+                    )
                 )
                 previous_chord = chord
 
@@ -112,7 +132,10 @@ def _row_runs(lines, end_times, beat_times, beat_chords, row_end_beat):
             fraction = 0.0
             if end_time > line.timestamp:
                 fraction = (event_time - line.timestamp) / (end_time - line.timestamp)
-            position = max(0, min(len(line.text), round(fraction * len(line.text))))
+            position = _word_boundary(
+                line.text,
+                round(fraction * len(line.text)),
+            )
             if position < cursor:
                 position = cursor
             lyric = line.text[cursor:position]
@@ -133,67 +156,24 @@ def _row_runs(lines, end_times, beat_times, beat_chords, row_end_beat):
 
 
 def _bound_row_runs(rows, beat_chords):
-    """Give each row's final marker its effective analyzed range end.
-
-    The effective end is the analyzed chord-run end capped by mapped Lyrics
-    coverage. Adjacent rows are continuous coverage, so a display-row boundary
-    does not truncate a held chord. A gap between rows retains the earlier
-    coverage boundary. If adjacent rows split one run, the earlier marker owns
-    it and the redundant marker at the start of the next row is removed. A
-    later surviving marker takes ownership at its own start beat.
-    """
-    bounded = list(rows)
-    for index, row in enumerate(bounded):
+    """Cap each timed lyric line's final marker at its own coverage end."""
+    bounded = []
+    for row in rows:
         row_chords = [run for run in row.runs if run.chord is not None]
         if not row_chords:
+            bounded.append(row)
             continue
         last_run = row_chords[-1]
         if last_run.beat_index is None:
+            bounded.append(row)
             continue
 
         analyzed_chord = beat_chords[last_run.beat_index]
         run_end = last_run.beat_index + 1
         while run_end < len(beat_chords) and beat_chords[run_end] == analyzed_chord:
             run_end += 1
-        next_row = bounded[index + 1] if index + 1 < len(bounded) else None
-        contiguous = (
-            next_row is not None
-            and row.measure_start + row.measure_count == next_row.measure_start
-        )
-        effective_end = run_end if contiguous else min(row.end_beat, run_end)
-        next_chords = (
-            [run for run in next_row.runs if run.chord is not None]
-            if next_row is not None
-            else []
-        )
-        if contiguous and next_chords:
-            first_next_run = next_chords[0]
-            if (
-                first_next_run.beat_index is not None
-                and first_next_run.beat_index < run_end
-            ):
-                next_runs = tuple(
-                    replace(run, chord=None, chord_time=None, beat_index=None)
-                    if run is first_next_run else run
-                    for run in next_row.runs
-                )
-                bounded[index + 1] = replace(next_row, runs=next_runs)
-
-        next_mapped_run = next(
-            (
-                run
-                for later_row in bounded[index + 1 :]
-                for run in later_row.runs
-                if run.chord is not None and run.beat_index is not None
-            ),
-            None,
-        )
-        if (
-            next_mapped_run is not None
-            and last_run.beat_index < next_mapped_run.beat_index < effective_end
-        ):
-            effective_end = next_mapped_run.beat_index
-        bounded[index] = replace(row, end_beat=effective_end)
+        effective_end = min(row.end_beat, run_end)
+        bounded.append(replace(row, chord_end_beat=effective_end))
     return tuple(bounded)
 
 
@@ -205,7 +185,7 @@ def align_lyrics(
     meter: int | None,
     beat_chords: list[str],
 ) -> tuple[AlignedRow, ...]:
-    """Align lines to beat/measure groups, normally four measures per row."""
+    """Align every visible timed lyric line to its own beat coverage."""
     if not lines:
         raise ValueError("synchronized lyrics are empty")
     if len(beat_times) != len(beat_chords):
@@ -219,64 +199,26 @@ def align_lyrics(
     for index, line in enumerate(lines):
         end_time = lines[index + 1].timestamp if index + 1 < len(lines) else song_end
         located.append((line, beat_at_or_after_index(line.timestamp, beat_times), end_time))
-    four_measure_groups = {}
-    for line, beat_index, end_time in located:
-        measure_index = measure_by_beat[beat_index]
-        four_measure_groups.setdefault(measure_index // 4, []).append((line, beat_index, end_time))
-
-    row_specs = []
-    for group_index in sorted(four_measure_groups):
-        entries = four_measure_groups[group_index]
-        text_size = sum(len(line.text) for line, _, _ in entries)
-        group_start = group_index * 4
-        group_beats = [beat for measure in measures[group_start : group_start + 4] for beat in measure]
-        chord_density = len({beat_chords[index] for index in group_beats})
-        use_two = text_size > 120 or chord_density > 8
-        subgroups = {}
-        for line, beat_index, end_time in entries:
-            measure_index = measure_by_beat[beat_index]
-            subgroup = measure_index // 2 if use_two else group_index
-            subgroups.setdefault(subgroup, []).append((line, beat_index, end_time))
-        for subgroup in sorted(subgroups):
-            selected = subgroups[subgroup]
-            row_lines = [item[0] for item in selected]
-            row_ends = [item[2] for item in selected]
-            measure_start = subgroup * 2 if use_two else group_index * 4
-            measure_count = min(2 if use_two else 4, len(measures) - measure_start)
-            row_beats = [
-                beat
-                for measure in measures[measure_start : measure_start + measure_count]
-                for beat in measure
-            ]
-            # Exclusive analyzed beat end of this rendered row's measures. It is
-            # the boundary used to clear Lyrics sync in an instrumental gap.
-            row_end_beat = row_beats[-1] + 1 if row_beats else measure_start
-            row_specs.append(
-                (measure_start, measure_count, row_lines, row_ends, row_end_beat)
-            )
-
     rows = []
-    for index, spec in enumerate(row_specs):
-        measure_start, measure_count, row_lines, row_ends, row_end_beat = spec
-        next_spec = row_specs[index + 1] if index + 1 < len(row_specs) else None
-        if (
-            next_spec is not None
-            and measure_start + measure_count == next_spec[0]
-        ):
-            # Consecutive display rows are one mapped Lyrics span. Keep every
-            # analyzed change up to the next timed lyric instead of truncating
-            # the marker set merely because the visual row changed.
-            row_end_beat = max(
-                row_end_beat,
-                bisect.bisect_left(beat_times, row_ends[-1]),
-            )
+    for line, start_beat, end_time in located:
+        if not line.text.strip():
+            continue
+        measure_index = measure_by_beat[start_beat]
+        max_line_span = (meter or 4) * 4
+        row_end_beat = min(
+            bisect.bisect_left(beat_times, end_time),
+            start_beat + max_line_span,
+            len(beat_chords),
+        )
+        row_end_beat = max(start_beat + 1, row_end_beat)
         rows.append(
             AlignedRow(
-                measure_start,
-                measure_count,
+                measure_index,
+                1,
                 _row_runs(
-                    row_lines, row_ends, beat_times, beat_chords, row_end_beat
+                    [line], [end_time], beat_times, beat_chords, row_end_beat
                 ),
+                start_beat,
                 row_end_beat,
             )
         )
@@ -314,19 +256,28 @@ def render_chordpro(
     for row in rows:
         lyric_text = "".join(run.lyric for run in row.runs)
         romanized = romanize(lyric_text) if romanize is not None else None
+        if (
+            row.start_beat is not None
+            and row.end_beat is not None
+            and row.end_beat > row.start_beat
+        ):
+            output.append(
+                f"{{x_chordflask_line: {row.start_beat},{row.end_beat}}}"
+            )
         if romanized:
             output.append(f"{{x_chordflask_romanized: {_escape(romanized)}}}")
         chord_runs = [run for run in row.runs if run.chord is not None]
         beat_indices = [run.beat_index for run in chord_runs]
+        chord_end_beat = row.chord_end_beat or row.end_beat
         if (
             chord_runs
             and all(beat is not None for beat in beat_indices)
-            and row.end_beat is not None
-            and row.end_beat > beat_indices[-1]
+            and chord_end_beat is not None
+            and chord_end_beat > beat_indices[-1]
         ):
             beats = ",".join(str(beat) for beat in beat_indices)
             output.append(f"{{x_chordflask_beats: {beats}}}")
-            output.append(f"{{x_chordflask_end: {row.end_beat}}}")
+            output.append(f"{{x_chordflask_end: {chord_end_beat}}}")
         line = []
         for run in row.runs:
             if run.chord is not None:
