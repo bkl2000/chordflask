@@ -55,7 +55,7 @@ These are kept as usable command-line tools and have smoke-test coverage.
   later files. Existing `.cho` files are intentionally skipped unless `--force`
   is supplied.
 
-  Thai romanization is **experimental in 0.9.16**. `--romanize` uses the
+  Thai romanization is **experimental**. `--romanize` uses the
   external-runtime PyThaiNLP `thai2rom_onnx` engine by default;
   `--romanize-engine royin` selects the RTGS-oriented alternative. Engines
   never silently fall back. Romanization is
