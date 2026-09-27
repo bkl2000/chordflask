@@ -5027,7 +5027,7 @@
       updateLyricsHighlight(dataDict.active_index);
     }
 
-    function syncPlaybackPosition(force = false) {
+    function syncPlaybackPosition(force = false, renderIfPending = false) {
       if (isNaN(video.currentTime)) {
         return;
       }
@@ -5045,6 +5045,7 @@
       }
 
       positionSyncInFlight = true;
+      let skippedPendingResponse = false;
       const requestGeneration = playbackSyncGeneration;
       const requestStartedAt = performance.now();
       const controller = new AbortController();
@@ -5082,6 +5083,11 @@
         if (requestGeneration !== playbackSyncGeneration) {
           return;
         }
+        // A catch-up response must render despite a newly pending timer tick.
+        if (!force && !renderIfPending && positionSyncPending) {
+          skippedPendingResponse = true;
+          return;
+        }
         currentPositionLabel.innerHTML = `Position: ${video.currentTime.toFixed(2)}s`;
         renderCallbackData(data);
       })
@@ -5097,7 +5103,7 @@
           const forcePendingSync = positionSyncForcePending;
           positionSyncPending = false;
           positionSyncForcePending = false;
-          syncPlaybackPosition(forcePendingSync);
+          syncPlaybackPosition(forcePendingSync, skippedPendingResponse);
         }
       });
     }
