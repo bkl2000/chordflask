@@ -119,7 +119,7 @@ def test_index_contains_file_autoload_logic():
     assert "loadRequestInFlight" in body
 
 
-def test_playback_sync_has_bounded_single_request_and_forced_retry():
+def test_playback_sync_coalesces_in_flight_updates_without_overlap():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
@@ -127,11 +127,20 @@ def test_playback_sync_has_bounded_single_request_and_forced_retry():
 
     assert "const positionSyncTimeoutMs = 5000;" in body
     assert "if (positionSyncInFlight)" in sync
-    assert "positionSyncPending = positionSyncPending || force;" in sync
+    assert "positionSyncPending = true;" in sync
+    assert "positionSyncForcePending = positionSyncForcePending || force;" in sync
+    assert sync.count("positionSyncPending = true;") == 1
     in_flight_gate = sync.index("if (positionSyncInFlight)")
+    set_pending = sync.index("positionSyncPending = true;", in_flight_gate)
+    coalesce_force = sync.index(
+        "positionSyncForcePending = positionSyncForcePending || force;",
+        set_pending,
+    )
+    early_return = sync.index("return;", coalesce_force)
     request_start = sync.index("const controller = new AbortController();")
     fetch_start = sync.index("fetch('/set_position'")
-    assert in_flight_gate < request_start < fetch_start
+    assert in_flight_gate < set_pending < coalesce_force < early_return < request_start
+    assert request_start < fetch_start
     assert "() => controller.abort()" in sync
     assert "positionSyncTimeoutMs" in sync
     assert "signal: controller.signal" in sync
@@ -140,10 +149,38 @@ def test_playback_sync_has_bounded_single_request_and_forced_retry():
         "positionSyncInFlight = false;"
     )
     completion = sync.index(".finally(() =>")
+    clear_in_flight = sync.index("positionSyncInFlight = false;", completion)
     pending_retry = sync.index("if (positionSyncPending)", completion)
-    clear_pending = sync.index("positionSyncPending = false;", pending_retry)
-    forced_retry = sync.index("syncPlaybackPosition(true);", clear_pending)
-    assert completion < pending_retry < clear_pending < forced_retry
+    remember_force = sync.index(
+        "const forcePendingSync = positionSyncForcePending;", pending_retry
+    )
+    clear_pending = sync.index("positionSyncPending = false;", remember_force)
+    clear_force = sync.index("positionSyncForcePending = false;", clear_pending)
+    retry = sync.index("syncPlaybackPosition(forcePendingSync);", clear_force)
+    assert sync.count("syncPlaybackPosition(forcePendingSync);") == 1
+    assert (
+        completion
+        < clear_in_flight
+        < pending_retry
+        < remember_force
+        < clear_pending
+        < clear_force
+        < retry
+    )
+
+
+def test_playback_sync_follow_up_reads_latest_position_and_preserves_force():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+
+    in_flight_gate = sync.index("if (positionSyncInFlight)")
+    current_position = sync.index("const position = video.currentTime + displayLead;")
+    request_body = sync.index("position: position,", current_position)
+    assert in_flight_gate < current_position < request_body
+    assert "positionSyncForcePending = positionSyncForcePending || force;" in sync
+    assert "syncPlaybackPosition(forcePendingSync);" in sync
 
 
 def test_playback_sync_lifecycle_hooks_request_forced_resync():
@@ -164,6 +201,16 @@ def test_playback_sync_lifecycle_hooks_request_forced_resync():
     assert (
         "window.addEventListener('online', "
         "() => syncPlaybackPosition(true));"
+    ) in body
+    assert "player.addEventListener('seeked', () => syncPlaybackPosition(true));" in body
+    assert (
+        "player.addEventListener('play', () => {\n"
+        "        exitEditMode();\n"
+        "        syncPlaybackPosition(true);"
+    ) in body
+    assert (
+        "player.addEventListener('pause', () => {\n"
+        "        syncPlaybackPosition(true);"
     ) in body
 
 

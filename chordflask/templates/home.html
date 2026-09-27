@@ -4944,6 +4944,7 @@
 
     let positionSyncInFlight = false;
     let positionSyncPending = false;
+    let positionSyncForcePending = false;
     let playbackSyncGeneration = 0;
     const positionSyncIntervalMs = 90;
     const positionSyncTimeoutMs = 5000;
@@ -5038,7 +5039,8 @@
       }
 
       if (positionSyncInFlight) {
-        positionSyncPending = positionSyncPending || force;
+        positionSyncPending = true;
+        positionSyncForcePending = positionSyncForcePending || force;
         return;
       }
 
@@ -5092,8 +5094,10 @@
         clearTimeout(requestTimeout);
         positionSyncInFlight = false;
         if (positionSyncPending) {
+          const forcePendingSync = positionSyncForcePending;
           positionSyncPending = false;
-          syncPlaybackPosition(true);
+          positionSyncForcePending = false;
+          syncPlaybackPosition(forcePendingSync);
         }
       });
     }
