@@ -10,6 +10,12 @@ recognition is a practical starting point for orientation and practice, not a
 guaranteed transcription; dense mixes and unusual harmony can produce wrong
 chords.
 
+For users looking for a self-hosted, local-first, open-source alternative to
+services such as Chordify, ChordFlask provides a similar play-along workflow
+while keeping the music collection and analysis local.
+
+ChordFlask is an independent project and is not affiliated with Chordify.
+
 ![ChordFlask example screenshot](docs/example-screenshot.png)
 
 ## What you can do

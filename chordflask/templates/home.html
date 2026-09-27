@@ -2952,13 +2952,13 @@
       const relativeTop = lineRect.top - containerRect.top + container.scrollTop;
       const relativeBottom = lineRect.bottom - containerRect.top + container.scrollTop;
       const margin = container.clientHeight * 0.15;
-      if (
-        relativeTop >= container.scrollTop + margin
-        && relativeBottom <= container.scrollTop + container.clientHeight - margin
-      ) return;
-      // Deterministic: place the row about one third from the top, only when
-      // it left the comfortable band. No animation and no per-beat scrolling.
-      container.scrollTop = Math.max(0, relativeTop - container.clientHeight * 0.3);
+      const upperBoundary = container.scrollTop + margin;
+      const lowerBoundary = container.scrollTop + container.clientHeight - margin;
+      if (relativeBottom > lowerBoundary) {
+        container.scrollTop += relativeBottom - lowerBoundary;
+      } else if (relativeTop < upperBoundary) {
+        container.scrollTop = Math.max(0, relativeTop - margin);
+      }
     }
 
     function handleSongViewportChange() {

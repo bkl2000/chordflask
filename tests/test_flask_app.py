@@ -2936,6 +2936,22 @@ def test_lyrics_highlight_and_scroll_are_desktop_song_mode_only():
     assert "smooth" not in scroller
 
 
+def test_lyrics_scrolls_only_by_the_overflow_beyond_the_comfort_band():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    scroller = javascript_function(body, "keepLyricLineVisible")
+
+    # A row crossing the lower edge advances by exactly its overflow instead
+    # of being repositioned to a fixed point near the top of the viewport.
+    assert (
+        "const lowerBoundary = "
+        "container.scrollTop + container.clientHeight - margin;" in scroller
+    )
+    assert "container.scrollTop += relativeBottom - lowerBoundary;" in scroller
+    assert "container.clientHeight * 0.3" not in scroller
+
+
 def test_lyrics_active_chord_uses_strong_inverse_for_both_themes():
     _, client = make_client()
 
