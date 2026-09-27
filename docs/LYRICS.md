@@ -354,5 +354,5 @@ the rights applicable to their collection.
   that user-owned sidecar is intended.
 - **Lyrics displays but does not follow playback:** hand-written sheets and
   edited marker counts may lack valid ChordFlask beat-range metadata.
-- **A romanization engine fails:** rerun `make setup`, select an engine supported
+- **A romanization engine fails:** rerun `make setup-lyrics`, select an engine supported
   by the current Python version, and do not expect an automatic fallback.
