@@ -30,6 +30,7 @@ _EDITED_TRACK_ID = USER_EDITED_TRACK_ID
 _EDITED_SOURCE_CHORD = DEFAULT_CHORD_TRACK
 _EDIT_GRID_ROWS = 16
 _EDIT_GRID_MEASURES_PER_ROW = 2
+_PLAYBACK_LOOKAHEAD_BEATS = 8
 
 # Consumer-side identifier for the grouped Demucs stem set. It intentionally
 # matches the producer's AUDIO_SET_ID ("demucs:htdemucs") but is defined here
@@ -59,6 +60,7 @@ class MP4PlayerFlask:
         self.last_chord = None
         self.last_rendered_position = None
         self.__empty_output_warning_active = False
+        self.__beat_lookahead_cache = None
 
         self._load_chords()
         self.chord_data.transpose(self.semitones)
@@ -480,6 +482,7 @@ class MP4PlayerFlask:
     def reset_render_cache(self):
         if hasattr(self, "last_index"):
             del self.last_index
+        self.__beat_lookahead_cache = None
 
     def _load_chords(self):
         try:
@@ -568,11 +571,40 @@ class MP4PlayerFlask:
                 self.reset_render_cache()
         self.position_callback(position)
 
-    def get_callback_output(self):
+    def get_callback_output(self, beat_cache_through=None):
         self.__diagnose_empty_output()
-        return {
+        active_index = getattr(self, "last_index", None)
+        payload = {
             "callback_output": list(self.callback_output),
             "bpm": self.chord_data.bpm,
             "position": self.last_rendered_position,
-            "active_index": getattr(self, "last_index", None),
+            "active_index": active_index,
         }
+        if active_index is None:
+            return payload
+
+        cache_key = (active_index, self.grid_mode)
+        if (
+            self.__beat_lookahead_cache is None
+            or self.__beat_lookahead_cache[0] != cache_key
+        ):
+            lookahead = []
+            end = min(
+                active_index + 1 + _PLAYBACK_LOOKAHEAD_BEATS,
+                len(self.chord_data.beat_times),
+            )
+            for index in range(active_index + 1, end):
+                rendered = self.playback_view.render_index(index)
+                lookahead.append({
+                    "index": index,
+                    "time": self.chord_data.beat_times[index],
+                    "callback_output": [rendered["output"]],
+                })
+            self.__beat_lookahead_cache = (cache_key, lookahead)
+        missing = [
+            beat for beat in self.__beat_lookahead_cache[1]
+            if beat_cache_through is None or beat["index"] > beat_cache_through
+        ]
+        if missing:
+            payload["beat_lookahead"] = missing
+        return payload

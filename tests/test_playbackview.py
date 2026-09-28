@@ -297,6 +297,77 @@ def test_callback_payload_exposes_active_beat_index_for_lyrics_sync(tmp_path):
     assert player.playback_view.render(1.1)["index"] == payload["active_index"]
 
 
+def test_callback_payload_has_bounded_exact_canonical_beat_lookahead(
+    tmp_path, monkeypatch
+):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
+    beat_times = [0.0, 0.31, 0.79, 1.04, 1.83, 2.02, 2.67, 3.41, 3.58, 4.2]
+    labels = ["C", "G#sus4", "F#m7b5", "D", "E", "F", "G", "A", "B", "C"]
+    data = ChordData()
+    data.set_base_chords([
+        {"timestamp": time, "chord": chord}
+        for time, chord in zip(beat_times, labels, strict=True)
+    ], beat_times=beat_times)
+    data.save_to_file(file_repr.get("json"))
+
+    player = MP4PlayerFlask(file_repr)
+    player.update_position(0.0)
+    original_render = player.playback_view.render_index
+    rendered_indexes = []
+
+    def record_render(index, position=None):
+        rendered_indexes.append(index)
+        return original_render(index, position)
+
+    monkeypatch.setattr(player.playback_view, "render_index", record_render)
+    first = player.get_callback_output()
+    covered = player.get_callback_output(8)
+
+    assert len(first["beat_lookahead"]) == 8
+    assert [beat["index"] for beat in first["beat_lookahead"]] == list(range(1, 9))
+    assert [beat["time"] for beat in first["beat_lookahead"]] == beat_times[1:9]
+    assert "[Absus4]" in first["beat_lookahead"][0]["callback_output"][0]
+    assert "[Gbm7b5]" in first["beat_lookahead"][1]["callback_output"][0]
+    assert "beat_lookahead" not in covered
+    assert rendered_indexes == list(range(1, 9))
+
+
+def test_callback_payload_returns_only_missing_consecutive_lookahead_tail(tmp_path):
+    media = tmp_path / "tail.mp4"
+    media.write_bytes(b"not used")
+    file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
+    beat_times = [
+        0.0, 0.31, 0.79, 1.04, 1.83, 2.02, 2.67, 3.41,
+        3.58, 4.2, 4.47, 5.11, 5.9, 6.08, 6.72, 7.4,
+    ]
+    data = ChordData()
+    data.set_base_chords([
+        {"timestamp": time, "chord": f"C{index % 7}"}
+        for index, time in enumerate(beat_times)
+    ], beat_times=beat_times)
+    data.save_to_file(file_repr.get("json"))
+    player = MP4PlayerFlask(file_repr)
+
+    player.update_position(0.0)
+    initial = player.get_callback_output()
+    assert [beat["index"] for beat in initial["beat_lookahead"]] == list(range(1, 9))
+
+    player.update_position(beat_times[1])
+    one = player.get_callback_output(8)
+    assert [beat["index"] for beat in one["beat_lookahead"]] == [9]
+    assert one["beat_lookahead"][0]["time"] == beat_times[9]
+    assert one["beat_lookahead"][0]["callback_output"] == [
+        player.playback_view.render_index(9)["output"]
+    ]
+
+    player.update_position(beat_times[4])
+    several = player.get_callback_output(8)
+    assert [beat["index"] for beat in several["beat_lookahead"]] == [9, 10, 11, 12]
+    assert [beat["time"] for beat in several["beat_lookahead"]] == beat_times[9:13]
+
+
 def _diagnostic_player(tmp_path):
     media = tmp_path / "diagnostic.mp3"
     media.write_bytes(b"not used")

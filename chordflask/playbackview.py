@@ -90,6 +90,11 @@ class PlaybackView:
                 return None
             current_index = self.chord_data.get_chord_index_by_timestamp(chords[0][0])
 
+        return self.render_index(current_index, position)
+
+    def render_index(self, current_index, position=None):
+        """Render the canonical Grid with an exact analyzed beat active."""
+
         full_chords = self.chord_data.get_chords_per_beat()
         if self.__metric_chords:
             full_chords = self.__get_metric_chords(full_chords)
@@ -120,5 +125,5 @@ class PlaybackView:
             "index": current_index,
             "output": output,
             "bpm": self.chord_data.bpm,
-            "position": position,
+            "position": beat_time if position is None else position,
         }

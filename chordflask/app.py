@@ -1430,6 +1430,18 @@ class FlaskMP4App:
         include_edit_grid = data.get('include_edit_grid', False)
         if not isinstance(include_edit_grid, bool):
             return jsonify(error="include_edit_grid must be a boolean"), 400
+        beat_cache_through = data.get("beat_cache_through")
+        if (
+            beat_cache_through is not None
+            and (
+                isinstance(beat_cache_through, bool)
+                or not isinstance(beat_cache_through, int)
+                or beat_cache_through < 0
+            )
+        ):
+            return jsonify(
+                error="beat_cache_through must be a non-negative integer or null"
+            ), 400
         grid_mode = data.get("grid_mode", "compact")
         if not isinstance(grid_mode, str) or grid_mode not in GRID_MODES:
             return jsonify(
@@ -1445,7 +1457,9 @@ class FlaskMP4App:
                 state.old_current_position == state.current_position
                 and state.old_grid_mode == grid_mode
             ):
-                payload = state.player.get_callback_output() if state.player else {
+                payload = state.player.get_callback_output(
+                    beat_cache_through
+                ) if state.player else {
                     "callback_output": [], "bpm": 100
                 }
                 payload["success"] = True
@@ -1473,7 +1487,7 @@ class FlaskMP4App:
                             state.semitones,
                         )
                         raise
-                    payload = state.player.get_callback_output()
+                    payload = state.player.get_callback_output(beat_cache_through)
                     payload["success"] = True
                 else:
                     payload = {"success": True, "callback_output": [], "bpm": 100}

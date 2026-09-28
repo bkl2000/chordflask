@@ -183,6 +183,139 @@ def test_playback_sync_follow_up_reads_latest_position_and_preserves_force():
     assert "syncPlaybackPosition(forcePendingSync);" in sync
 
 
+def test_playback_fallback_runs_only_for_a_genuinely_delayed_request():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+    fallback = javascript_function(body, "advanceDelayedPlaybackFallback")
+
+    in_flight = sync.index("if (positionSyncInFlight)")
+    advance = sync.index("advanceDelayedPlaybackFallback();", in_flight)
+    early_return = sync.index("return;", advance)
+    request_start = sync.index("positionSyncInFlight = true;", early_return)
+    assert in_flight < advance < early_return < request_start
+    assert "positionSyncIntervalMs * 3" in fallback
+    assert "estimatedRoundTripSeconds * 3000" in fallback
+    stale_guard = fallback.index(
+        "performance.now() - positionSyncRequestStartedAt < staleAfterMs"
+    )
+    render = fallback.index("renderCallbackData({", stale_guard)
+    assert stale_guard < render
+
+
+def test_playback_fallback_uses_only_latest_supplied_exact_beat():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    fallback = javascript_function(body, "advanceDelayedPlaybackFallback")
+
+    assert "[...playbackFallbackData.beats].reverse().find" in fallback
+    assert "candidate.time <= video.currentTime" in fallback
+    assert "candidate.index > displayedIndex" in fallback
+    assert "callback_output: beat.callback_output" in fallback
+    assert "active_index: beat.index" in fallback
+    for forbidden in ("settimeout", "requestanimationframe", "beatinterval", "synthetic"):
+        assert forbidden not in fallback.lower()
+
+
+def test_playback_lookahead_cache_merge_is_ordered_unique_and_bounded():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    merge = javascript_function(body, "cachePlaybackFallback")
+    sync = javascript_function(body, "syncPlaybackPosition")
+
+    assert "data.beat_lookahead || []" in merge
+    assert "beat.index > data.active_index" in merge
+    assert "!retained.some(cached => cached.index === beat.index)" in merge
+    assert "retained.sort((left, right) => left.index - right.index)" in merge
+    assert "beats: retained.slice(0, 8)" in merge
+    assert "cachedBeats[cachedBeats.length - 1].index" in sync
+    assert "beat_cache_through: beatCacheThrough" in sync
+    assert "playbackFallbackData.gridMode !== gridMode" in sync
+    assert "cachePlaybackFallback(data, requestGeneration, gridMode)" in sync
+
+
+def test_playback_lookahead_invalidation_reports_an_empty_cache_after_seek():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+    invalidator = javascript_function(body, "invalidatePlaybackFallback")
+
+    assert "playbackFallbackData = null;" in invalidator
+    assert "const cachedBeats = playbackFallbackData?.beats || [];" in sync
+    assert "? cachedBeats[cachedBeats.length - 1].index\n        : null;" in sync
+    assert (
+        "player.addEventListener('seeking', () => {\n"
+        "        invalidatePlaybackFallbackGeneration();"
+    ) in body
+    assert "invalidatePlaybackFallbackGeneration();" in javascript_function(
+        body, "applyChordEditingState"
+    )
+    assert "invalidatePlaybackFallbackGeneration();" in javascript_function(
+        body, "updateSemitones"
+    )
+    assert "invalidatePlaybackFallbackGeneration();" in javascript_function(
+        body, "sendDisplayOptions"
+    )
+
+
+def test_playback_fallback_recovery_only_suppresses_an_actual_backward_hop():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+
+    fallback_guard = (
+        "if (fallbackActiveIndex !== null "
+        "&& data.active_index < fallbackActiveIndex)"
+    )
+    assert fallback_guard in sync
+    guard = sync.index(fallback_guard)
+    render = sync.index("renderCallbackData(data);", guard)
+    cache = sync.index(
+        "cachePlaybackFallback(data, requestGeneration, gridMode);", render
+    )
+    leave_fallback = sync.index("fallbackActiveIndex = null;", cache)
+    assert guard < render < cache < leave_fallback
+    assert sync.count("renderCallbackData(data);") == 1
+
+
+def test_playback_fallback_invalidation_reuses_forced_sync_lifecycle():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+    loader = javascript_function(body, "processNextLoadIntent")
+
+    force = sync.index("if (force)")
+    generation = sync.index("playbackSyncGeneration += 1;", force)
+    invalidate = sync.index("invalidatePlaybackFallback();", generation)
+    in_flight = sync.index("if (positionSyncInFlight)", invalidate)
+    assert force < generation < invalidate < in_flight
+    assert "invalidatePlaybackFallbackGeneration();" in loader
+    assert (
+        "player.addEventListener('seeking', () => {\n"
+        "        invalidatePlaybackFallbackGeneration();"
+    ) in body
+    assert "player.addEventListener('seeked', () => syncPlaybackPosition(true));" in body
+    assert "player.addEventListener('pause', () => {\n        syncPlaybackPosition(true);" in body
+    assert "player.currentTime = loopStart;" in body
+
+
+def test_normal_playback_lead_keeps_explicit_zero_extra_tuning():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
+
+    assert "const positionSyncIntervalMs = 90;" in body
+    assert "positionSyncIntervalMs / 2000 + 0" in body
+    assert "const position = video.currentTime + displayLead;" in sync
+
+
 def test_playback_sync_lifecycle_hooks_request_forced_resync():
     _, client = make_client()
 
@@ -453,14 +586,18 @@ def test_playlist_navigation_does_not_add_height_to_control_bar():
 
 def test_repeated_position_returns_complete_player_payload():
     app_wrapper, client = make_client()
+    cache_reports = []
 
     class FakePlayer:
-        def get_callback_output(self):
+        def get_callback_output(self, beat_cache_through=None):
+            cache_reports.append(beat_cache_through)
             return {"callback_output": ["grid"], "bpm": 120, "position": 0.0}
 
     _state(app_wrapper).player = FakePlayer()
 
-    response = client.post("/set_position", json={"position": 0.0})
+    response = client.post(
+        "/set_position", json={"position": 0.0, "beat_cache_through": 127}
+    )
 
     assert response.status_code == 200
     assert response.get_json() == {
@@ -469,6 +606,7 @@ def test_repeated_position_returns_complete_player_payload():
         "bpm": 120,
         "position": 0.0,
     }
+    assert cache_reports == [127]
 
 
 def test_set_position_switches_grid_mode_at_same_position():
@@ -479,7 +617,7 @@ def test_set_position_switches_grid_mode_at_same_position():
         def update_position(self, position, grid_mode=None):
             calls.append((position, grid_mode))
 
-        def get_callback_output(self):
+        def get_callback_output(self, beat_cache_through=None):
             return {"callback_output": ["grid"], "bpm": 120, "position": 0.5}
 
     _state(app_wrapper).player = FakePlayer()
@@ -1233,6 +1371,9 @@ def test_routes_reject_malformed_payloads():
 
     assert client.post("/list_files", data="not json").status_code == 400
     assert client.post("/set_position", json={"position": -1}).status_code == 400
+    assert client.post(
+        "/set_position", json={"position": 0, "beat_cache_through": True}
+    ).status_code == 400
     assert client.post("/update_semitones", json={"semitones": 25}).status_code == 400
     assert client.post(
         "/update_display_options",
@@ -2936,7 +3077,15 @@ def test_lyrics_display_controls_refresh_server_formatted_labels():
     assert '<button id="repeatDisplayButton" data-grid-only' in body
     assert "refreshSongSheetLabels();" in transpose
     assert "sendDisplayOptions(true);" in spelling
-    assert "data.success && refreshLyrics" in sender
+    failed = sender.index("if (!data.success")
+    succeeded = sender.index("else if (data.success)", failed)
+    invalidate = sender.index("invalidatePlaybackFallbackGeneration();", succeeded)
+    refresh_guard = sender.index("if (refreshLyrics)", invalidate)
+    refresh_labels = sender.index("refreshSongSheetLabels();", refresh_guard)
+    assert failed < succeeded < invalidate < refresh_guard < refresh_labels
+    assert transpose.index("refreshSongSheetLabels();") < transpose.index(
+        "invalidatePlaybackFallbackGeneration();"
+    )
 
     # Refresh fetches server-formatted labels and reuses the retained active
     # beat; neither a view switch nor a label refresh changes synchronization.
@@ -3064,10 +3213,19 @@ def test_chord_grid_mode_is_viewport_selected_without_changing_mobile_reflow():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
+    sync = javascript_function(body, "syncPlaybackPosition")
 
     assert "function isDesktopChordGrid()" in body
     assert "min-width: 1024px) and (min-height: 650px)" in body
-    assert "grid_mode: isDesktopChordGrid() ? 'desktop' : 'compact'" in body
+    selection = sync.index(
+        "const gridMode = isDesktopChordGrid() ? 'desktop' : 'compact';"
+    )
+    cache_check = sync.index(
+        "playbackFallbackData.gridMode !== gridMode", selection
+    )
+    request_mode = sync.index("grid_mode: gridMode", cache_check)
+    assert selection < cache_check < request_mode
+    assert sync.count("isDesktopChordGrid()") == 1
     assert "function reflowGridForMobile" in body
     assert "window.matchMedia('(max-width: 640px)')" in body
 

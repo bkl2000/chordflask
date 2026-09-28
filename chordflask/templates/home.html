@@ -4409,6 +4409,7 @@
         semitonesInput.value = data.semitones;
         localStorage.setItem(storageKeys.file, filename);
         callbackOutput.innerText = '';
+        invalidatePlaybackFallbackGeneration();
         selectMediaPlayer(data.media_kind, filename);
         video.src = '/video?' + new Date().getTime();
         video.load();
@@ -4701,6 +4702,7 @@
     }
 
     function applyChordEditingState(data) {
+      invalidatePlaybackFallbackGeneration();
       hasEditedChords = data.has_edited === true;
       updateTrackSelectors(data);
       if (data.grid) {
@@ -4948,8 +4950,11 @@
     let playbackSyncGeneration = 0;
     const positionSyncIntervalMs = 90;
     const positionSyncTimeoutMs = 5000;
-    const pollingLeadSeconds = positionSyncIntervalMs / 2000 + 0.002;
+    const pollingLeadSeconds = positionSyncIntervalMs / 2000 + 0;
     let estimatedRoundTripSeconds = 0;
+    let positionSyncRequestStartedAt = null;
+    let playbackFallbackData = null;
+    let fallbackActiveIndex = null;
 
     function isNarrowViewport() {
       return window.matchMedia('(max-width: 640px)').matches;
@@ -5027,26 +5032,93 @@
       updateLyricsHighlight(dataDict.active_index);
     }
 
+    function invalidatePlaybackFallback() {
+      playbackFallbackData = null;
+      fallbackActiveIndex = null;
+    }
+
+    function invalidatePlaybackFallbackGeneration() {
+      playbackSyncGeneration += 1;
+      invalidatePlaybackFallback();
+    }
+
+    function cachePlaybackFallback(data, generation, gridMode) {
+      const retained = playbackFallbackData?.generation === generation
+        ? playbackFallbackData.beats.filter(beat => beat.index > data.active_index)
+        : [];
+      for (const beat of (data.beat_lookahead || [])) {
+        if (!retained.some(cached => cached.index === beat.index)) {
+          retained.push(beat);
+        }
+      }
+      retained.sort((left, right) => left.index - right.index);
+      playbackFallbackData = {
+        generation: generation,
+        gridMode: gridMode,
+        activeIndex: data.active_index,
+        bpm: data.bpm,
+        beats: retained.slice(0, 8)
+      };
+    }
+
+    function advanceDelayedPlaybackFallback() {
+      if (
+        positionSyncRequestStartedAt === null
+        || video.paused
+        || !playbackFallbackData
+        || playbackFallbackData.generation !== playbackSyncGeneration
+      ) {
+        return;
+      }
+      const staleAfterMs = Math.max(
+        positionSyncIntervalMs * 3,
+        estimatedRoundTripSeconds * 3000
+      );
+      if (performance.now() - positionSyncRequestStartedAt < staleAfterMs) {
+        return;
+      }
+      const displayedIndex = fallbackActiveIndex ?? playbackFallbackData.activeIndex;
+      const beat = [...playbackFallbackData.beats].reverse().find(candidate => (
+        candidate.index > displayedIndex && candidate.time <= video.currentTime
+      ));
+      if (!beat) {
+        return;
+      }
+      renderCallbackData({
+        callback_output: beat.callback_output,
+        bpm: playbackFallbackData.bpm,
+        active_index: beat.index
+      });
+      fallbackActiveIndex = beat.index;
+    }
+
     function syncPlaybackPosition(force = false) {
       if (isNaN(video.currentTime)) {
         return;
+      }
+      const gridMode = isDesktopChordGrid() ? 'desktop' : 'compact';
+      if (playbackFallbackData && playbackFallbackData.gridMode !== gridMode) {
+        invalidatePlaybackFallbackGeneration();
       }
       if (!force && video.paused) {
         return;
       }
       if (force) {
         playbackSyncGeneration += 1;
+        invalidatePlaybackFallback();
       }
 
       if (positionSyncInFlight) {
         positionSyncPending = true;
         positionSyncForcePending = positionSyncForcePending || force;
+        advanceDelayedPlaybackFallback();
         return;
       }
 
       positionSyncInFlight = true;
       const requestGeneration = playbackSyncGeneration;
-      const requestStartedAt = performance.now();
+      positionSyncRequestStartedAt = performance.now();
+      const requestStartedAt = positionSyncRequestStartedAt;
       const controller = new AbortController();
       const requestTimeout = window.setTimeout(
         () => controller.abort(),
@@ -5059,6 +5131,10 @@
         ? 0
         : Math.min(pollingLeadSeconds + estimatedRoundTripSeconds, 0.25);
       const position = video.currentTime + displayLead;
+      const cachedBeats = playbackFallbackData?.beats || [];
+      const beatCacheThrough = cachedBeats.length
+        ? cachedBeats[cachedBeats.length - 1].index
+        : null;
 
       fetch('/set_position', {
         method: 'POST',
@@ -5069,7 +5145,8 @@
         body: JSON.stringify({
           position: position,
           include_edit_grid: editMode,
-          grid_mode: isDesktopChordGrid() ? 'desktop' : 'compact'
+          grid_mode: gridMode,
+          beat_cache_through: beatCacheThrough
         }),
         signal: controller.signal
       })
@@ -5082,8 +5159,13 @@
         if (requestGeneration !== playbackSyncGeneration) {
           return;
         }
+        if (fallbackActiveIndex !== null && data.active_index < fallbackActiveIndex) {
+          return;
+        }
         currentPositionLabel.innerHTML = `Position: ${video.currentTime.toFixed(2)}s`;
         renderCallbackData(data);
+        cachePlaybackFallback(data, requestGeneration, gridMode);
+        fallbackActiveIndex = null;
       })
       .catch(error => {
         if (error.name !== 'AbortError') {
@@ -5093,6 +5175,7 @@
       .finally(() => {
         clearTimeout(requestTimeout);
         positionSyncInFlight = false;
+        positionSyncRequestStartedAt = null;
         if (positionSyncPending) {
           const forcePendingSync = positionSyncForcePending;
           positionSyncPending = false;
@@ -5111,6 +5194,9 @@
     window.addEventListener('pageshow', () => syncPlaybackPosition(true));
     window.addEventListener('online', () => syncPlaybackPosition(true));
     [videoPlayer, audioPlayer].forEach(player => {
+      player.addEventListener('seeking', () => {
+        invalidatePlaybackFallbackGeneration();
+      });
       player.addEventListener('seeked', () => syncPlaybackPosition(true));
       player.addEventListener('play', () => {
         exitEditMode();
@@ -5172,6 +5258,7 @@
           rememberSemitones(loadedMediaIdentity, semitones);
           clearEditUndo();
           refreshSongSheetLabels();
+          invalidatePlaybackFallbackGeneration();
         }
       })
       .catch(error => {
@@ -5229,8 +5316,9 @@
       .then(data => {
         if (!data.success && data.error !== 'Player not initialized') {
           console.error('Error updating display options:', data.error);
-        } else if (data.success && refreshLyrics) {
-          refreshSongSheetLabels();
+        } else if (data.success) {
+          invalidatePlaybackFallbackGeneration();
+          if (refreshLyrics) refreshSongSheetLabels();
         }
       })
       .catch(error => {
