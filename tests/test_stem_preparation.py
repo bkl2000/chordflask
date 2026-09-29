@@ -591,20 +591,19 @@ def test_theme_selector_stays_in_display_row():
     assert tools_row.index('id="editButton"') > display_end
 
 
-def test_theme_selector_is_available_on_desktop_and_phone_css():
+def test_theme_selector_is_available_at_every_viewport_size():
     _, client = make_client()
     body = _index_body(client)
 
-    # Base layout hides the selector; desktop and phone media queries show it.
     assert "#desktopSplitter,\n    #chordThemeSelect {\n      display: none;\n    }" in body
-    assert "@media (min-width: 1024px), (max-width: 640px)" in body
+    assert "@media (min-width: 0px)" in body
     assert "#chordThemeSelect {\n        display: inline-block;" in body
-    # The phone layout hides Changes so the theme selector takes its place.
+    # The phone layout still hides Changes so the theme selector has room.
     phone = body[body.index("@media (max-width: 640px) {"):]
     assert "#repeatDisplayButton {\n        display: none;\n      }" in phone
 
 
-def test_theme_selector_behavior_unchanged():
+def test_theme_selector_behavior_is_shared_by_desktop_tablet_and_phone():
     _, client = make_client()
     body = _index_body(client)
 
@@ -612,7 +611,7 @@ def test_theme_selector_behavior_unchanged():
     assert "themeSelect.value = readPreference(themeKey) === 'light' ? 'light' : 'dark';" in body
     assert "panel.classList.toggle('chord-light', themeActive() && themeSelect.value === 'light');" in body
     assert "function themeActive() {" in body
-    assert "return desktop.matches || phone.matches;" in body
+    assert "return true;" in body
     assert "savePreference(themeKey, themeSelect.value);" in body
     theme_select = body[body.index('id="chordThemeSelect"'):]
     theme_select = theme_select[: theme_select.index("</select>")]
