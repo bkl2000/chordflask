@@ -1689,7 +1689,7 @@
       }
 
       #callbackOutput {
-        font-size: clamp(9px, min(2.75cqw, 3.9cqh), 21px);
+        font-size: clamp(14px, min(3.2cqw, 6cqh), 26px);
       }
     }
 
@@ -1705,13 +1705,41 @@
       }
     }
 
+    @media (min-width: 801px) and (max-width: 1023px) and (max-height: 599px) {
+      body {
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        overflow: hidden;
+      }
+
+      .app {
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .workspace {
+        flex: 1;
+        min-height: 0;
+      }
+
+      #videoPlayer,
+      .audio-player-panel {
+        min-height: 0;
+      }
+    }
+
     @media (min-width: 801px) and (max-height: 599px) {
       .chord-panel {
         container-type: inline-size;
       }
 
       #callbackOutput {
-        font-size: clamp(9px, 2.75cqw, 21px);
+        font-size: clamp(14px, 3.2cqw, 26px);
       }
     }
 
@@ -1876,7 +1904,7 @@
       }
 
       #callbackOutput {
-        font-size: clamp(13px, 1.5vw, 17px);
+        font-size: clamp(14px, 1.65vw, 18px);
       }
     }
 
@@ -1888,6 +1916,10 @@
 
       #callbackContainer {
         min-height: 420px;
+      }
+
+      #callbackOutput {
+        font-size: clamp(16px, 2.6vw, 20px);
       }
     }
 

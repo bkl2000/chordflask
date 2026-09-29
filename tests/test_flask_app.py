@@ -2774,8 +2774,50 @@ def test_chord_grid_uses_compact_responsive_desktop_layout():
     assert "padding: 8px 12px" in callback_rule
     assert "clamp(14px, min(1.35vw, 3vh), 21px)" in callback_rule
     assert "grid-template-rows: minmax(0, 1fr) auto" in desktop_rule
-    assert "font-size: clamp(9px, min(2.75cqw, 3.9cqh), 21px)" in desktop_rule
+    desktop_grid_sizes = [
+        int(size) for size in re.findall(
+            r"#callbackOutput\s*\{[^}]*font-size:\s*clamp\([^;]*,\s*(\d+)px\);",
+            desktop_rule,
+        )
+    ]
+    assert desktop_grid_sizes
+    assert all(24 <= size <= 26 for size in desktop_grid_sizes)
+    assert "cqw" in desktop_rule
+    assert "cqh" in desktop_rule
     assert "@media (max-width: 800px)" in body
+
+
+def test_playback_grid_typography_grows_without_changing_phone_scale():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+
+    def callback_font_max(block):
+        match = re.search(
+            r"#callbackOutput\s*\{[^}]*font-size:\s*clamp\([^;]*,\s*(\d+)px\);",
+            block,
+        )
+        assert match is not None
+        return int(match.group(1))
+
+    desktop = body.split(
+        "@media (min-width: 801px) and (min-height: 600px) {", 1
+    )[1].split("@media", 1)[0]
+    wide_tablet = body.split(
+        "@media (min-width: 801px) and (max-width: 1023px) {", 1
+    )[1].split("@media", 1)[0]
+    narrow_tablet = body.split(
+        "@media (min-width: 641px) and (max-width: 800px) {", 1
+    )[1].split("@media", 1)[0]
+    phone = body.rsplit("@media (max-width: 640px) {", 1)[1]
+
+    desktop_max = callback_font_max(desktop)
+    wide_tablet_max = callback_font_max(wide_tablet)
+    narrow_tablet_max = callback_font_max(narrow_tablet)
+    phone_max = callback_font_max(phone)
+
+    assert 24 <= desktop_max <= 26
+    assert wide_tablet_max > phone_max
+    assert narrow_tablet_max > phone_max
 
 
 def test_responsive_layout_reserves_space_for_controls_and_stacks_cleanly():
@@ -2859,6 +2901,42 @@ def test_song_view_uses_existing_chord_area_and_desktop_only_switch():
     assert 'id="saveButton" data-grid-only' in body
     assert 'id="reanalyzeButton" data-grid-only' in body
     assert 'id="stemsButton" data-grid-only' not in body
+
+
+def test_tablet_lyrics_keeps_callback_container_bounded_at_low_height():
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+
+    def rule(block, selector):
+        match = re.search(rf"{re.escape(selector)}\s*\{{(?P<rule>[^}}]*)\}}", block)
+        assert match is not None
+        return match.group("rule")
+
+    low_tablet = body.split(
+        "@media (min-width: 801px) and (max-width: 1023px) and (max-height: 599px) {",
+        1,
+    )[1].split("@media", 1)[0]
+    callback = rule(body, "#callbackContainer")
+    chord_panel = rule(body[body.index("#videoPlayer[hidden]"):], ".chord-panel")
+    panel_frame = body[
+        body.index(".video-panel,"):body.index("#videoPlayer,")
+    ]
+
+    assert "height: 100dvh" in rule(low_tablet, "body")
+    assert "overflow: hidden" in rule(low_tablet, "body")
+    assert "display: flex" in rule(low_tablet, ".app")
+    assert "min-height: 0" in rule(low_tablet, ".app")
+    assert "flex: 1" in rule(low_tablet, ".workspace")
+    assert "min-height: 0" in rule(low_tablet, ".workspace")
+    assert "display: flex" in chord_panel
+    assert "min-height: 0" in panel_frame
+    assert "overflow: hidden" in panel_frame
+    assert "flex: 1" in callback
+    assert "min-height: 0" in callback
+    assert "overflow: auto" in callback
+    # The low-height repair constrains layout only; Grid rendering and sizing
+    # retain their existing responsive rules.
+    assert "#callbackOutput" not in low_tablet
 
 
 def test_song_renderer_uses_text_only_dom_construction_for_untrusted_data():
@@ -3630,6 +3708,6 @@ def test_desktop_outer_spacing_and_file_height_are_scoped():
     assert "padding: 8px 0 0" in body
     assert "width: min(1500px, calc(100vw - 32px))" in body
     assert "max-height: clamp(152px, 22vh, 260px)" in body
-    tablet = body.split("@media (min-width: 801px) and (max-width: 1023px)")[1].split("@media")[0]
+    tablet = body.split("@media (min-width: 801px) and (max-width: 1023px) {")[1].split("@media")[0]
     assert "minmax(0, 9fr) minmax(0, 11fr)" in tablet
     assert "#callbackContainer {" in body and "overflow: auto" in body

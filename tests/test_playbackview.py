@@ -94,7 +94,7 @@ def test_compact_grid_keeps_current_chord_on_third_row_with_eight_columns():
     rendered = view.render(17.1)
 
     lines = rendered["output"].splitlines()
-    assert len(lines[1:]) == 13
+    assert len(lines[1:]) == 9
     assert "C0" in lines[1]
     assert "C8" in lines[2]
     assert "[ C17" in lines[3]
@@ -205,7 +205,7 @@ def test_desktop_grid_places_current_row_at_position_three():
     active_row = next(index for index, line in enumerate(rows, start=1) if "[" in line)
 
     assert active_row == 3
-    assert len(rows) == 21
+    assert len(rows) == 12
     assert "C104" in rows[0]
     assert "C120" in rows[2]
     assert "C128" in rows[3]

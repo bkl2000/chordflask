@@ -7,8 +7,8 @@ from .metric_chords import filter_metric_chords, format_classification_diagnosti
 
 
 _GRID_SETTINGS = {
-    "compact": (13, 2),
-    "desktop": (21, 2),
+    "compact": (9, 2),
+    "desktop": (12, 2),
 }
 GRID_MODES = frozenset(_GRID_SETTINGS)
 
