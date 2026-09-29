@@ -143,9 +143,8 @@ scanned recursively.
   browsing remain available.
 - On desktop (1024 px and wider), drag the divider between media and chords to
   resize the panels, or focus it and use the arrow keys. **Dark** and **Light**
-  change only the chord panel theme and are also available on tablet and phone.
-  The browser remembers the theme preference; the split preference remains
-  desktop-only.
+  change only the chord panel theme. The browser remembers both preferences;
+  tablet and phone layouts are unchanged.
 
 ## Original and Edited chords
 
