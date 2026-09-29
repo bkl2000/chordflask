@@ -1101,7 +1101,7 @@
 
     .chord-panel .transpose-control {
       display: grid;
-      grid-template-columns: 24px 34px 24px;
+      grid-template-columns: 24px 44px 24px;
       gap: 3px;
       align-items: center;
     }
@@ -1428,7 +1428,7 @@
       display: none;
     }
 
-    /* Desktop adds the splitter and preparation actions; tablet keeps a compact subset. */
+    /* The 801–1023px tablet layout retains its existing ratio and controls. */
     @media (min-width: 1024px) {
       .chord-tools-row {
         flex-direction: column;
@@ -1450,7 +1450,7 @@
       }
 
       .chord-panel .transpose-control {
-        grid-template-columns: 18px 30px 18px;
+        grid-template-columns: 18px minmax(36px, 40px) 18px;
         gap: 0;
         overflow: hidden;
         border: 1px solid #69727d;
@@ -1562,8 +1562,8 @@
 
     }
 
-    /* The chord theme selector and light theme apply at every viewport size. */
-    @media (min-width: 0px) {
+    /* The chord theme selector and light theme apply on desktop and phone. */
+    @media (min-width: 1024px), (max-width: 640px) {
       #chordThemeSelect {
         display: inline-block;
         flex: 0 0 auto;
@@ -1801,82 +1801,6 @@
         grid-column: auto;
         grid-row: auto;
         height: 34px;
-      }
-    }
-
-    @media (min-width: 641px) and (max-width: 1023px) {
-      .chord-tools-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 4px;
-      }
-
-      .chord-display-controls {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 6px;
-        min-width: 0;
-        justify-content: flex-start;
-      }
-
-      .track-field:first-child .track-label {
-        display: none;
-      }
-
-      .chord-panel .transpose-control {
-        grid-template-columns: 18px 30px 18px;
-        gap: 0;
-        overflow: hidden;
-        border: 1px solid #69727d;
-        border-radius: 3px;
-      }
-
-      .chord-panel .transpose-control button {
-        width: 18px;
-        min-width: 18px;
-        height: 20px;
-        border: 0;
-        border-radius: 0;
-      }
-
-      .chord-panel .transpose-control #semitones {
-        width: 30px;
-        min-width: 30px;
-        height: 20px;
-        border-top: 0;
-        border-right: 1px solid #3b4652;
-        border-bottom: 0;
-        border-left: 1px solid #3b4652;
-      }
-
-      .chord-action-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        min-width: 0;
-        justify-content: flex-end;
-        width: 100%;
-      }
-
-      .action-status {
-        display: block;
-        flex: 1 1 auto;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .action-status > span {
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .chord-actions {
-        flex: 0 0 auto;
       }
     }
 
@@ -2456,7 +2380,7 @@
       themeSelect.value = readPreference(themeKey) === 'light' ? 'light' : 'dark';
 
       function themeActive() {
-        return true;
+        return desktop.matches || phone.matches;
       }
 
       function applyPreferences() {
