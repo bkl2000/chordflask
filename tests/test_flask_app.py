@@ -3582,10 +3582,10 @@ def test_phone_light_theme_bolds_only_the_chord_output():
         "      }"
     ) in phone
 
-    # The desktop light theme is unchanged: it never bolds #callbackOutput.
-    desktop = body.split("@media (min-width: 1024px), (max-width: 640px) {")[1].split(
+    # The shared light-theme rules never bold #callbackOutput.
+    theme = body.split("@media (min-width: 0px) {")[1].split(
         "@media (min-width: 801px) and (min-height: 600px)")[0]
-    assert "#callbackOutput" not in desktop
+    assert "#callbackOutput" not in theme
 
 
 def test_desktop_outer_spacing_and_file_height_are_scoped():
