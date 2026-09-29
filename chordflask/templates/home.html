@@ -1423,8 +1423,7 @@
       padding: 0 10px;
     }
 
-    #desktopSplitter,
-    #chordThemeSelect {
+    #desktopSplitter {
       display: none;
     }
 
@@ -1562,102 +1561,100 @@
 
     }
 
-    /* The chord theme selector and light theme apply on desktop and phone. */
-    @media (min-width: 1024px), (max-width: 640px) {
-      #chordThemeSelect {
-        display: inline-block;
-        flex: 0 0 auto;
-        width: auto;
-        height: 22px;
-        padding: 0 3px;
-        border: 1px solid #69727d;
-        border-radius: 3px;
-        background: var(--chord-bg);
-        color: var(--chord-muted);
-        font-size: 12px;
-      }
+    /* The chord theme selector and light theme use one preference at every size. */
+    #chordThemeSelect {
+      display: inline-block;
+      flex: 0 0 auto;
+      width: auto;
+      height: 22px;
+      padding: 0 3px;
+      border: 1px solid #69727d;
+      border-radius: 3px;
+      background: var(--chord-bg);
+      color: var(--chord-muted);
+      font-size: 12px;
+    }
 
-      .chord-panel.chord-light {
-        --chord-bg: #fff;
-        --chord-text: #20242a;
-        --chord-muted: #52606d;
-        color-scheme: light;
-        border-color: #cfd6de;
-      }
+    .chord-panel.chord-light {
+      --chord-bg: #fff;
+      --chord-text: #20242a;
+      --chord-muted: #52606d;
+      color-scheme: light;
+      border-color: #cfd6de;
+    }
 
-      .chord-light .chord-header,
-      .chord-light:not(.song-view-active) #editTools {
-        border-color: #cfd6de;
-      }
+    .chord-light .chord-header,
+    .chord-light:not(.song-view-active) #editTools {
+      border-color: #cfd6de;
+    }
 
-      .chord-light .song-sheet-title {
-        color: var(--chord-text);
-      }
+    .chord-light .song-sheet-title {
+      color: var(--chord-text);
+    }
 
-      .chord-light .song-sheet-meta,
-      .chord-light .song-comment {
-        color: var(--chord-muted);
-      }
+    .chord-light .song-sheet-meta,
+    .chord-light .song-comment {
+      color: var(--chord-muted);
+    }
 
-      .chord-light .song-section-heading,
-      .chord-light .song-chord {
-        color: var(--accent);
-      }
+    .chord-light .song-section-heading,
+    .chord-light .song-chord {
+      color: var(--accent);
+    }
 
-      .chord-light .song-chord.song-chord-active {
-        /* Strong inverse of the light theme: dark plate, white text. */
-        background: #1b1f24;
-        color: #ffffff;
-      }
+    .chord-light .song-chord.song-chord-active {
+      /* Strong inverse of the light theme: dark plate, white text. */
+      background: #1b1f24;
+      color: #ffffff;
+    }
 
-      .chord-light .song-comment-box {
-        border-color: #a5b1bd;
-      }
+    .chord-light .song-comment-box {
+      border-color: #a5b1bd;
+    }
 
-      .chord-light:not(.song-view-active) #queueStatus {
-        color: #805900;
-      }
+    .chord-light:not(.song-view-active) #queueStatus {
+      color: #805900;
+    }
 
-      .chord-light .prepare-popover {
-        border-color: #a5b1bd;
-        background: #fff;
-        box-shadow: 0 6px 18px #0003;
-        color: #20242a;
-      }
+    .chord-light .prepare-popover {
+      border-color: #a5b1bd;
+      background: #fff;
+      box-shadow: 0 6px 18px #0003;
+      color: #20242a;
+    }
 
-      .chord-light .prepare-action:hover:not(:disabled),
-      .chord-light .prepare-action:focus-visible {
-        background: #e7edf3;
-        color: #20242a;
-      }
+    .chord-light .prepare-action:hover:not(:disabled),
+    .chord-light .prepare-action:focus-visible {
+      background: #e7edf3;
+      color: #20242a;
+    }
 
-      .chord-light:not(.song-view-active) .track-selectors select,
-      .chord-light:not(.song-view-active) #semitones,
-      .chord-light:not(.song-view-active) .edit-cell {
-        background: #f0f3f6;
-        color: #20242a;
-        border-color: #a5b1bd;
-      }
+    .chord-light:not(.song-view-active) .track-selectors select,
+    .chord-light:not(.song-view-active) #semitones,
+    .chord-light:not(.song-view-active) .edit-cell {
+      background: #f0f3f6;
+      color: #20242a;
+      border-color: #a5b1bd;
+    }
 
-      .chord-light:not(.song-view-active) .edit-cell:hover {
-        background: #dceefb;
-        border-color: #1767a8;
-      }
+    .chord-light:not(.song-view-active) .edit-cell:hover {
+      background: #dceefb;
+      border-color: #1767a8;
+    }
 
-      .chord-light:not(.song-view-active) .edit-cell.repeat {
-        color: #52606d;
-      }
+    .chord-light:not(.song-view-active) .edit-cell.repeat {
+      color: #52606d;
+    }
 
-      .chord-light:not(.song-view-active) .edit-cell.active {
-        background: #1767a8;
-        border-color: #0f4f82;
-        color: #fff;
-      }
+    .chord-light:not(.song-view-active) .edit-cell.active {
+      background: #1767a8;
+      border-color: #0f4f82;
+      color: #fff;
+    }
 
-      .chord-light:not(.song-view-active) .edit-cell.empty {
-        background: transparent;
-        border-color: transparent;
-      }
+    .chord-light:not(.song-view-active) .edit-cell.empty {
+      background: transparent;
+      border-color: transparent;
     }
 
     @media (min-width: 801px) and (min-height: 600px) {
@@ -1715,6 +1712,70 @@
 
       #callbackOutput {
         font-size: clamp(9px, 2.75cqw, 21px);
+      }
+    }
+
+    @media (min-width: 641px) and (max-width: 1023px) {
+      .chord-tools-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 5px;
+      }
+
+      .chord-display-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        min-width: 0;
+      }
+
+      .track-selectors,
+      .display-tools {
+        gap: 5px;
+      }
+
+      .chord-panel .transpose-control {
+        grid-template-columns: 34px 4ch 34px;
+        gap: 2px;
+      }
+
+      .chord-panel .transpose-control button {
+        width: 34px;
+        min-width: 34px;
+        height: 28px;
+      }
+
+      .chord-panel .transpose-control #semitones {
+        width: 4ch;
+        min-width: 4ch;
+        height: 28px;
+      }
+
+      .chord-action-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        width: 100%;
+      }
+
+      .action-status {
+        display: block;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .action-status > span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .chord-actions {
+        flex: 0 0 auto;
       }
     }
 
@@ -2351,7 +2412,6 @@
   <script id="desktopPanelPreferences">
     (() => {
       const desktop = window.matchMedia('(min-width: 1024px)');
-      const phone = window.matchMedia('(max-width: 640px)');
       const workspace = document.querySelector('.workspace');
       const splitter = document.getElementById('desktopSplitter');
       const panel = document.getElementById('desktopChordPanel');
@@ -2379,16 +2439,12 @@
       let split = clampSplit(readPreference(splitKey));
       themeSelect.value = readPreference(themeKey) === 'light' ? 'light' : 'dark';
 
-      function themeActive() {
-        return desktop.matches || phone.matches;
-      }
-
       function applyPreferences() {
         // Only CSS layout and panel colors change; player/grid state is untouched.
         workspace.style.setProperty('--video-share', `${split}fr`);
         workspace.style.setProperty('--chord-share', `${100 - split}fr`);
         splitter.setAttribute('aria-valuenow', String(Math.round(split)));
-        panel.classList.toggle('chord-light', themeActive() && themeSelect.value === 'light');
+        panel.classList.toggle('chord-light', themeSelect.value === 'light');
       }
 
       function endDrag() {
@@ -2434,11 +2490,9 @@
         applyPreferences();
       });
       themeSelect.addEventListener('change', () => {
-        if (!themeActive()) return;
         applyPreferences();
         savePreference(themeKey, themeSelect.value);
       });
-      phone.addEventListener('change', applyPreferences);
       applyPreferences();
     })();
   </script>
@@ -2479,6 +2533,7 @@
       '(max-width: 640px), (min-width: 1024px)'
     );
     let mobilePlaybackControls = window.matchMedia('(max-width: 640px)');
+    let nonPhoneDisplayControls = window.matchMedia('(min-width: 641px)');
     // On-demand preparation is offered only in the established desktop layout.
     let desktopPrepare = window.matchMedia('(min-width: 1024px)');
     let loopStartButton = document.getElementById('loopStartButton');
@@ -3841,7 +3896,7 @@
     }
 
     function placeStemsControl() {
-      if (desktopPrepare.matches) {
+      if (nonPhoneDisplayControls.matches) {
         chordDisplayControls.appendChild(stemsButton);
       } else {
         chordActions.insertBefore(stemsButton, prepareGroup);
@@ -5462,9 +5517,9 @@
       placeStemsControl();
       navigationInPlaybackBar.addEventListener('change', placePlaybackNavigation);
       mobilePlaybackControls.addEventListener('change', placePlaybackNavigation);
+      nonPhoneDisplayControls.addEventListener('change', placeStemsControl);
       desktopPrepare.addEventListener('change', () => {
         // Entering desktop may reveal Prepare; leaving it must cancel polling.
-        placeStemsControl();
         if (!desktopPrepare.matches) setPrepareMenuOpen(false);
         refreshPreparationStates();
       });

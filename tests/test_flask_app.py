@@ -3301,16 +3301,55 @@ def test_desktop_chord_header_compacts_track_and_transpose_controls():
     assert "min-width: 0;" in desktop
 
 
-def test_stems_returns_to_existing_action_position_below_desktop():
+def test_stems_uses_display_controls_off_phone_and_keeps_phone_position():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
     placement = javascript_function(body, "placeStemsControl")
 
-    assert "if (desktopPrepare.matches)" in placement
+    assert "if (nonPhoneDisplayControls.matches)" in placement
     assert "chordDisplayControls.appendChild(stemsButton);" in placement
     assert "chordActions.insertBefore(stemsButton, prepareGroup);" in placement
-    assert "desktopPrepare.addEventListener('change'" in body
+    assert "let nonPhoneDisplayControls = window.matchMedia('(min-width: 641px)');" in body
+    assert "nonPhoneDisplayControls.addEventListener('change', placeStemsControl);" in body
+
+
+def test_tablet_chord_header_groups_display_controls_and_compacts_transpose():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    tablet = body.split(
+        "@media (min-width: 641px) and (max-width: 1023px) {"
+    )[1].split("@media")[0]
+
+    assert ".chord-tools-row {" in tablet
+    assert "display: grid;" in tablet
+    assert ".chord-display-controls {" in tablet
+    assert "display: flex;" in tablet
+    assert "flex-wrap: wrap;" in tablet
+    assert ".chord-action-row {" in tablet
+    assert "width: 100%;" in tablet
+    assert ".action-status > span {" in tablet
+    assert "text-overflow: ellipsis;" in tablet
+
+    transpose = tablet[
+        tablet.index(".chord-panel .transpose-control {"):
+        tablet.index(".chord-action-row {")
+    ]
+    columns = re.search(
+        r"grid-template-columns:\s*(\d+)px 4ch (\d+)px;", transpose
+    )
+    assert columns is not None
+    assert columns.group(1) == columns.group(2)
+    assert int(columns.group(1)) >= 32
+    assert "width: 4ch;" in transpose
+    assert "min-width: 4ch;" in transpose
+    button_rule = transpose.split(
+        ".chord-panel .transpose-control button {", 1
+    )[1].split("}", 1)[0]
+    button_height = re.search(r"height:\s*(\d+)px;", button_rule)
+    assert button_height is not None
+    assert int(button_height.group(1)) >= 28
 
 
 def test_index_contains_mobile_menu_markup_and_rules():
@@ -3500,13 +3539,13 @@ def test_transpose_control_has_single_plus_minus_pair():
 def test_desktop_panel_split_preserves_default_and_small_screen_layouts():
     _, client = make_client()
     body = client.get("/").get_data(as_text=True)
-    desktop = body[body.index('@media (min-width: 1024px)'):body.index(
+    desktop = body[body.index('@media (min-width: 1024px) {'):body.index(
         '@media (min-width: 801px) and (min-height: 600px)')]
     assert 'id="desktopSplitter" role="separator" tabindex="0"' in body
     assert 'aria-valuemin="35" aria-valuemax="70" aria-valuenow="55"' in body
     assert 'var(--video-share, 55fr)) 14px minmax(0, var(--chord-share, 45fr))' in desktop
     assert 'gap: 0' in desktop
-    assert '#desktopSplitter,\n    #chordThemeSelect {\n      display: none;' in body
+    assert '#desktopSplitter {\n      display: none;' in body
     assert 'minmax(0, 9fr) minmax(0, 11fr)' in body
     assert 'object-fit: contain' in body
     script = body.split('<script id="desktopPanelPreferences">')[1].split('</script>')[0]
@@ -3532,23 +3571,25 @@ def test_desktop_chord_light_theme_is_optional_and_panel_scoped():
     for control in ('chordThemeSelect', 'chordTrackSelect', 'rhythmTrackSelect',
                     'semitones', 'editButton', 'saveButton', 'repeatDisplayButton'):
         assert f'id="{control}"' in panel
-    desktop = body[body.index('@media (min-width: 1024px)'):body.index(
+    shared_theme = body[body.index(
+        '/* The chord theme selector and light theme use one preference at every size. */'
+    ):body.index(
         '@media (min-width: 801px) and (min-height: 600px)')]
-    assert '.chord-panel.chord-light {' in desktop
-    assert '.chord-panel.chord-light:not(.song-view-active)' not in desktop
-    assert '--chord-bg: #fff' in desktop
-    assert '--chord-text: #20242a' in desktop
+    assert '.chord-panel.chord-light {' in shared_theme
+    assert '.chord-panel.chord-light:not(.song-view-active)' not in shared_theme
+    assert '--chord-bg: #fff' in shared_theme
+    assert '--chord-text: #20242a' in shared_theme
     assert '#songSheet {' in body
     assert 'color: var(--chord-text)' in body[body.index('#songSheet {'):body.index('.song-sheet-title')]
-    assert '.chord-light .song-sheet-title {' in desktop
-    assert '.chord-light .song-chord {' in desktop
-    assert 'color: var(--accent)' in desktop
-    assert '.edit-cell.active' in desktop
-    assert '.edit-cell.repeat' in desktop
-    assert 'filter:' not in desktop
+    assert '.chord-light .song-sheet-title {' in shared_theme
+    assert '.chord-light .song-chord {' in shared_theme
+    assert 'color: var(--accent)' in shared_theme
+    assert '.edit-cell.active' in shared_theme
+    assert '.edit-cell.repeat' in shared_theme
+    assert 'filter:' not in shared_theme
     script = body.split('<script id="desktopPanelPreferences">')[1].split('</script>')[0]
     assert "readPreference(themeKey) === 'light' ? 'light' : 'dark'" in script
-    assert "panel.classList.toggle('chord-light', themeActive() && themeSelect.value === 'light')" in script
+    assert "panel.classList.toggle('chord-light', themeSelect.value === 'light')" in script
     assert 'savePreference(themeKey, themeSelect.value)' in script
 
 
@@ -3564,10 +3605,12 @@ def test_phone_light_theme_bolds_only_the_chord_output():
         "      }"
     ) in phone
 
-    # The desktop light theme is unchanged: it never bolds #callbackOutput.
-    desktop = body.split("@media (min-width: 1024px), (max-width: 640px) {")[1].split(
-        "@media (min-width: 801px) and (min-height: 600px)")[0]
-    assert "#callbackOutput" not in desktop
+    # The shared light theme stays unchanged: only the phone override bolds
+    # #callbackOutput.
+    shared_theme = body.split(
+        "/* The chord theme selector and light theme use one preference at every size. */"
+    )[1].split("@media (min-width: 801px) and (min-height: 600px)")[0]
+    assert "#callbackOutput" not in shared_theme
 
 
 def test_desktop_outer_spacing_and_file_height_are_scoped():

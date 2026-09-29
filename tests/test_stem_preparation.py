@@ -591,14 +591,19 @@ def test_theme_selector_stays_in_display_row():
     assert tools_row.index('id="editButton"') > display_end
 
 
-def test_theme_selector_is_available_on_desktop_and_phone_css():
+def test_theme_selector_is_available_on_desktop_tablet_and_phone_css():
     _, client = make_client()
     body = _index_body(client)
 
-    # Base layout hides the selector; desktop and phone media queries show it.
-    assert "#desktopSplitter,\n    #chordThemeSelect {\n      display: none;\n    }" in body
-    assert "@media (min-width: 1024px), (max-width: 640px)" in body
-    assert "#chordThemeSelect {\n        display: inline-block;" in body
+    # The selector is a normal all-width display control; only the splitter
+    # remains hidden by default and enabled at the desktop breakpoint.
+    shared_theme = body.split(
+        "/* The chord theme selector and light theme use one preference at every size. */"
+    )[1].split("@media (min-width: 801px) and (min-height: 600px)")[0]
+    assert "@media" not in shared_theme
+    assert "#chordThemeSelect {" in shared_theme
+    assert "display: inline-block;" in shared_theme
+    assert ".chord-panel.chord-light {" in shared_theme
     # The phone layout hides Changes so the theme selector takes its place.
     phone = body[body.index("@media (max-width: 640px) {"):]
     assert "#repeatDisplayButton {\n        display: none;\n      }" in phone
@@ -610,9 +615,8 @@ def test_theme_selector_behavior_unchanged():
 
     assert "const themeKey = 'chordflask.chordTheme';" in body
     assert "themeSelect.value = readPreference(themeKey) === 'light' ? 'light' : 'dark';" in body
-    assert "panel.classList.toggle('chord-light', themeActive() && themeSelect.value === 'light');" in body
-    assert "function themeActive() {" in body
-    assert "return desktop.matches || phone.matches;" in body
+    assert "panel.classList.toggle('chord-light', themeSelect.value === 'light');" in body
+    assert "function themeActive() {" not in body
     assert "savePreference(themeKey, themeSelect.value);" in body
     theme_select = body[body.index('id="chordThemeSelect"'):]
     theme_select = theme_select[: theme_select.index("</select>")]
