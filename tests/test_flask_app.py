@@ -3296,9 +3296,27 @@ def test_desktop_chord_header_compacts_track_and_transpose_controls():
 
     assert 'aria-label="Select chord analysis source"' in body
     assert ".track-field:first-child .track-label {\n        display: none;" in desktop
-    assert "grid-template-columns: 18px minmax(36px, 40px) 18px;" in desktop
+    assert "grid-template-columns: 18px 30px 18px;" in desktop
     assert ".chord-panel .transpose-control #semitones" in desktop
     assert "min-width: 0;" in desktop
+
+
+def test_tablet_chord_header_uses_compact_desktop_like_structure():
+    _, client = make_client()
+
+    body = client.get("/").get_data(as_text=True)
+    tablet = body.split(
+        "@media (min-width: 641px) and (max-width: 1023px) {"
+    )[1].split("@media")[0]
+
+    assert ".chord-tools-row {" in tablet
+    assert "flex-direction: column;" in tablet
+    assert ".chord-display-controls {" in tablet
+    assert ".chord-action-row {" in tablet
+    assert "grid-template-columns: 18px 30px 18px;" in tablet
+    assert "width: 30px;" in tablet
+    assert ".prepare-control:not([hidden])" not in tablet
+    assert "#desktopSplitter" not in tablet
 
 
 def test_stems_returns_to_existing_action_position_below_desktop():
@@ -3583,7 +3601,7 @@ def test_desktop_outer_spacing_and_file_height_are_scoped():
     assert "grid-template-rows: minmax(0, 1fr) auto auto" in height_rule
     assert "max-height: clamp(152px, 28vh, 360px)" in height_rule
     assert "max-height: clamp(152px, 28dvh, 360px)" in height_rule
-    # Smaller screens retain their original spacing, file cap, and overrides.
+    # Smaller screens retain their original spacing, file cap, and workspace ratio.
     assert "padding: 8px 0 0" in body
     assert "width: min(1500px, calc(100vw - 32px))" in body
     assert "max-height: clamp(152px, 22vh, 260px)" in body
