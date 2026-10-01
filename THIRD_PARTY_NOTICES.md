@@ -95,6 +95,18 @@ Liberation Mono font files for rasterized PDF leadsheets.
 - **Full license:** `chordflask/assets/fonts/LICENSE.txt` in the source tree and
   `LIBERATION-FONTS-LICENSE.txt` in the standalone archive
 
+## Noto Sans Thai
+
+ChordFlask bundles the unmodified Noto Sans Thai Regular font for Thai lyrics
+in rasterized PDF leadsheets.
+
+- **License:** SIL Open Font License 1.1
+- **Copyright:** Copyright 2010, 2012-2020 Google Inc.;
+  copyright 2015-2020 Google LLC.
+- **Upstream:** https://github.com/notofonts/thai
+- **Full license:** `chordflask/assets/fonts/LICENSE.txt` in the source tree and
+  `LIBERATION-FONTS-LICENSE.txt` in the standalone archive
+
 ## Python Dependencies
 
 Python runtime dependencies are listed in `requirements-core.txt` and

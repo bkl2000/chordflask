@@ -9,6 +9,8 @@ compact metadata line, a source line, and playable monospace chord rows.
 
 import re
 
+from .chord_export_sheet import lyric_line_text
+
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 _MEASURES_PER_BLOCK = 8
@@ -273,3 +275,36 @@ def format_chord_markdown(
         beat_numbers=[number for number, _ in beats],
         repeat_mode=repeat_mode,
     )
+
+
+def format_export_markdown(sheet):
+    """Render a shared export sheet as Markdown."""
+    markdown = format_chord_markdown(
+        title=sheet.title,
+        chord_track=sheet.chord_track,
+        rhythm_track=sheet.rhythm_track,
+        version=sheet.version,
+        transpose=sheet.transpose,
+        spelling=sheet.spelling,
+        unicode_symbols=sheet.unicode_symbols,
+        bpm=sheet.bpm,
+        meter=sheet.meter,
+        beats=sheet.beats,
+        repeat_mode=sheet.repeat_mode,
+    )
+    if not sheet.lyrics:
+        return markdown
+
+    lines = [markdown.rstrip(), "", "## Lyrics", ""]
+    for block in sheet.lyrics:
+        if block.type == "line":
+            lines.append(lyric_line_text(block))
+            if block.romanized:
+                lines.append(block.romanized)
+        elif block.type == "blank":
+            lines.append("")
+        elif block.type == "section_start":
+            lines.extend((f"### {block.heading or block.section or 'Section'}", ""))
+        elif block.type == "comment" and block.text:
+            lines.append(f"*{block.text}*")
+    return "\n".join(lines).rstrip() + "\n"

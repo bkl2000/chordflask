@@ -454,6 +454,7 @@ def test_download_chords_returns_markdown_pdf_and_chordpro_zip(tmp_path):
     assert "Chordino · QM Bar/Beat Tracker" in body
     assert "```text\n" in body
     assert "C          -          G          -" in body
+    assert "## Lyrics" not in body
     assert "|" not in body
     chordpro = files["song-chords-chordino.cho"].decode("utf-8")
     assert "{title: song}" in chordpro
@@ -564,7 +565,7 @@ def test_download_chords_returns_no_partial_zip_when_chordpro_rendering_fails(
     def fail_render(**kwargs):
         raise ValueError("render failed")
 
-    monkeypatch.setattr("chordflask.app.format_chordpro", fail_render)
+    monkeypatch.setattr("chordflask.app.format_export_chordpro", fail_render)
 
     response = client.post("/download_chords", json=_payload(tmp_path))
 
@@ -680,6 +681,166 @@ def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path
     assert "| D♭/A♭ N X G♭/D♭ |" in chordpro
 
 
+@pytest.mark.parametrize(
+    ("export_format", "suffix", "content_type", "prefix"),
+    [
+        ("markdown", ".md", "text/markdown", b"# song\n"),
+        ("pdf", ".pdf", "application/pdf", b"%PDF"),
+        ("chordpro", ".cho", "text/plain", b"{title: song}"),
+    ],
+)
+def test_download_chords_returns_requested_file_without_zip(
+    tmp_path, export_format, suffix, content_type, prefix
+):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+
+    response = client.post(
+        "/download_chords", json=_payload(tmp_path, format=export_format)
+    )
+
+    assert response.status_code == 200
+    assert response.content_type.startswith(content_type)
+    assert f"song-chords-chordino{suffix}" in response.headers["Content-Disposition"]
+    assert response.data.startswith(prefix)
+
+
+def test_download_chords_rejects_unknown_format(tmp_path):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+
+    response = client.post(
+        "/download_chords", json=_payload(tmp_path, format="docx")
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Unknown chord export format."}
+
+    response = client.post(
+        "/download_chords", json=_payload(tmp_path, format=["pdf"])
+    )
+    assert response.status_code == 400
+
+
+def test_download_chords_includes_existing_thai_lyrics_and_romanization(tmp_path):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+    (tmp_path / "song.cho").write_text(
+        "{x_chordflask_romanized: chan rak thoe}\n"
+        "{x_chordflask_beats: 0,2}\n"
+        "{x_chordflask_end: 4}\n"
+        "[F]ฉันรัก [B♭]เธอ\n",
+        encoding="utf-8",
+    )
+
+    response = client.post("/download_chords", json=_payload(tmp_path, format="all"))
+
+    assert response.status_code == 200
+    files = _download_archive(response)
+    markdown = files["song-chords-chordino.md"].decode("utf-8")
+    chordpro = files["song-chords-chordino.cho"].decode("utf-8")
+    assert "## Lyrics\n\n[C]ฉันรัก [G]เธอ\nchan rak thoe" in markdown
+    assert "{x_chordflask_romanized: chan rak thoe}" in chordpro
+    assert "{x_chordflask_beats: 0,2}" in chordpro
+    assert "[C]ฉันรัก [G]เธอ" in chordpro
+    assert "[F]" not in chordpro
+    assert "[B♭]" not in chordpro
+    assert files["song-chords-chordino.pdf"].startswith(b"%PDF")
+
+
+@pytest.mark.parametrize(
+    ("track_id", "expected_chord", "expected_slug"),
+    [
+        ("chordino", "C", "chordino"),
+        ("btc", "Dm", "btc"),
+        ("user_edited", "Em", "edited"),
+    ],
+)
+def test_lyrics_export_uses_active_track_not_sidecar_chords(
+    tmp_path, track_id, expected_chord, expected_slug
+):
+    app_wrapper, client = make_client()
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
+    cd = _track_data()
+    cd.set_chord_track("btc", [{"timestamp": 0.0, "chord": "Dm"}])
+    cd.set_chord_track(
+        "user_edited",
+        [{"timestamp": 0.0, "chord": "Em"}],
+        metadata={
+            "display_name": "Edited",
+            "sources": {"chord": "chordino", "rhythm": "qm_barbeattracker"},
+        },
+    )
+    cd.select_chord_track(track_id)
+    cd.save_to_file(file_repr.get("json"))
+    _state(app_wrapper).file_repr = file_repr
+    _state(app_wrapper).player = MP4PlayerFlask(file_repr)
+    _state(app_wrapper).player.select_chord_track(track_id)
+    (tmp_path / "song.cho").write_text(
+        "{x_chordflask_beats: 0}\n{x_chordflask_end: 4}\n[F#]Lyric\n",
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/download_chords", json=_payload(tmp_path, format="chordpro")
+    )
+
+    assert response.status_code == 200
+    assert f"song-chords-{expected_slug}.cho" in response.headers["Content-Disposition"]
+    body = response.get_data(as_text=True)
+    assert f"[{expected_chord}]Lyric" in body
+    assert "[F#]" not in body
+
+
+def test_export_does_not_use_network_or_lyrics_runtime(tmp_path, monkeypatch):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+    (tmp_path / "song.cho").write_text("Plain local lyric\n", encoding="utf-8")
+
+    def reject_network(*args, **kwargs):
+        raise AssertionError("network operation attempted")
+
+    monkeypatch.setattr("socket.create_connection", reject_network)
+    response = client.post(
+        "/download_chords", json=_payload(tmp_path, format="markdown")
+    )
+
+    assert response.status_code == 200
+    assert "Plain local lyric" in response.get_data(as_text=True)
+
+
+def test_lyrics_export_uses_current_transposition_and_accidental_spelling(tmp_path):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+    (tmp_path / "song.cho").write_text(
+        "{x_chordflask_beats: 0}\n{x_chordflask_end: 4}\n[F]Lyric\n",
+        encoding="utf-8",
+    )
+    assert client.post("/update_semitones", json={"semitones": 1}).status_code == 200
+
+    sharp = client.post(
+        "/update_display_options",
+        json={"prefer_flats": False, "repeat_mode": "changes"},
+    )
+    assert sharp.status_code == 200
+    response = client.post(
+        "/download_chords", json=_payload(tmp_path, format="chordpro")
+    )
+    assert "[C#]Lyric" in response.get_data(as_text=True)
+
+    flat = client.post(
+        "/update_display_options",
+        json={"prefer_flats": True, "repeat_mode": "changes"},
+    )
+    assert flat.status_code == 200
+    response = client.post(
+        "/download_chords", json=_payload(tmp_path, format="chordpro")
+    )
+    assert "[Db]Lyric" in response.get_data(as_text=True)
+
+
 # ── browser contract ─────────────────────────────────────────────────
 
 
@@ -689,18 +850,22 @@ def test_index_contains_export_control_and_download_contract():
     body = client.get("/").get_data(as_text=True)
 
     assert 'id="saveButton"' in body
-    assert 'aria-label="Export the current chord sheet (Markdown, PDF, ChordPro)"' in body
-    assert '<span class="desktop-action-label">Export</span>' in body
-    assert "'chords.zip'" in body
+    assert 'id="exportMenu"' in body
+    assert 'aria-label="Export the current chord sheet"' in body
+    assert 'Export <span aria-hidden="true">▾</span>' in body
+    assert body.count('data-export-format=') == 4
+    for label in ("Markdown", "PDF", "ChordPro", "All formats (.zip)"):
+        assert f">{label}</button>" in body
     assert "#saveButton" in body
     assert "fetch('/download_chords'" in body
     assert "function updateSaveButton()" in body
-    assert "function downloadChords()" in body
+    assert "function downloadChords(format)" in body
     assert "function filenameFromDisposition(disposition)" in body
     assert "URL.createObjectURL(blob)" in body
     assert "URL.revokeObjectURL(url)" in body
     assert "let saveRequestInFlight = false;" in body
-    assert "saveButton.addEventListener('click', downloadChords)" in body
+    assert "saveButton.addEventListener('click', toggleExportMenu)" in body
+    assert "downloadChords(button.dataset.exportFormat)" in body
 
 
 def test_index_save_busy_state_guards_ambiguous_views():

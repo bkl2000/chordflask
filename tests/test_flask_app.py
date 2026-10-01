@@ -2898,7 +2898,7 @@ def test_song_view_uses_existing_chord_area_and_desktop_only_switch():
     assert 'class="display-tools"' in body
     assert 'id="repeatDisplayButton" data-grid-only' in body
     assert 'id="editButton" data-grid-only' in body
-    assert 'id="saveButton" data-grid-only' in body
+    assert 'id="exportGroup" class="export-control" data-grid-only' in body
     assert 'id="reanalyzeButton" data-grid-only' in body
     assert 'id="stemsButton" data-grid-only' not in body
 
@@ -3363,7 +3363,8 @@ def test_desktop_chord_header_separates_display_controls_and_actions():
         assert f'id="{control_id}"' in actions
     assert 'id="stemsButton"' not in actions
     assert actions.index('id="queueStatus"') < actions.index('class="chord-actions"')
-    assert '<span class="desktop-action-label">Export</span>' in actions
+    assert 'id="exportMenu"' in actions
+    assert 'Export <span aria-hidden="true">▾</span>' in actions
 
 
 def test_desktop_chord_header_compacts_track_and_transpose_controls():

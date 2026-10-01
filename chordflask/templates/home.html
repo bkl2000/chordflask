@@ -1176,6 +1176,14 @@
       position: relative;
     }
 
+    .export-control {
+      position: relative;
+    }
+
+    .export-control[hidden] {
+      display: none;
+    }
+
     .prepare-popover {
       position: absolute;
       z-index: 20;
@@ -1218,6 +1226,14 @@
       color: inherit;
       text-align: left;
       text-transform: none;
+    }
+
+    .export-popover {
+      min-width: 175px;
+    }
+
+    .export-action {
+      display: block;
     }
 
     .prepare-action[hidden] {
@@ -2092,6 +2108,10 @@
         display: none;
       }
 
+      .export-control {
+        display: none;
+      }
+
       #repeatDisplayButton {
         display: none;
       }
@@ -2240,10 +2260,25 @@
               <span class="chord-actions">
                 <button id="editButton" data-grid-only type="button" title="Edit detected chords beat by beat"
                         aria-label="Edit detected chords" hidden disabled>Edit</button>
-                <button id="saveButton" data-grid-only type="button" title="Export the current chord sheet (Markdown, PDF, ChordPro)"
-                        aria-label="Export the current chord sheet (Markdown, PDF, ChordPro)" hidden disabled>
-                  <span class="desktop-action-label">Export</span><span class="compact-action-label">Save</span>
-                </button>
+                <span id="exportGroup" class="export-control" data-grid-only hidden>
+                  <button id="saveButton" type="button" title="Export the current chord sheet"
+                          aria-label="Export the current chord sheet" aria-expanded="false"
+                          aria-controls="exportMenu" hidden disabled>
+                    Export <span aria-hidden="true">▾</span>
+                  </button>
+                  <span id="exportMenu" class="prepare-popover export-popover" role="menu"
+                        aria-label="Export current chord sheet" hidden>
+                    <span class="prepare-popover-title">Export current chord sheet</span>
+                    <button class="prepare-action export-action" role="menuitem" type="button"
+                            data-export-format="markdown">Markdown</button>
+                    <button class="prepare-action export-action" role="menuitem" type="button"
+                            data-export-format="pdf">PDF</button>
+                    <button class="prepare-action export-action" role="menuitem" type="button"
+                            data-export-format="chordpro">ChordPro</button>
+                    <button class="prepare-action export-action" role="menuitem" type="button"
+                            data-export-format="all">All formats (.zip)</button>
+                  </span>
+                </span>
                 <button id="reanalyzeButton" data-grid-only type="button" title="Reanalyze this file with automatic Chordino/QM analysis"
                         aria-label="Reanalyze with Chordino/QM" hidden disabled>
                   <span class="desktop-action-label">Reanalyze</span><span class="compact-action-label" aria-hidden="true">↻</span>
@@ -2579,7 +2614,9 @@
     let batchLimitInput = document.getElementById('batchLimit');
     let queueNextButton = document.getElementById('queueNextButton');
     let editButton = document.getElementById('editButton');
+    let exportGroup = document.getElementById('exportGroup');
     let saveButton = document.getElementById('saveButton');
+    let exportMenu = document.getElementById('exportMenu');
     let undoEditButton = document.getElementById('undoEditButton');
     let resetEditButton = document.getElementById('resetEditButton');
     let mobileMenuButton = document.getElementById('mobileMenuButton');
@@ -2788,6 +2825,7 @@
 
     function applySongViewMode() {
       const showSong = songViewMode === 'song';
+      if (showSong) setExportMenuOpen(false);
       chordPanel.classList.toggle('song-view-active', showSong);
       chordViewTitle.textContent = showSong ? 'Lyrics' : 'Grid';
       callbackOutput.hidden = showSong || editMode;
@@ -4711,6 +4749,7 @@
 
     function updateSaveButton() {
       const validLoaded = Boolean(loadedMediaPath) && loadedAnalysisValid;
+      exportGroup.hidden = !validLoaded;
       saveButton.hidden = !validLoaded;
       saveButton.disabled = (
         !validLoaded
@@ -4720,6 +4759,18 @@
         || trackRequestInFlight
         || queuedAnalysisPaths.has(loadedMediaPath)
       );
+      if (saveButton.disabled || exportGroup.hidden) setExportMenuOpen(false);
+    }
+
+    function setExportMenuOpen(open, returnFocus = false) {
+      const shouldOpen = Boolean(open && !exportGroup.hidden && !saveButton.disabled);
+      exportMenu.hidden = !shouldOpen;
+      saveButton.setAttribute('aria-expanded', String(shouldOpen));
+      if (!shouldOpen && returnFocus) saveButton.focus();
+    }
+
+    function toggleExportMenu() {
+      setExportMenuOpen(exportMenu.hidden);
     }
 
     function filenameFromDisposition(disposition) {
@@ -4735,23 +4786,28 @@
       return plain ? plain[1].trim() : '';
     }
 
-    function downloadChords() {
+    function downloadChords(format) {
       if (saveButton.disabled) {
         return;
       }
+      setExportMenuOpen(false);
       saveRequestInFlight = true;
       updateSaveButton();
       fetch('/download_chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+        body: JSON.stringify({
+          dirname: loadedFileDirectory,
+          filename: loadedFileName,
+          format: format
+        })
       })
       .then(response => {
         if (!response.ok) {
           return response.json().then(error => { throw error; });
         }
         const disposition = response.headers.get('Content-Disposition') || '';
-        const filename = filenameFromDisposition(disposition) || 'chords.zip';
+        const filename = filenameFromDisposition(disposition) || 'chords';
         return response.blob().then(blob => ({ blob, filename }));
       })
       .then(({ blob, filename }) => {
@@ -5311,6 +5367,9 @@
     setInterval(stemDriftCheck, STEM_DRIFT_INTERVAL_MS);
 
     document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !exportMenu.hidden) {
+        setExportMenuOpen(false, true);
+      }
       if (event.key === 'Escape' && !prepareMenu.hidden) {
         setPrepareMenuOpen(false, true);
       }
@@ -5320,6 +5379,9 @@
     });
     document.addEventListener('click', event => {
       const target = event.target instanceof Element ? event.target : null;
+      if (!target || !target.closest('.export-control')) {
+        setExportMenuOpen(false);
+      }
       if (!target || !target.closest('.prepare-control')) {
         setPrepareMenuOpen(false);
       }
@@ -5593,7 +5655,10 @@
       prepareButton.addEventListener('click', togglePrepareMenu);
       updateReanalyzeButton();
       editButton.addEventListener('click', toggleEditMode);
-      saveButton.addEventListener('click', downloadChords);
+      saveButton.addEventListener('click', toggleExportMenu);
+      exportMenu.querySelectorAll('[data-export-format]').forEach(button => {
+        button.addEventListener('click', () => downloadChords(button.dataset.exportFormat));
+      });
       undoEditButton.addEventListener('click', undoLastEdit);
       resetEditButton.addEventListener('click', resetEditedChords);
       document.getElementById('editApplyButton').addEventListener('click', applyEditDialog);

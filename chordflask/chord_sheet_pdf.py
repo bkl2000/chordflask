@@ -32,6 +32,7 @@ _CODE_BLOCK_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 _PICKUP_RE = re.compile(r"^Auftakt(?:\s+\(Zählzeiten\s+([1-9][0-9]*)(?:–[1-9][0-9]*)?\))?$")
+_LYRICS_HEADING_RE = re.compile(r"^##\s+Lyrics\s*$", re.MULTILINE | re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,7 @@ class ParsedChordSheet:
     source: str
     meter: int
     measures: tuple[ChordSheetMeasure, ...]
+    lyrics: tuple[str, ...] = ()
 
 
 class ChordSheetPdfRenderer:
@@ -76,6 +78,9 @@ class ChordSheetPdfRenderer:
             self.__font("LiberationMono-Regular.ttf", size)
             for size in (21, 18, 15, 12)
         )
+        self.__lyrics_font = self.__font("LiberationSans-Regular.ttf", 20)
+        self.__lyrics_heading_font = self.__font("LiberationSans-Bold.ttf", 22)
+        self.__thai_font = None
 
     def render_markdown(self, markdown: str) -> bytes:
         """Return a complete PDF for one UTF-8 Markdown leadsheet."""
@@ -160,12 +165,18 @@ class ChordSheetPdfRenderer:
         if not measures:
             raise ValueError("The chord block is empty")
 
+        lyrics = ()
+        lyrics_match = _LYRICS_HEADING_RE.search(markdown)
+        if lyrics_match:
+            lyrics = tuple(markdown[lyrics_match.end() :].strip("\n").splitlines())
+
         return ParsedChordSheet(
             title=title,
             metadata=metadata,
             source=source,
             meter=meter,
             measures=tuple(measures),
+            lyrics=lyrics,
         )
 
     def __parse_measure_block(self, block: str, meter: int) -> list[ChordSheetMeasure]:
@@ -282,15 +293,19 @@ class ChordSheetPdfRenderer:
         ]
 
     def __render_sheet(self, sheet: ParsedChordSheet) -> bytes:
-        page_count = (len(sheet.measures) + BARS_PER_PAGE - 1) // BARS_PER_PAGE
+        grid_page_count = (len(sheet.measures) + BARS_PER_PAGE - 1) // BARS_PER_PAGE
+        lyric_pages = self.__paginate_lyrics(sheet.lyrics)
+        page_count = grid_page_count + len(lyric_pages)
         pages = []
         try:
-            for page_number in range(1, page_count + 1):
+            for page_number in range(1, grid_page_count + 1):
                 start = (page_number - 1) * BARS_PER_PAGE
                 page_measures = sheet.measures[start : start + BARS_PER_PAGE]
                 pages.append(
                     self.__render_page(sheet, page_measures, page_number, page_count)
                 )
+            for lyric_page, lines in enumerate(lyric_pages, grid_page_count + 1):
+                pages.append(self.__render_lyrics_page(sheet, lines, lyric_page, page_count))
             output = BytesIO()
             pages[0].save(
                 output,
@@ -384,6 +399,109 @@ class ChordSheetPdfRenderer:
                 chord_font = self.__fitting_font(draw, chord, beat_width - 6)
                 self.__centered_text(draw, center_x, center_y, chord, chord_font)
         return image
+
+    def __paginate_lyrics(self, lyrics):
+        if not lyrics:
+            return []
+        maximum_width = PAGE_W - 2 * MARGIN_X
+        wrapped = []
+        for source_line in lyrics:
+            line = source_line
+            heading = line.startswith("### ")
+            if heading:
+                line = line[4:]
+            elif len(line) >= 2 and line.startswith("*") and line.endswith("*"):
+                line = line[1:-1]
+            font = self.__lyrics_heading_font if heading else self.__lyrics_font
+            wrapped.extend((part, heading) for part in self.__wrap_text(line, font, maximum_width))
+
+        line_height = 34
+        lines_per_page = max(1, (PAGE_H - MARGIN_TOP - MARGIN_BOTTOM - 85) // line_height)
+        return [
+            wrapped[start : start + lines_per_page]
+            for start in range(0, len(wrapped), lines_per_page)
+        ]
+
+    def __render_lyrics_page(self, sheet, lines, page_number, page_count):
+        image = Image.new("RGB", (PAGE_W, PAGE_H), "white")
+        draw = ImageDraw.Draw(image)
+        title = f"{sheet.title} — Lyrics"
+        draw.text((MARGIN_X, MARGIN_TOP), title, font=self.__title_font, fill="black")
+        page_text = f"{page_number}/{page_count}"
+        page_box = draw.textbbox((0, 0), page_text, font=self.__metadata_font)
+        draw.text(
+            (PAGE_W - MARGIN_X - (page_box[2] - page_box[0]), MARGIN_TOP + 5),
+            page_text,
+            font=self.__metadata_font,
+            fill="black",
+        )
+        y = MARGIN_TOP + 65
+        for line, heading in lines:
+            font = self.__lyrics_heading_font if heading else self.__lyrics_font
+            self.__draw_unicode_text(draw, (MARGIN_X, y), line, font)
+            y += 34
+        return image
+
+    def __wrap_text(self, text, font, maximum_width):
+        if not text:
+            return [""]
+        output = []
+        remaining = text
+        while remaining:
+            if self.__text_width(remaining, font) <= maximum_width:
+                output.append(remaining)
+                break
+            end = len(remaining)
+            while end > 1 and self.__text_width(remaining[:end], font) > maximum_width:
+                end -= 1
+            space = remaining.rfind(" ", 0, end + 1)
+            if space > 0:
+                end = space
+            output.append(remaining[:end].rstrip())
+            remaining = remaining[end:].lstrip()
+        return output
+
+    @staticmethod
+    def __is_thai(character):
+        return "\u0e00" <= character <= "\u0e7f"
+
+    def __font_runs(self, text, default_font):
+        runs = []
+        for character in text:
+            if self.__is_thai(character):
+                if self.__thai_font is None:
+                    self.__thai_font = self.__font("NotoSansThai-Regular.ttf", 20)
+                font = self.__thai_font
+            else:
+                font = default_font
+            if runs and runs[-1][0] is font:
+                runs[-1] = (font, runs[-1][1] + character)
+            else:
+                runs.append((font, character))
+        return runs
+
+    def __text_width(self, text, default_font):
+        return sum(font.getlength(part) for font, part in self.__font_runs(text, default_font))
+
+    def __draw_unicode_text(self, draw, xy, text, default_font):
+        x, y = xy
+        for font, part in self.__font_runs(text, default_font):
+            self.__require_glyphs(font, part)
+            draw.text((x, y), part, font=font, fill="black")
+            x += draw.textlength(part, font=font)
+
+    @staticmethod
+    def __require_glyphs(font, text):
+        missing = font.getmask(chr(0x10FFFF))
+        missing_signature = (missing.size, bytes(missing))
+        for character in text:
+            if character.isspace():
+                continue
+            glyph = font.getmask(character)
+            if (glyph.size, bytes(glyph)) == missing_signature:
+                raise ValueError(
+                    f"Bundled PDF fonts do not support U+{ord(character):04X}"
+                )
 
     def __fitting_font(self, draw, text, maximum_width):
         for font in self.__chord_fonts:

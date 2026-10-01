@@ -5,6 +5,11 @@ Copyright (c) 2010 Google Corporation with Reserved Font Names Arimo, Tinos
 and Cousine. Copyright (c) 2012 Red Hat, Inc. with Reserved Font Name
 Liberation.
 
+Noto Sans Thai
+==============
+
+Copyright 2010, 2012-2020 Google Inc. and 2015-2020 Google LLC.
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The license is available with an FAQ at https://openfontlicense.org.
 

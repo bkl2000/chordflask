@@ -37,3 +37,4 @@ def test_runtime_resources_are_owned_by_application_package():
     assert (PACKAGE_ROOT / "templates" / "home.html").is_file()
     assert Path(app.resource_path("assets")) == PACKAGE_ROOT / "assets"
     assert (PACKAGE_ROOT / "assets" / "fonts" / "LiberationSans-Regular.ttf").is_file()
+    assert (PACKAGE_ROOT / "assets" / "fonts" / "NotoSansThai-Regular.ttf").is_file()

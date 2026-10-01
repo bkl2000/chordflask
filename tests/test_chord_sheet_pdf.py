@@ -81,6 +81,55 @@ def test_render_uses_sixty_boxes_per_page_and_continues():
     assert _page_count(pdf) == 2
 
 
+def test_render_thai_lyrics_and_romanization_on_lyrics_page(monkeypatch):
+    drawn = []
+    original_text = ImageDraw.ImageDraw.text
+
+    def record_text(draw, xy, text, *args, **kwargs):
+        drawn.append(text)
+        return original_text(draw, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", record_text)
+    markdown = format_leadsheet_markdown(
+        title="Thai Song",
+        chord_track="Chordino",
+        rhythm_track="QM Bar/Beat Tracker",
+        version="Original",
+        transpose=0,
+        spelling="Flats",
+        bpm=120,
+        meter=4,
+        beats=["C", "C", "G", "G"],
+        beat_numbers=[1, 2, 3, 4],
+    )
+    markdown += "\n## Lyrics\n\n[C]ฉันรักเธอ\nchan rak thoe\n"
+
+    pdf = ChordSheetPdfRenderer().render_markdown(markdown)
+
+    assert pdf.startswith(b"%PDF")
+    assert _page_count(pdf) == 2
+    assert "ฉันรักเธอ" in "".join(drawn)
+    assert "chan rak thoe" in drawn
+
+
+def test_render_rejects_unsupported_lyric_glyph_instead_of_drawing_tofu():
+    markdown = format_leadsheet_markdown(
+        title="Song",
+        chord_track="Chordino",
+        rhythm_track="QM Bar/Beat Tracker",
+        version="Original",
+        transpose=0,
+        spelling="Flats",
+        meter=4,
+        beats=["C", "C", "G", "G"],
+        beat_numbers=[1, 2, 3, 4],
+    )
+    markdown += "\n## Lyrics\n\n[C]漢字\n"
+
+    with pytest.raises(ValueError, match="Bundled PDF fonts do not support"):
+        ChordSheetPdfRenderer().render_markdown(markdown)
+
+
 def test_render_file_uses_default_and_explicit_output_paths(tmp_path):
     source = tmp_path / "song.md"
     source.write_text(REFERENCE.read_text(encoding="utf-8"), encoding="utf-8")
@@ -131,6 +180,7 @@ def test_bundled_fonts_are_open_licensed_and_loadable():
         "LiberationSans-Regular.ttf",
         "LiberationSans-Bold.ttf",
         "LiberationMono-Regular.ttf",
+        "NotoSansThai-Regular.ttf",
     ):
         font = ImageFont.truetype(str(font_dir / name), 16)
         assert font.getbbox("Cmaj13(#11)")

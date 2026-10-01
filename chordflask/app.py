@@ -21,9 +21,10 @@ from flask import Flask, g, render_template, jsonify, request, send_file, make_r
 
 from .analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from .client_state import ClientRegistry, PathLockRegistry
-from .chord_chordpro import format_chordpro
+from .chord_chordpro import format_export_chordpro
+from .chord_export_sheet import build_export_sheet
 from .chordpro_song import ChordProSongError, read_chordpro
-from .chord_markdown import download_track_slug, format_chord_markdown
+from .chord_markdown import download_track_slug, format_export_markdown
 from .chord_sheet_pdf import ChordSheetPdfRenderer
 from .chordflask_config import (
     ANALYSIS_DIR_NAME, LEGACY_ANALYSIS_DIR_NAME,
@@ -1042,10 +1043,15 @@ class FlaskMP4App:
         return jsonify({"success": True, **track_state})
 
     def download_chords(self):
-        """Return the active displayed beat-level chords as Markdown, PDF, and ChordPro."""
+        """Download the active chord view in one requested leadsheet format."""
         data, error_response = self._json_body()
         if error_response:
             return error_response
+        export_format = data.get("format", "all")
+        if not isinstance(export_format, str) or export_format not in {
+            "markdown", "pdf", "chordpro", "all"
+        }:
+            return jsonify(error="Unknown chord export format."), 400
         state = self._client()
         with state.lock:
             media_or_error = self._active_editing_media(state, data)
@@ -1059,29 +1065,41 @@ class FlaskMP4App:
             f"{media_or_error.stem}-chords-"
             f"{download_track_slug(snapshot['chord_track_id'])}"
         )
-        markdown = format_chord_markdown(
-            title=media_or_error.stem,
-            chord_track=snapshot["chord_track_label"],
-            rhythm_track=snapshot["rhythm_track_label"],
-            version=snapshot["version"].capitalize(),
-            transpose=snapshot["transpose"],
-            spelling="Flats" if snapshot["prefer_flats"] else "Sharps",
-            unicode_symbols=snapshot["use_unicode"],
-            bpm=snapshot["bpm"],
-            meter=snapshot["meter"],
-            beats=snapshot["beats"],
-            repeat_mode=snapshot["repeat_mode"],
-        )
+        song = None
+        sidecar = self._song_sidecar(media_or_error)
+        if sidecar is not None:
+            try:
+                song = read_chordpro(sidecar)
+            except ChordProSongError:
+                logging.warning("Ignoring invalid Song sidecar during export: %s", sidecar)
+        sheet = build_export_sheet(media_or_error.stem, snapshot, song)
         try:
+            if export_format == "chordpro":
+                chordpro = format_export_chordpro(sheet)
+                return send_file(
+                    BytesIO(chordpro.encode("utf-8")),
+                    mimetype="text/plain",
+                    as_attachment=True,
+                    download_name=f"{export_stem}.cho",
+                )
+            markdown = format_export_markdown(sheet)
+            if export_format == "markdown":
+                return send_file(
+                    BytesIO(markdown.encode("utf-8")),
+                    mimetype="text/markdown",
+                    as_attachment=True,
+                    download_name=f"{export_stem}.md",
+                )
+            if export_format == "pdf":
+                pdf = ChordSheetPdfRenderer().render_markdown(markdown)
+                return send_file(
+                    BytesIO(pdf),
+                    mimetype="application/pdf",
+                    as_attachment=True,
+                    download_name=f"{export_stem}.pdf",
+                )
+            chordpro = format_export_chordpro(sheet)
             pdf = ChordSheetPdfRenderer().render_markdown(markdown)
-            chordpro = format_chordpro(
-                title=media_or_error.stem,
-                bpm=snapshot["bpm"],
-                meter=snapshot["meter"],
-                beats=[chord for _, chord in snapshot["beats"]],
-                beat_numbers=[number for number, _ in snapshot["beats"]],
-                repeat_mode=snapshot["repeat_mode"],
-            )
             archive = BytesIO()
             with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
                 output.writestr(f"{export_stem}.md", markdown.encode("utf-8"))
