@@ -18,6 +18,20 @@ ChordFlask is an independent project and is not affiliated with Chordify.
 
 ![ChordFlask example screenshot](docs/example-screenshot.png)
 
+## Design principles
+
+The standalone stays deliberately lean while providing the complete core
+playback workflow and built-in Chordino chord and QM beat/bar analysis. Heavy
+optional producers such as Lyrics generation, BTC, and Demucs remain in
+separate external runtimes rather than becoming core or standalone
+dependencies. When those runtimes are installed and usable, ChordFlask detects
+their capabilities and reaches them through narrow helper/subprocess
+interfaces.
+
+Desktop is the full interactive interface. Tablet and smartphone layouts
+intentionally expose fewer controls to preserve clarity and usability;
+responsive design does not imply feature parity with desktop.
+
 ## What you can do
 
 ChordFlask is designed for exploring a music collection and playing along with whatever catches your interest. Browse your own audio and video directories, open a song, and let ChordFlask analyze it when you need it. You do not have to prepare the whole collection first: analyze one song spontaneously, queue several from the browser, or prepare an entire directory from the command line. Completed analyses stay with the collection and are reused the next time you return.
@@ -26,7 +40,7 @@ During playback, the detected chords and beats follow the song in the browser. T
 
 Automatic chord recognition is not a perfect transcription, especially with dense arrangements or unusual harmony. It is intended as a practical starting point for playing, orientation, and improvisation. When the analysis is close but not quite right, you can correct it beat by beat instead of starting over.
 
-Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro. Lyrics, BTC, and Demucs keep their optional heavy runtimes outside both source and standalone application processes.
+Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro.
 
 On desktop (1024 px and wider), a compact **Prepare** menu can run the
 available optional producers for the currently loaded song. Depending on the
@@ -249,9 +263,11 @@ chordflask-export --format chordpro song.mp3
 
 - Markdown is an editable leadsheet representation.
 - PDF is a printable A4 layout.
-- ChordPro is a reusable chord-grid file without lyrics.
+- ChordPro is a reusable chord-grid or lyric-bearing song sheet.
 
-The browser **Export** control downloads the current display as a ZIP. Export
+The browser **Export** menu offers Markdown, PDF, ChordPro, or **All formats
+(.zip)**. Individual formats download directly; only **All formats** produces a
+ZIP. Existing local Lyrics and romanization are included when available. Export
 options, track selection, naming, and storage locations are documented in
 [docs/ANALYSIS.md](docs/ANALYSIS.md#command-line-export).
 
@@ -329,7 +345,7 @@ standalone status are in the
 The desktop **Prepare** menu in source and standalone runs can use the bundled
 lightweight connector when the isolated BTC runtime is complete.
 It reloads the track list on completion; Chordino and Edited data remain
-separate. Torch, predictor code, and weights remain in the external runtime.
+separate.
 
 ## LAN, phone, and tablet use
 

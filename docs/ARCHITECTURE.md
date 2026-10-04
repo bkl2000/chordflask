@@ -292,8 +292,16 @@ state coordination, not authentication or hardened multi-user isolation.
 - Public command names and the no-manual-activation workflow remain stable.
 - The web process, persistent queue, and single worker keep their current
   ownership and recovery semantics.
-- BTC and Demucs heavy runtimes remain optional, isolated subprocesses and stay
-  out of normal core imports and standalone artifacts.
+- The lean standalone contains the complete core playback and built-in
+  Chordino/QM analysis workflow.
+- Heavy optional producers such as Lyrics generation, BTC, and Demucs remain
+  outside the core runtime and standalone bundle. They are capability-detected
+  and invoked, when available, through narrow helper/subprocess interfaces;
+  optional ML, language, and model runtimes must not move into the core or
+  standalone.
+- Desktop is the full interactive UI. Tablet and smartphone layouts
+  intentionally expose fewer controls and do not require feature parity with
+  desktop.
 - Source media are never modified; generated data remain media-local under
   `.chordflask`, while application state remains separate under the user's
   home directory.
