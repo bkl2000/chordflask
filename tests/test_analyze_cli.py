@@ -171,7 +171,7 @@ def test_help_identifies_btc_as_optional_without_backend(monkeypatch, capsys, tm
         analyze_cli.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "--analyzer {chordino,btc}" in out
+    assert "--analyzer {chordino,btc,chordflask-v3}" in out
     assert "Chordino is the default built-in analyzer." in out
     assert "BTC is an optional analyzer" in out
 
@@ -182,7 +182,7 @@ def test_help_shows_btc_with_backend(monkeypatch, capsys, tmp_path):
         analyze_cli.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "--analyzer {chordino,btc}" in out
+    assert "--analyzer {chordino,btc,chordflask-v3}" in out
     assert "BTC is an optional analyzer" in out
     assert "chordflask-analyze --analyzer btc song.mp4" in out
 
@@ -219,7 +219,7 @@ def test_btc_choice_remains_available_for_actionable_runtime_error(monkeypatch, 
     script.chmod(0o644)  # present but not executable
     monkeypatch.setattr("chordflask_btc.runtime.wrapper_path", lambda: script)
     parser = analyze_cli.build_parser()
-    assert parser._option_string_actions["--analyzer"].choices == ("chordino", "btc")
+    assert parser._option_string_actions["--analyzer"].choices == ("chordino", "btc", "chordflask-v3")
     assert parser.parse_args(["--analyzer", "btc", "song.mp4"]).analyzer == "btc"
 
 
@@ -527,3 +527,283 @@ def test_dispatcher_reuses_worker_and_batch_core():
     assert "def analyze_chords" not in src
     assert "def _extract_chords" not in src
     assert "def ensure_analyzed" not in src
+
+
+@pytest.fixture
+def v3_runtime(monkeypatch):
+    """Fake only the optional connector, including in public source exports."""
+    from types import ModuleType
+
+    calls = []
+    metadata = {
+        "model_family": "chordino-correction", "run_id": "frozen-run",
+        "dataset_id": "frozen-dataset", "seed": 42, "model_version": "v3",
+        "model_sha256": "model-hash", "input_track": "chordino",
+        "input_sha256": "input-hash", "media_sha256": "media-hash",
+    }
+    package = ModuleType("chordflask_v3")
+    package.__path__ = []
+    runtime = ModuleType("chordflask_v3.runtime")
+    runtime.require_runtime = lambda: {}
+    predictor = ModuleType("chordflask_v3.predictor")
+
+    def predict(media):
+        calls.append(media)
+        return {
+            "chords": [{"timestamp": 0.0, "chord": "N"},
+                       {"timestamp": 0.18575963718820862, "chord": "G#min"}],
+            "metadata": metadata,
+        }
+
+    predictor.predict_media = predict
+    package.runtime = runtime
+    package.predictor = predictor
+    for name, module in (("chordflask_v3", package), (runtime.__name__, runtime),
+                         (predictor.__name__, predictor)):
+        monkeypatch.setitem(sys.modules, name, module)
+    return calls, metadata, runtime, predictor
+
+
+def _v3_media(tmp_path, *, chordino=True):
+    from chordflask_base import ChordData, analysis_json_path
+
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    if chordino:
+        track = ChordData()
+        track.set_chord_track("chordino", _CHORD, metadata={"source": "original"})
+        track.set_chord_track("btc", [{"timestamp": 0.0, "chord": "F"}])
+        track.set_rhythm_track("qm_barbeattracker", bpm=120, beat_times=[0.0])
+        track.user_data = {"title": "Keep me"}
+        path = analysis_json_path(media)
+        path.parent.mkdir(exist_ok=True)
+        track.save_to_file(path)
+    return media
+
+
+def _invoke_v3(target, *flags):
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--analyzer", "chordflask-v3", *flags, str(target)])
+    return exc.value.code
+
+
+def test_v3_choice_accepted():
+    args = analyze_cli.build_parser().parse_args(["--analyzer", "chordflask-v3", "song.mp4"])
+    assert args.analyzer == "chordflask-v3"
+
+
+def test_v3_reuses_chordino_persists_provenance_and_generic_player(
+    tmp_path, monkeypatch, v3_runtime
+):
+    from chordflask_base import analysis_json_path
+    from chordflask.filerepr import FileRepr
+    from chordflask.mp4playerflask import MP4PlayerFlask
+
+    media = _v3_media(tmp_path)
+    path = analysis_json_path(media)
+    original = json.loads(path.read_text())
+    monkeypatch.setattr(analyze_cli, "_run_chordino", lambda *a, **kw: pytest.fail("reanalyzed Chordino"))
+    player = MP4PlayerFlask(FileRepr(str(media), datapath=str(path.parent)))
+    assert "chordflask_v3" not in player.chord_data.available_chord_track_ids
+    assert _invoke_v3(media) == 0
+    updated = json.loads(path.read_text())
+    v3 = updated["chord_tracks"].pop("chordflask_v3")
+    assert updated == original
+    assert v3["metadata"] == {**v3_runtime[1], "display_name": "ChordFlask V3"}
+    assert v3["chords"] == [
+        {"timestamp": 0.0, "chord": "N"},
+        {"timestamp": 0.18575963718820862, "chord": "G#min"},
+    ]
+    assert v3_runtime[0] == [media]
+    # Stored-track consumption needs no private runtime, even in a frozen player.
+    monkeypatch.setitem(sys.modules, "chordflask_v3", None)
+    monkeypatch.setitem(sys.modules, "chordflask_v3.predictor", None)
+    monkeypatch.setitem(sys.modules, "chordflask_v3.runtime", None)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    player = MP4PlayerFlask(FileRepr(str(media), datapath=str(path.parent)))
+    names = {t["id"]: t["display_name"] for t in player.analysis_track_state()["available_chord_tracks"]}
+    assert names["chordino"] == "Chordino"
+    assert names["chordflask_v3"] == "ChordFlask V3"
+    player.select_analysis_tracks(chord_track_id="chordflask_v3")
+    assert player.analysis_track_state()["active_chord_track_id"] == "chordflask_v3"
+    assert player.chord_data.chord_track_chords("chordflask_v3") == v3["chords"]
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_v3_generates_missing_chordino_with_normal_worker(tmp_path, monkeypatch, v3_runtime, existing):
+    from chordflask_base import ChordData, analysis_json_path
+
+    media = _v3_media(tmp_path, chordino=False)
+    path = analysis_json_path(media)
+    if existing:
+        path.parent.mkdir()
+        track = ChordData()
+        track.set_chord_track("btc", _CHORD)
+        track.save_to_file(path)
+    calls = []
+
+    class Worker:
+        def __init__(self, analyzer_cls):
+            from chordflask.chordanalyzer import ChordAnalyzer
+            assert analyzer_cls is ChordAnalyzer
+
+        def _analyze(self, target, force=False):
+            calls.append((target, force))
+            assert not v3_runtime[0]
+            _v3_media(tmp_path)
+
+    monkeypatch.setattr("chordflask.analysis_worker.AnalysisWorker", Worker)
+    assert _invoke_v3(media) == 0
+    assert calls == [(media, existing)]
+    assert v3_runtime[0] == [media]
+    assert set(json.loads(path.read_text())["chord_tracks"]) == {"chordino", "btc", "chordflask_v3"}
+
+
+def test_v3_replace_only_selected_track(tmp_path, v3_runtime):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    assert _invoke_v3(media) == 0
+    path = analysis_json_path(media)
+    before = path.read_bytes()
+    assert _invoke_v3(media) == 0
+    assert v3_runtime[0] == [media]
+    assert path.read_bytes() == before
+    assert _invoke_v3(media, "--replace") == 0
+    assert v3_runtime[0] == [media, media]
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("replace", [False, True])
+def test_v3_dry_run_no_runtime_inference_or_write(tmp_path, monkeypatch, v3_runtime, existing, replace):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path, chordino=existing)
+    path = analysis_json_path(media)
+    before = path.read_bytes() if existing else None
+    v3_runtime[2].require_runtime = lambda: pytest.fail("runtime checked")
+    v3_runtime[3].predict_media = lambda media: pytest.fail("inference ran")
+    monkeypatch.setattr(analyze_cli, "_run_chordino", lambda *a, **kw: pytest.fail("analysis ran"))
+    assert _invoke_v3(media, "--dry-run", *(["--replace"] if replace else [])) == 0
+    assert (path.read_bytes() if path.exists() else None) == before
+
+
+@pytest.mark.parametrize("failure", [ImportError("private V3 module absent"), RuntimeError("runtime unavailable"),
+                                     ValueError("checkpoint hash differs")])
+def test_v3_runtime_failure_preserves_analysis(tmp_path, v3_runtime, failure, capsys):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    before = analysis_json_path(media).read_bytes()
+
+    def fail():
+        raise failure
+
+    v3_runtime[2].require_runtime = fail
+    assert _invoke_v3(media, "--replace") == 2
+    assert analysis_json_path(media).read_bytes() == before
+    assert v3_runtime[0] == []
+    assert str(failure) in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("V3 inference failed"), OSError("atomic save failed")])
+def test_v3_prediction_or_save_failure_preserves_analysis(tmp_path, monkeypatch, v3_runtime, failure):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    assert _invoke_v3(media) == 0
+    before = analysis_json_path(media).read_bytes()
+
+    def fail(*args):
+        raise failure
+
+    if isinstance(failure, OSError):
+        monkeypatch.setattr("chordflask_base.write_atomic", fail)
+    else:
+        v3_runtime[3].predict_media = fail
+    assert _invoke_v3(media, "--replace") == 1
+    assert analysis_json_path(media).read_bytes() == before
+
+
+def test_v3_directory_uses_normal_discovery(tmp_path, v3_runtime):
+    from chordflask_base import ChordData, analysis_json_path
+
+    for name in ("a.mp3", "a.mp4", "b.webm", "notes.txt"):
+        media = tmp_path / name
+        media.write_bytes(b"media")
+        if media.suffix != ".txt":
+            path = analysis_json_path(media)
+            path.parent.mkdir(exist_ok=True)
+            track = ChordData()
+            track.set_chord_track("chordino", _CHORD)
+            track.save_to_file(path)
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "ignored.mp4").write_bytes(b"media")
+    assert _invoke_v3(tmp_path) == 0
+    assert v3_runtime[0] == [tmp_path / "a.mp4", tmp_path / "b.webm"]
+
+
+def test_v3_invalid_analysis_preserved(tmp_path, v3_runtime):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    path = analysis_json_path(media)
+    path.write_text("{broken")
+    assert _invoke_v3(media) == 1
+    assert path.read_text() == "{broken"
+    assert not v3_runtime[0]
+
+
+def test_v3_dry_run_existing_track_classification(tmp_path, v3_runtime, capsys):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    assert _invoke_v3(media) == 0
+    before = analysis_json_path(media).read_bytes()
+    capsys.readouterr()
+    assert _invoke_v3(media, "--dry-run") == 0
+    assert "CURRENT" in capsys.readouterr().out
+    assert _invoke_v3(media, "--dry-run", "--replace") == 0
+    assert "REANALYZE" in capsys.readouterr().out
+    assert v3_runtime[0] == [media]
+    assert analysis_json_path(media).read_bytes() == before
+
+
+def test_v3_missing_private_package_fails_without_generating_chordino(tmp_path, monkeypatch, capsys):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path, chordino=False)
+    monkeypatch.setitem(sys.modules, "chordflask_v3", None)
+    monkeypatch.delitem(sys.modules, "chordflask_v3.runtime", raising=False)
+    monkeypatch.setattr(analyze_cli, "_run_chordino", lambda *a, **kw: pytest.fail("analysis ran"))
+    assert _invoke_v3(media) == 2
+    assert "runtime unavailable or invalid" in capsys.readouterr().err
+    assert not analysis_json_path(media).exists()
+
+
+def test_v3_chordino_failure_prevents_prediction(tmp_path, monkeypatch, v3_runtime):
+    media = _v3_media(tmp_path, chordino=False)
+    monkeypatch.setattr(analyze_cli, "_run_chordino", lambda *a, **kw: 1)
+    assert _invoke_v3(media) == 1
+    assert not v3_runtime[0]
+
+
+def test_v3_canonical_change_during_prediction_is_not_overwritten(tmp_path, v3_runtime):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    path = analysis_json_path(media)
+    updated = json.loads(path.read_text())
+    updated["chord_tracks"]["chordino"]["chords"] = [{"timestamp": 0.0, "chord": "D"}]
+    changed = json.dumps(updated)
+    predict = v3_runtime[3].predict_media
+
+    def change(media):
+        path.write_text(changed)
+        return predict(media)
+
+    v3_runtime[3].predict_media = change
+    assert _invoke_v3(media) == 1
+    assert path.read_text() == changed

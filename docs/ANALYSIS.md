@@ -423,3 +423,28 @@ are replaced atomically. The target media must already have an analysis (or
 ChordFlask creates one); a requested chord/rhythm track that is not present
 fails that file with an error. Exit code 0 means all exports succeeded, 1 means
 one or more files failed, and 2 means an invalid invocation.
+
+
+### Experimental ChordFlask V3 analyzer
+
+ChordFlask V3 is an experimental ML-based chord-analysis path currently used
+to investigate whether learned corrections can improve the existing Chordino
+analysis.
+
+It uses Chordino as an input together with audio features and selectively keeps
+or replaces chord predictions. The current model is still under active
+evaluation against Chordino, BTC and reference annotations. Results should not
+be interpreted as generally better than the existing analyzers.
+
+The analyzer is selected with:
+
+    chordflask-analyze --analyzer chordflask-v3 song.mp4
+
+The result is stored as a separate `chordflask_v3` chord track. Existing
+Chordino and other chord tracks remain unchanged and can therefore be compared
+directly in the player.
+
+The experimental V3 inference runtime, model weights and training environment
+are not part of the normal ChordFlask distribution. An already stored
+`chordflask_v3` track is an ordinary chord track and can be displayed without
+the ML runtime.

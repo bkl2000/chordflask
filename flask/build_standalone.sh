@@ -94,6 +94,7 @@ pyinstaller \
     --copy-metadata=moviepy \
     --additional-hooks-dir="${SCRIPT_DIR}/pyinstaller_hooks" \
     --exclude-module=imageio_ffmpeg.binaries \
+    --exclude-module=chordflask_v3 \
     --exclude-module=chordflask_btc.model \
     --exclude-module=chordflask_lyrics \
     --exclude-module=pythainlp \

@@ -4,7 +4,8 @@ Chordino is the built-in default analyzer and runs in-process through the
 canonical :class:`AnalysisWorker` / :class:`ChordAnalyzer` path. When the
 optional BTC backend is installed, it is reached only through a subprocess
 call to its private backend; this module never imports torch, BTC code, or the
-private training package.
+private training package. The private frozen V3 connector is imported only
+when explicitly selected; inference stays in its existing external runtime.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ def _btc_backend_available() -> bool:
 
 
 def _analyzer_choices() -> tuple[str, ...]:
-    return ("chordino", "btc")
+    return ("chordino", "btc", "chordflask-v3")
 
 
 def _epilog() -> str:
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Chordino is the default built-in analyzer."
     )
     description += "\nBTC is an optional analyzer that adds a separate chord track."
+    description += "\nChordFlask V3 requires the private configured runtime and adds a separate chord track."
     parser = argparse.ArgumentParser(
         prog="chordflask-analyze",
         description=description,
@@ -219,6 +221,74 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
     return 1 if counts["failed"] else 0
 
 
+def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
+    from chordflask_base import ChordData, analysis_json_path, write_atomic
+    from chordflask_btc.schema import load_analysis, validate_analysis
+
+    media_files = _resolve_media_files(target)
+    if media_files is None:
+        return 2
+    if not dry_run:
+        try:
+            from chordflask_v3.runtime import require_runtime
+            from chordflask_v3.predictor import predict_media
+
+            require_runtime()
+        except (ImportError, OSError, ValueError, TypeError, RuntimeError) as exc:
+            print(f"ERROR: ChordFlask V3 runtime unavailable or invalid: {exc}", file=sys.stderr)
+            return 2
+
+    counts = {"ok": 0, "skipped": 0, "failed": 0}
+    for index, media in enumerate(media_files, 1):
+        print(f"[{index}/{len(media_files)}] {media.name}")
+        try:
+            path = analysis_json_path(media)
+            data = load_analysis(media)[0] if path.exists() else None
+            exists = data is not None and "chordflask_v3" in data["chord_tracks"]
+            if dry_run:
+                label = ("REANALYZE" if replace else "CURRENT") if exists else "TODO"
+                print(f"       {label}")
+                continue
+            if exists and not replace:
+                print("       SKIP: analysis already exists")
+                counts["skipped"] += 1
+                continue
+            if data is None or "chordino" not in data["chord_tracks"]:
+                if _run_chordino(media, replace=False, dry_run=False):
+                    raise RuntimeError("Could not generate canonical Chordino analysis")
+                data, path = load_analysis(media)
+            original = data["chord_tracks"]["chordino"]
+            result = predict_media(media)
+            # Reload to retain other tracks/edits written while inference ran.
+            data, path = load_analysis(media)
+            if data["chord_tracks"].get("chordino") != original:
+                raise RuntimeError("Canonical Chordino track changed during V3 inference; retry")
+            track = ChordData()
+            track.set_chord_track(
+                "chordflask_v3", result["chords"],
+                metadata={**result["metadata"], "display_name": "ChordFlask V3"},
+            )
+            data["chord_tracks"]["chordflask_v3"] = {
+                "chords": track.chord_track_chords("chordflask_v3"),
+                "metadata": track.chord_track_metadata("chordflask_v3"),
+            }
+            # Preserve canonical raw Chordino and all other persisted data exactly.
+            validate_analysis(data, path)
+            write_atomic(path, data)
+            counts["ok"] += 1
+            print("       OK")
+        except Exception as exc:
+            print(f"       ERROR: {exc}", file=sys.stderr)
+            counts["failed"] += 1
+
+    print("\nChordFlask V3 dry-run complete" if dry_run else "\nChordFlask V3 analysis complete")
+    print(f"\nfiles:      {len(media_files)}")
+    print(f"analyzed:   {counts['ok']}")
+    print(f"skipped:    {counts['skipped']}")
+    print(f"failed:     {counts['failed']}")
+    return 1 if counts["failed"] else 0
+
+
 def main(argv=None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
@@ -227,6 +297,8 @@ def main(argv=None) -> None:
     args = build_parser().parse_args(argv)
     if args.analyzer == "btc":
         code = _run_btc_backend(args.target, replace=args.replace, dry_run=args.dry_run)
+    elif args.analyzer == "chordflask-v3":
+        code = _run_v3(args.target, replace=args.replace, dry_run=args.dry_run)
     else:
         code = _run_chordino(args.target, replace=args.replace, dry_run=args.dry_run)
     raise SystemExit(code)
