@@ -299,3 +299,12 @@ def test_read_chordpro_wraps_read_errors(tmp_path, monkeypatch):
     with pytest.raises(ChordProSongError, match="could not be read") as error:
         read_chordpro(sidecar)
     assert "private filesystem detail" not in str(error.value)
+
+
+@pytest.mark.parametrize("provenance", [
+    "{x_chordflask_generator: unknown tool}\n{x_chordflask_version: nonsense}\n{x_chordflask_fingerprint: invalid}",
+    "{x_chordflask_fingerprint}\n{x_future_provenance: unknown}",
+])
+def test_unverifiable_provenance_does_not_break_loading(provenance):
+    parsed = parse_chordpro(provenance + "\n[C]Hello")
+    assert parsed["blocks"][-1] == parse_chordpro("[C]Hello")["blocks"][0]

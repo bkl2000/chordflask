@@ -321,9 +321,12 @@ def render_chordpro(
     capo: int | None = None,
     chord_track_id: str | None = None,
     romanize: Callable[[str], str | None] | None = None,
+    provenance: dict[str, str] | None = None,
 ) -> str:
     """Render aligned rows into the subset accepted by ChordFlask's parser."""
     output = [f"{{title: {_escape(record.title)}}}", f"{{artist: {_escape(record.artist)}}}"]
+    for name, value in (provenance or {}).items():
+        output.append(f"{{{name}: {_escape(value)}}}")
     if key:
         output.append(f"{{key: {_escape(key)}}}")
     if capo is not None:

@@ -3,6 +3,8 @@
 from pathlib import Path
 import re
 
+from chordflask_base.rhythm import rhythm_grid_fingerprint
+
 
 MAX_SONG_BYTES = 1024 * 1024
 MAX_SONG_LINE_BYTES = 16 * 1024
@@ -40,8 +42,13 @@ _SYNC_END_DIRECTIVE = "x_chordflask_end"
 _SYNC_LINE_DIRECTIVE = "x_chordflask_line"
 _ROMANIZED_DIRECTIVE = "x_chordflask_romanized"
 _ESCAPED_CHARACTERS = frozenset("[]{}\\")
+LYRICS_PROVENANCE_DIRECTIVES = (
+    "x_chordflask_generator", "x_chordflask_version", "x_chordflask_fingerprint",
+    "x_chordflask_rhythm_fingerprint",
+)
 _METADATA_DIRECTIVES = frozenset(
     ("title", "artist", "subtitle", "key", "capo", "x_chordflask_track")
+    + LYRICS_PROVENANCE_DIRECTIVES
 )
 _SECTION_STARTS = {
     "start_of_verse": ("verse", "Verse"),
@@ -67,6 +74,21 @@ _COMMENTS = {
     "comment_box": "box",
     "cb": "box",
 }
+
+
+def sheet_rhythm_status(song, chord_data):
+    """Return CURRENT, STALE or LEGACY for the selected playback/alignment grid.
+
+    Missing/malformed provenance or an unavailable grid is unverifiable LEGACY.
+    This does not assess the Lyrics runtime or change sheet/analysis contents.
+    """
+    stored = song.get("metadata", {}).get("x_chordflask_rhythm_fingerprint")
+    if not isinstance(stored, str) or re.fullmatch(r"[0-9a-f]{64}", stored) is None:
+        return "LEGACY"
+    current = rhythm_grid_fingerprint(chord_data)
+    if current is None:
+        return "LEGACY"
+    return "CURRENT" if stored == current else "STALE"
 
 
 def _unescape(value):

@@ -94,8 +94,15 @@ def test_analysis_service_generates_json_and_exports_when_missing(tmp_path):
     chord_data = service.ensure_analyzed(file_repr, use_madmom=True)
 
     assert converter.calls == [file_repr.get()]
-    assert analyzer.calls == [(file_repr.get("mp3"), True)]
-    assert exporter.calls == [(chord_data, file_repr.get("xml"), file_repr.get("mid"))]
+    audio_path, madmom = analyzer.calls[0]
+    assert madmom is True
+    staged_dir = Path(audio_path).parent
+    assert staged_dir.parent == Path(file_repr.datapath)
+    assert staged_dir.name.startswith(".song.analyze-")
+    assert not staged_dir.exists()
+    exported_data, xml_path, midi_path = exporter.calls[0]
+    assert exported_data.chord_track_chords("chordino") == chord_data.chord_track_chords("chordino")
+    assert Path(xml_path).parent == Path(midi_path).parent == staged_dir
     assert Path(file_repr.get("json")).is_file()
 
 

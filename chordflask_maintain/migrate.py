@@ -14,11 +14,13 @@ original file stays byte-identical on any error.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
-from chordflask_base import ChordTrackRepository
+from chordflask_base import (
+    ChordTrackRepository, SchemaV3Error, analysis_schema_status, analysis_json_lock,
+    read_analysis_json as read_json, validate_analysis,
+)
 
 
 class MigrationFileError(Exception):
@@ -32,9 +34,8 @@ def read_analysis_json(json_path: Path) -> Any:
     valid JSON.
     """
     try:
-        with json_path.open("r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
+        return read_json(json_path)
+    except (OSError, UnicodeError, ValueError) as exc:
         raise MigrationFileError(f"could not read JSON: {exc}") from exc
 
 
@@ -49,14 +50,12 @@ def classify_analysis(data: Any) -> str | None:
     if not isinstance(data, dict):
         raise MigrationFileError("JSON root must be an object")
 
-    version = data.get("schema_version")
-    if version == 3:
-        return "v3"
-    if version is None and "base_chords" not in data:
+    if data.get("schema_version") is None and "base_chords" not in data:
         return None
-    if version in (1, 2, None):
-        return "legacy"
-    raise MigrationFileError(f"unsupported schema version {version!r}")
+    try:
+        return "v3" if analysis_schema_status(data) == "current" else "legacy"
+    except SchemaV3Error as exc:
+        raise MigrationFileError(str(exc)) from exc
 
 
 def migrate_analysis_file(json_path: Path) -> tuple[str, str | None]:
@@ -67,8 +66,18 @@ def migrate_analysis_file(json_path: Path) -> tuple[str, str | None]:
     Raises :class:`MigrationFileError` for unreadable, invalid, or unsupported
     files; in that case the file is left byte-identical.
     """
+    with analysis_json_lock(json_path):
+        return _migrate_analysis_file_locked(json_path)
+
+
+def _migrate_analysis_file_locked(json_path):
     data = read_analysis_json(json_path)
     kind = classify_analysis(data)
+    if kind is not None:
+        try:
+            validate_analysis(data, json_path)
+        except SchemaV3Error as exc:
+            raise MigrationFileError(str(exc)) from exc
     if kind == "v3":
         return ("skip", "already schema 3")
     if kind is None:

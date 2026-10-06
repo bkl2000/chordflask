@@ -101,3 +101,64 @@ def preserve_analysis_user_data(current_track, replacement_track, *, drop_edited
     replacement_track.transpose(current_track.transpose_semitones)
     replacement_track.set_prefer_flats(current_track.prefer_flats)
     replacement_track.user_data = current_track.user_data
+
+
+def media_source_identity(media_path):
+    """Hash original media bytes with the same streaming SHA-256 used by producers."""
+    import hashlib
+    import os
+    from pathlib import Path
+
+    path = Path(media_path)
+    with path.open("rb") as handle:
+        before = os.fstat(handle.fileno())
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+        after = os.fstat(handle.fileno())
+    def stamp(stat):
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    if stamp(before) != stamp(after) or stamp(after) != stamp(path.stat()):
+        raise RuntimeError("Media changed while reading source identity; retry")
+    return {"sha256": digest.hexdigest(), "size": after.st_size}
+
+
+def canonical_source_status(chord_data, media_path, *, identity=None):
+    """Return current/stale/legacy independently of schema validity/completeness.
+
+    Missing or unverifiable metadata is legacy/unknown, never proof of currency.
+    Legacy inspection does not hash media. Checks run only at explicit load or
+    analysis boundaries, not playback polling.
+    """
+    if not is_canonical_analysis_complete(chord_data):
+        return "legacy"
+    sources = [chord_data.chord_track_metadata(DEFAULT_CHORD_TRACK).get("source_media"),
+               chord_data.rhythm_track_metadata(DEFAULT_RHYTHM_TRACK).get("source_media")]
+    for source in sources:
+        if not isinstance(source, dict):
+            return "legacy"
+        digest, size = source.get("sha256"), source.get("size")
+        if (not isinstance(digest, str) or len(digest) != 64
+                or any(c not in "0123456789abcdef" for c in digest)
+                or type(size) is not int or size < 0):
+            return "legacy"
+    if sources[0] != sources[1]:
+        return "stale"
+    try:
+        current = identity if identity is not None else media_source_identity(media_path)
+    except (OSError, RuntimeError):
+        return "legacy"
+    return "current" if sources[0] == current else "stale"
+
+
+def record_canonical_source(chord_data, identity):
+    """Attach the same original-media identity to both generated canonical tracks."""
+    if not is_canonical_analysis_complete(chord_data):
+        return
+    metadata = chord_data.chord_track_metadata(DEFAULT_CHORD_TRACK)
+    metadata["source_media"] = dict(identity)
+    chord_data.set_chord_track(DEFAULT_CHORD_TRACK,
+                               chord_data.chord_track_chords(DEFAULT_CHORD_TRACK), metadata=metadata)
+    rhythm = chord_data.rhythm_track_data(DEFAULT_RHYTHM_TRACK)
+    rhythm["metadata"]["source_media"] = dict(identity)
+    chord_data.set_rhythm_track(DEFAULT_RHYTHM_TRACK, **rhythm)

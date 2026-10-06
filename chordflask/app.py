@@ -18,13 +18,15 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from chordflask_base import analysis_json_lock
+
 from flask import Flask, g, render_template, jsonify, request, send_file, make_response
 
 from .analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from .client_state import ClientRegistry, PathLockRegistry
 from .chord_chordpro import format_export_chordpro
 from .chord_export_sheet import build_export_sheet
-from .chordpro_song import ChordProSongError, read_chordpro
+from .chordpro_song import ChordProSongError, read_chordpro, sheet_rhythm_status
 from .chord_markdown import download_track_slug, format_export_markdown
 from .chord_sheet_pdf import ChordSheetPdfRenderer
 from .chordflask_config import (
@@ -50,7 +52,7 @@ from .mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4
 from .playbackview import GRID_MODES
 from .stem_preparation import BackgroundPreparationManager, StemPreparationManager
 
-from chordflask_base import DEMUCS_STEM_NAMES, transpose_chord_pitches
+from chordflask_base import DEMUCS_STEM_NAMES, transpose_chord_pitches, ChordData, canonical_source_status
 
 # Opaque cookie that identifies one browser cookie jar. The cookie carries only
 # a random client id; the actual playback state stays server-side in memory.
@@ -701,7 +703,8 @@ class FlaskMP4App:
         for media in ordered_media:
             file_repr = FileRepr(str(media), datapath=ANALYSIS_DIR_NAME)
             json_path = file_repr.get("json")
-            if os.path.exists(json_path) and self.__analysis_is_complete(json_path):
+            if (os.path.exists(json_path) and self.__analysis_is_complete(json_path)
+                    and canonical_source_status(ChordData(json_path), media) != "stale"):
                 analyzed_count += 1
             else:
                 candidates.append(media)
@@ -794,6 +797,7 @@ class FlaskMP4App:
                 'title': f"ChordFlask - {filename}"
             })
 
+        source_status = canonical_source_status(ChordData(requested_file_repr.get("json")), media)
         state = self._client()
         with state.lock:
             state.semitones = requested_semitones
@@ -843,6 +847,7 @@ class FlaskMP4App:
             'media_kind': self._media_kind(media),
             'json_file': json_file,
             'analysis_valid': analysis_valid,
+            'analysis_source_status': source_status,
             'semitones': state.semitones,
             'title': f"ChordFlask - {filename}",
             'stems': stems,
@@ -938,7 +943,7 @@ class FlaskMP4App:
         # check-and-save cycle per analysis JSON path so two clients editing
         # the same song cannot both pass the staleness check and overwrite.
         file_lock = self.path_locks.get(self._json_lock_key(json_path))
-        with file_lock:
+        with file_lock, analysis_json_lock(json_path):
             disk_mtime_ns = self._json_mtime_ns(json_path)
             if (
                 state.json_mtime_ns is not None
@@ -1194,6 +1199,10 @@ class FlaskMP4App:
             song = read_chordpro(sidecar)
         except ChordProSongError as error:
             return jsonify(error=str(error)), error.status_code
+        with state.lock:
+            song["rhythm_status"] = sheet_rhythm_status(
+                song, state.player.chord_data if state.player is not None else None
+            )
         for block in song["blocks"]:
             for run in block.get("runs", ()):
                 chord = run.get("chord")
@@ -1350,14 +1359,23 @@ class FlaskMP4App:
             media = Path(file_repr.get())
         return jsonify(self.stem_preparation.status(media))
 
-    def _current_preparation_status(self, manager, ready):
+    def _current_preparation_status(self, manager, ready, *, verify_job_capability=False):
         state = self._client()
         with state.lock:
             if state.player is None or state.file_repr is None:
                 return jsonify(state="idle", available=False, message="")
             media = Path(state.file_repr.get())
             is_ready = ready(state, media)
-        status = manager.status(media)
+        if verify_job_capability:
+            capability = manager.capability()
+            if not capability["available"]:
+                status = {"state": "unavailable", "available": False,
+                          "message": capability["reason"],
+                          "needs_update": capability.get("needs_update", False)}
+            else:
+                status = manager.status(media)
+        else:
+            status = manager.status(media)
         if is_ready:
             status["state"] = "ready"
         return jsonify(status)
@@ -1367,6 +1385,7 @@ class FlaskMP4App:
         return self._current_preparation_status(
             self.lyrics_preparation,
             self._lyrics_ready,
+            verify_job_capability=True,
         )
 
     def btc_preparation_status(self):

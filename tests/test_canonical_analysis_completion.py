@@ -203,13 +203,13 @@ def test_service_completes_partial_and_preserves_tracks(analysis_case):
     assert_preserved(case.data, ChordData(case.file_repr.get("json")))
 
 
-def test_cli_reports_todo_or_current(analysis_case, capsys):
+def test_cli_reports_incomplete_or_legacy_complete(analysis_case, capsys):
     case = analysis_case
-    assert analyze_cli._chordino_status(case.media) == ("current" if case.complete else "todo")
+    assert analyze_cli._chordino_status(case.media) == ("legacy" if case.complete else "todo")
     with pytest.raises(SystemExit) as result:
         analyze_cli.main(["--dry-run", str(case.media)])
     assert result.value.code == 0
-    assert ("CURRENT" if case.complete else "TODO") in capsys.readouterr().out
+    assert ("LEGACY" if case.complete else "TODO") in capsys.readouterr().out
 
 
 def test_empty_canonical_tracks_count_as_complete():

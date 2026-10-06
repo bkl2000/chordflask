@@ -49,10 +49,14 @@ def _directory_for(media: Path) -> Path:
     return media if media.is_dir() else media.parent
 
 
-def _print_validation_hint(target: Path) -> None:
+def _print_validation_hint(target: Path, reason: str = "") -> None:
     directory = shlex.quote(str(_directory_for(target)))
-    print("Validate the existing analysis with:")
-    print(f"  chordflask-maintain validate {directory}")
+    if "requires migration" in reason.lower():
+        print("Migrate the valid older analysis with:")
+        print(f"  chordflask-maintain migrate-schema {directory}")
+    else:
+        print("Validate the existing analysis with:")
+        print(f"  chordflask-maintain validate {directory}")
 
 
 def _print_runtime_hint() -> None:
@@ -60,8 +64,8 @@ def _print_runtime_hint() -> None:
     print("  make btc-check", file=sys.stderr)
 
 
-def _is_invalid_analysis(reason: str) -> bool:
-    return "invalid chordflask analysis" in reason.lower()
+def _needs_analysis_guidance(reason: str) -> bool:
+    return any(text in reason.lower() for text in ("invalid chordflask analysis", "requires migration"))
 
 
 def _is_runtime_failure(reason: str) -> bool:
@@ -95,8 +99,8 @@ def analyze_btc_file(target: Path, *, replace: bool) -> int:
         return 1
     if classification == CLASS_NO_ANALYSIS:
         print(f"SKIP: {reason}")
-        if _is_invalid_analysis(reason):
-            _print_validation_hint(media)
+        if _needs_analysis_guidance(reason):
+            _print_validation_hint(media, reason)
         return 0
     if classification == CLASS_CURRENT and not replace:
         print("SKIP: BTC track already current")
@@ -109,8 +113,8 @@ def analyze_btc_file(target: Path, *, replace: bool) -> int:
         result = predict_btc_media(media, replace=replace)
     except (BtcPredictionError, BtcRuntimeError, OSError, ValueError) as exc:
         print(f"ERROR: BTC analysis failed: {exc}", file=sys.stderr)
-        if _is_invalid_analysis(str(exc)):
-            _print_validation_hint(media)
+        if _needs_analysis_guidance(str(exc)):
+            _print_validation_hint(media, str(exc))
         elif _is_runtime_failure(str(exc)):
             _print_runtime_hint()
         return 1
@@ -144,6 +148,7 @@ def analyze_btc_directory(directory: Path, *, dry_run: bool, replace: bool) -> i
         "failed": 0,
     }
     invalid_analysis = False
+    migration_required = False
     runtime_failure = False
     for index, media in enumerate(media_files, 1):
         print(f"[{index}/{len(media_files)}] {media.name}")
@@ -161,7 +166,8 @@ def analyze_btc_directory(directory: Path, *, dry_run: bool, replace: bool) -> i
             continue
         if classification == CLASS_NO_ANALYSIS:
             print(f"       SKIP: {reason}")
-            invalid_analysis = invalid_analysis or _is_invalid_analysis(reason)
+            migration_required = migration_required or "requires migration" in reason.lower()
+            invalid_analysis = invalid_analysis or "invalid chordflask analysis" in reason.lower()
             counts["no_analysis"] += 1
             continue
         if classification == CLASS_CURRENT and not replace:
@@ -180,7 +186,9 @@ def analyze_btc_directory(directory: Path, *, dry_run: bool, replace: bool) -> i
             result = predict_btc_media(media, replace=replace)
         except (BtcPredictionError, BtcRuntimeError, OSError, ValueError) as exc:
             print(f"       ERROR: BTC analysis failed: {exc}", file=sys.stderr)
-            if _is_invalid_analysis(str(exc)):
+            if "requires migration" in str(exc).lower():
+                migration_required = True
+            elif _needs_analysis_guidance(str(exc)):
                 invalid_analysis = True
             elif _is_runtime_failure(str(exc)):
                 runtime_failure = True
@@ -196,6 +204,8 @@ def analyze_btc_directory(directory: Path, *, dry_run: bool, replace: bool) -> i
     if invalid_analysis:
         print("")
         _print_validation_hint(directory)
+    if migration_required:
+        _print_validation_hint(directory, "requires migration")
     if runtime_failure:
         print("", file=sys.stderr)
         _print_runtime_hint()

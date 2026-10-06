@@ -49,13 +49,21 @@ def _unavailable(reason: str) -> dict:
 
 
 def lyrics_capability() -> dict:
-    """Require an external helper usable by either source or frozen builds."""
-    def probe():
-        if lyrics_command() is None:
-            return _unavailable("The external Lyrics runtime is not installed")
+    """Verify source snapshots; frozen builds retain external-helper detection."""
+    command = lyrics_command()
+    if command is None:
+        return _unavailable("The external Lyrics runtime is not installed")
+    if getattr(sys, "frozen", False):
         return {"available": True, "cuda": False, "reason": ""}
+    try:
+        from chordflask_lyrics.freshness import check_runtime
 
-    return _cached_capability("lyrics", probe)
+        # Do not cache freshness: same-version edits and runtime repairs must
+        # be visible immediately, including just before subprocess execution.
+        return check_runtime(command.parent.parent, Path(__file__).resolve().parents[1])
+    except ImportError:
+        return {**_unavailable("Lyrics runtime needs update. Rerun scripts/setup-lyrics.sh (make setup-lyrics)."),
+                "needs_update": True}
 
 
 def btc_capability() -> dict:
@@ -114,6 +122,15 @@ def run_lyrics_preparation(media_path: Path) -> int:
     command = lyrics_command()
     if command is None:
         raise RuntimeError("The external Lyrics runtime is not installed")
+    capability = lyrics_capability()
+    if not capability["available"]:
+        raise RuntimeError(capability["reason"])
+    if not getattr(sys, "frozen", False):
+        # Use the same isolated interpreter whose installed code was verified;
+        # inherited PYTHONPATH must not substitute another package snapshot.
+        return _run_helper(
+            "Lyrics", [str(command.parent / "python"), "-I", str(command), str(media_path)]
+        )
     return _run_helper("Lyrics", [str(command), str(media_path)])
 
 

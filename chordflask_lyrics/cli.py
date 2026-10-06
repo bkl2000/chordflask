@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import replace
 from functools import partial
+from importlib.metadata import version
 import json
 import math
 import os
@@ -17,6 +18,7 @@ import tempfile
 from chordflask.filerepr import FileRepr
 from chordflask.media_library import preferred_media_files
 from chordflask.playbackview import PlaybackView
+from chordflask_base.rhythm import rhythm_grid_fingerprint
 from chordflask_base import (
     DEFAULT_CHORD_TRACK,
     DEFAULT_RHYTHM_TRACK,
@@ -26,6 +28,7 @@ from chordflask_base import (
 
 from .align import align_lyrics, render_chordpro, time_plain_lyrics
 from .embedded import get_embedded_lyrics
+from .freshness import installed_fingerprint
 from .lrclib import (
     LRCLIBClient,
     LRCLIBError,
@@ -65,7 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Use external LRC, embedded, or LRCLIB lyrics and generate a .cho "
             "sidecar using existing ChordFlask analysis."
         ),
+        epilog="Batch: --recursive --force ROOT; retry: --retry-failed ROOT (saved options).",
     )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--recursive", action="store_true", help="scan nested media directories")
+    mode.add_argument("--retry-failed", action="store_true", help="retry only saved failures using saved options")
     parser.add_argument("--dry-run", action="store_true", help="match and render without writing")
     parser.add_argument("--force", action="store_true", help="replace an existing same-stem .cho file")
     parser.add_argument(
@@ -361,6 +368,12 @@ def generate_file(
         search_hint=search_hint if lyrics_source.startswith("lrclib:") else None,
         chord_track_id=selected_track,
         romanize=romanizer,
+        provenance={
+            "x_chordflask_generator": "ChordFlask Lyrics",
+            "x_chordflask_version": version("chordflask"),
+            "x_chordflask_fingerprint": installed_fingerprint(),
+            "x_chordflask_rhythm_fingerprint": rhythm_grid_fingerprint(chord_data),
+        },
     )
 
     # Validate against the same parser used by the web application before publish.
@@ -410,7 +423,15 @@ def _resolve_files(target: Path) -> list[Path] | None:
 
 
 def run(args, *, client=None) -> int:
-    files = _resolve_files(args.target)
+    from .batch import generation_options, load_failures, recursive_media, save_failures, state_path
+
+    batch_mode = getattr(args, "recursive", False) or getattr(args, "retry_failed", False)
+    retry = getattr(args, "retry_failed", False)
+    if batch_mode and not args.target.is_dir():
+        print("ERROR: --recursive/--retry-failed require a directory", file=sys.stderr)
+        return 2
+    root = args.target.resolve() if batch_mode else None
+    files = _resolve_files(args.target) if not batch_mode else []
     if files is None:
         print(f"ERROR: not a supported media file or directory: {args.target}", file=sys.stderr)
         return 2
@@ -425,32 +446,73 @@ def run(args, *, client=None) -> int:
         print("ERROR: --tag requires lrclib in --lyrics", file=sys.stderr)
         return 2
 
+    options = None
+    if batch_mode:
+        try:
+            state_path(root)
+            if retry:
+                state = load_failures(root)
+                if state is None:
+                    print("No previous Lyrics failure state; nothing to retry.")
+                    print("OK: 0\nFAILED: 0\nSKIPPED: 0")
+                    return 0
+                options = state["options"]
+                print("Retrying saved failures using original generation options.")
+                files = sorted((Path(entry["path"]) for entry in state["failed"]), key=str)
+            else:
+                options = generation_options(args)
+                files = recursive_media(root)
+        except (OSError, ValueError, TypeError, RuntimeError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 2
+        lyrics_sources = tuple(options["lyrics"])
     client = client or LRCLIBClient()
     print(f"Lyrics priority: {' > '.join(lyrics_sources)}")
     failures = 0
     skipped = 0
     written = 0
+    failed_items = []
     for index, media in enumerate(files, 1):
         try:
+            if batch_mode:
+                if not media.is_file():
+                    skipped += 1
+                    print(f"[{index}/{len(files)}] SKIPPED {media}: source no longer exists")
+                    continue
+                if media.resolve() != media or not media.resolve().is_relative_to(root):
+                    raise GenerationError("source path no longer stays inside requested root")
             status, detail = generate_file(
                 media,
                 client=client,
                 search_hint=args.tag,
-                force=args.force,
+                force=options["force"] if batch_mode else args.force,
                 dry_run=args.dry_run,
-                track=getattr(args, "track", "auto"),
-                romanize=getattr(args, "romanize", False),
-                romanize_engine=getattr(args, "romanize_engine", DEFAULT_ENGINE),
+                track=options["track"] if batch_mode else getattr(args, "track", "auto"),
+                romanize=options["romanize"] if batch_mode else getattr(args, "romanize", False),
+                romanize_engine=options["romanize_engine"] if batch_mode else getattr(args, "romanize_engine", DEFAULT_ENGINE),
                 lyrics_sources=lyrics_sources,
             )
-        except (GenerationError, LRCLIBError, RomanizationError, ValueError) as error:
+        except (GenerationError, LRCLIBError, RomanizationError, ValueError, OSError, RuntimeError) as error:
             failures += 1
-            print(f"[{index}/{len(files)}] SKIP {media}: {error}", file=sys.stderr)
+            failed_items.append({"path": str(media), "reason": str(error)})
+            print(f"[{index}/{len(files)}] FAILED {media}: {error}", file=sys.stderr)
             continue
-        skipped += status == "skipped"
+        skipped += status != "written" if batch_mode else status == "skipped"
         written += status == "written"
-        print(f"[{index}/{len(files)}] {status.upper()} {media}: {detail}")
-    print(f"Done: {len(files)} files, {written} written, {skipped} skipped, {failures} failed")
+        label = ("OK" if status == "written" else "SKIPPED") if batch_mode else status.upper()
+        print(f"[{index}/{len(files)}] {label} {media}: {detail}")
+    if batch_mode:
+        print(f"OK: {written}\nFAILED: {failures}\nSKIPPED: {skipped}")
+        if not args.dry_run:
+            try:
+                save_failures(root, options, failed_items)
+            except (OSError, ValueError, RuntimeError) as error:
+                print(f"ERROR: could not persist Lyrics failures: {error}", file=sys.stderr)
+                return 1
+        else:
+            print("Dry-run: failure state left unchanged.")
+    else:
+        print(f"Done: {len(files)} files, {written} written, {skipped} skipped, {failures} failed")
     return 1 if failures else 0
 
 

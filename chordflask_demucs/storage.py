@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from chordflask_base import ChordData, ChordTrackRepository, analysis_json_path
+from chordflask_base import ChordData, ChordTrackRepository, analysis_json_path, analysis_json_lock
 
 from .audio import AudioCommandError, AudioFacts, AudioValidationError, hash_file, probe_audio
 from .constants import (
@@ -285,23 +285,24 @@ def publish_set(
     json_path = analysis_path(media_path)
     analysis_dir = json_path.parent
     analysis_dir.mkdir(parents=True, exist_ok=True)
-    data = _load_analysis(media_path)
-    data.set_audio_track(AUDIO_SET_ID, set_data)
+    with analysis_json_lock(json_path):
+        data = _load_analysis(media_path)
+        data.set_audio_track(AUDIO_SET_ID, set_data)
 
-    descriptor, staged_json_name = tempfile.mkstemp(
-        prefix=f".{json_path.name}.", suffix=".tmp", dir=analysis_dir
-    )
-    os.close(descriptor)
-    staged_json = Path(staged_json_name)
-    try:
-        ChordTrackRepository().save(data, staged_json)
-        os.replace(staged_json, json_path)
-        _fsync_directory(analysis_dir)
-    finally:
+        descriptor, staged_json_name = tempfile.mkstemp(
+            prefix=f".{json_path.name}.", suffix=".tmp", dir=analysis_dir
+        )
+        os.close(descriptor)
+        staged_json = Path(staged_json_name)
         try:
-            staged_json.unlink()
-        except FileNotFoundError:
-            pass
+            ChordTrackRepository().save(data, staged_json)
+            os.replace(staged_json, json_path)
+            _fsync_directory(analysis_dir)
+        finally:
+            try:
+                staged_json.unlink()
+            except FileNotFoundError:
+                pass
     return json_path
 
 

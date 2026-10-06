@@ -8,7 +8,6 @@ track selection, beat-aligned tracks, transpose, and grid helpers) and
 
 import bisect
 import copy
-import json
 import logging
 import math
 from functools import lru_cache
@@ -23,26 +22,15 @@ class ChordTrackRepository:
 
     def load(self, file_path, chord_data=None):
         track = chord_data or ChordData()
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        data = schema.read_analysis_json(file_path)
 
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: root must be an object"
-            )
+        self._validate(data, file_path)
         version = data.get("schema_version")
         if version is None:
             logging.warning(
                 "Chord file %s has no schema_version, treating as legacy format.",
                 file_path,
             )
-        elif version not in self.SUPPORTED_SCHEMA_VERSIONS:
-            raise ValueError(
-                f"Unsupported chord data schema version {version} "
-                f"(current: {self.SCHEMA_VERSION}) in {file_path}"
-            )
-
-        self._validate(data, file_path)
 
         track._clear_tracks()
 
@@ -109,6 +97,11 @@ class ChordTrackRepository:
         })
 
     def save(self, chord_data, file_path):
+        """Validate and atomically save a snapshot.
+
+        For shared files, callers own analysis_json_lock across the current
+        read, mutation and this save. Invocation-owned staging needs no lock.
+        """
         chord_entries = {}
         for tid in chord_data.available_chord_track_ids:
             chord_entries[tid] = {
@@ -169,223 +162,8 @@ class ChordTrackRepository:
         schema.write_atomic(file_path, data)
 
     @staticmethod
-    def _is_finite_number(value):
-        return (
-            isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and math.isfinite(value)
-        )
-
-    @staticmethod
     def _validate(data, file_path):
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: root must be an object"
-            )
-
-        version = data.get("schema_version")
-        if version is not None and (
-            not isinstance(version, int)
-            or isinstance(version, bool)
-            or version not in ChordTrackRepository.SUPPORTED_SCHEMA_VERSIONS
-        ):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: schema_version must be "
-                f"one of {sorted(ChordTrackRepository.SUPPORTED_SCHEMA_VERSIONS)}, "
-                f"got {version!r}"
-            )
-
-        prefer_flats = data.get("prefer_flats", True)
-        if not isinstance(prefer_flats, bool):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: prefer_flats must be a boolean"
-            )
-
-        transpose = data.get("transpose", 0)
-        if not isinstance(transpose, int) or isinstance(transpose, bool):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: transpose must be an integer"
-            )
-
-        user_data = data.get("user_data", {})
-        if not isinstance(user_data, dict):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: user_data must be an object"
-            )
-
-        if version is not None and version >= 3:
-            ChordTrackRepository.__validate_v3(data, file_path)
-        else:
-            ChordTrackRepository.__validate_legacy(data, file_path)
-
-    @staticmethod
-    def __validate_chord_entries(chords, file_path, context):
-        schema.validate_chord_entries(chords, file_path, context)
-
-    @staticmethod
-    def __validate_rhythm_entry(entry, file_path, context):
-        schema.validate_rhythm_entry(entry, file_path, context)
-
-    @staticmethod
-    def __validate_v3(data, file_path):
-        for required in ("chord_tracks", "rhythm_tracks"):
-            if required not in data:
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: "
-                    f"schema v3 must contain \"{required}\""
-                )
-
-        chord_tracks = data["chord_tracks"]
-        if not isinstance(chord_tracks, dict):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: chord_tracks must be an object"
-            )
-        for tid, entry in chord_tracks.items():
-            if not isinstance(tid, str) or not tid.strip():
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: chord_tracks key must be a non-empty string"
-                )
-            if not isinstance(entry, dict):
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: chord_tracks[\"{tid}\"] must be an object"
-                )
-            if "chords" not in entry:
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: chord_tracks[\"{tid}\"] must contain \"chords\""
-                )
-            ChordTrackRepository.__validate_chord_entries(
-                entry["chords"], file_path, f"chord_tracks[\"{tid}\"].chords"
-            )
-            metadata = entry.get("metadata", {})
-            if not isinstance(metadata, dict):
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: chord_tracks[\"{tid}\"].metadata must be an object"
-                )
-
-        rhythm_tracks = data["rhythm_tracks"]
-        if not isinstance(rhythm_tracks, dict):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: rhythm_tracks must be an object"
-            )
-        for tid, entry in rhythm_tracks.items():
-            if not isinstance(tid, str) or not tid.strip():
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: rhythm_tracks key must be a non-empty string"
-                )
-            if not isinstance(entry, dict):
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: rhythm_tracks[\"{tid}\"] must be an object"
-                )
-            ChordTrackRepository.__validate_rhythm_entry(
-                entry, file_path, f"rhythm_tracks[\"{tid}\"]"
-            )
-
-        audio_tracks = data.get(schema.AUDIO_TRACKS_KEY, {})
-        if not isinstance(audio_tracks, dict):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: audio_tracks must be an object"
-            )
-        for set_id, entry in audio_tracks.items():
-            if not isinstance(set_id, str) or not set_id.strip():
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: "
-                    "audio_tracks key must be a non-empty string"
-                )
-            schema.validate_audio_track_set(
-                entry, file_path, f'audio_tracks["{set_id}"]'
-            )
-
-    @staticmethod
-    def __validate_legacy(data, file_path):
-        chords = data.get("base_chords", [])
-        ChordTrackRepository.__validate_chord_entries(
-            chords, file_path, "base_chords"
-        )
-
-        bpm = data.get("bpm")
-        if bpm is not None:
-            if not ChordTrackRepository._is_finite_number(bpm) or bpm <= 0:
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: bpm must be positive, got {bpm!r}"
-                )
-
-        meter = data.get("meter_signature")
-        if meter is not None:
-            if not isinstance(meter, int) or isinstance(meter, bool) or meter <= 0:
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: "
-                    f"meter_signature must be a positive integer, got {meter!r}"
-                )
-
-        beat_times = data.get("beat_times", [])
-        beat_indexes = data.get("beat_chord_indexes")
-        if not isinstance(beat_times, list):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: beat_times must be a list"
-            )
-        if beat_indexes is not None and not isinstance(beat_indexes, list):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: beat_chord_indexes must be a list"
-            )
-        if beat_indexes is not None and len(beat_indexes) != len(beat_times):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: "
-                f"beat_chord_indexes length {len(beat_indexes)} "
-                f"does not match beat_times length {len(beat_times)}"
-            )
-
-        prev_bt = None
-        for i, bt in enumerate(beat_times):
-            if not ChordTrackRepository._is_finite_number(bt) or bt < 0:
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: "
-                    f"beat_times[{i}] is negative or not a finite number: {bt!r}"
-                )
-            if prev_bt is not None and bt < prev_bt:
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: "
-                    f"beat_times[{i}] {bt} is before previous {prev_bt}"
-                )
-            prev_bt = bt
-
-        max_index = len(chords) - 1
-        for i, ci in enumerate(beat_indexes or []):
-            if (
-                not isinstance(ci, int)
-                or isinstance(ci, bool)
-                or ci < 0
-                or ci > max_index
-            ):
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: "
-                    f"beat_chord_indexes[{i}] {ci!r} is out of range [0, {max_index}]"
-                )
-
-        beat_numbers = data.get("beat_numbers", [])
-        if not isinstance(beat_numbers, list):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: beat_numbers must be a list"
-            )
-        if beat_numbers and len(beat_numbers) != len(beat_times):
-            raise ValueError(
-                f"Invalid chord data in {file_path}: beat_numbers length "
-                f"{len(beat_numbers)} does not match beat_times length {len(beat_times)}"
-            )
-        for i, beat_number in enumerate(beat_numbers):
-            if (
-                not isinstance(beat_number, int)
-                or isinstance(beat_number, bool)
-                or beat_number <= 0
-            ):
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: beat_numbers[{i}] must be "
-                    f"a positive integer, got {beat_number!r}"
-                )
-            if meter is not None and beat_number > meter:
-                raise ValueError(
-                    f"Invalid chord data in {file_path}: beat_numbers[{i}] "
-                    f"{beat_number} exceeds meter_signature {meter}"
-                )
+        return schema.validate_analysis(data, file_path)
 
 
 class ChordData:

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 STALE_PROCESSING_MINUTES = 10
 MAX_BATCH_SIZE = 500
+MAX_ANALYSIS_ATTEMPTS = 3
 
 
 class AnalysisQueue:
@@ -120,8 +121,10 @@ class AnalysisQueue:
         with self._locked_data() as data:
             self._recover_stale(data)
             pending = data.get("pending", [])
-            for item in pending:
+            for item in list(pending):
                 if item.get("status") != "processing":
+                    if self.__fail_exhausted(data, item):
+                        continue
                     item["status"] = "processing"
                     item["started_at"] = self._now()
                     item["attempt_count"] = item.get("attempt_count", 0) + 1
@@ -190,6 +193,9 @@ class AnalysisQueue:
                     "added_at": self._now(),
                 }
             job = dict(job)
+            # Explicit retry renews an exhausted automatic-attempt budget.
+            if job["attempt_count"] >= MAX_ANALYSIS_ATTEMPTS:
+                job["attempt_count"] = 0
             job["status"] = "pending"
             job.pop("started_at", None)
             job.pop("failed_at", None)
@@ -204,11 +210,13 @@ class AnalysisQueue:
             }
 
     def requeue_processing(self):
-        """Return jobs left processing by a previous worker to pending."""
+        """Retry interrupted jobs below the limit; fail exhausted jobs."""
         with self._locked_data() as data:
             recovered = 0
-            for item in data.get("pending", []):
+            for item in list(data.get("pending", [])):
                 if item.get("status") == "processing":
+                    if self.__fail_exhausted(data, item):
+                        continue
                     item["status"] = "pending"
                     item.pop("started_at", None)
                     recovered += 1
@@ -331,7 +339,7 @@ class AnalysisQueue:
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=STALE_PROCESSING_MINUTES)
         pending = data.get("pending", [])
         recovered = 0
-        for item in pending:
+        for item in list(pending):
             if item.get("status") == "processing":
                 started = item.get("started_at")
                 try:
@@ -341,11 +349,33 @@ class AnalysisQueue:
                 except (TypeError, ValueError):
                     started_at = None
                 if started_at is None or started_at <= cutoff:
+                    if AnalysisQueue.__fail_exhausted(data, item):
+                        continue
                     item["status"] = "pending"
                     item.pop("started_at", None)
                     recovered += 1
         if recovered:
             logger.info("Recovered %d stale processing job(s)", recovered)
+
+    @staticmethod
+    def __fail_exhausted(data, item):
+        if item["attempt_count"] < MAX_ANALYSIS_ATTEMPTS:
+            return False
+        data["pending"].remove(item)
+        failed = [job for job in data.get("failed", []) if job["path"] != item["path"]]
+        job = dict(item)
+        reason = (
+            f"Analysis attempt limit reached after {item['attempt_count']} attempts "
+            f"(limit {MAX_ANALYSIS_ATTEMPTS}). Retry explicitly or use Reanalyze."
+        )
+        if item.get("error"):
+            reason += f" Previous error: {item['error']}"
+        job.update(status="failed", failed_at=AnalysisQueue._now(), error=reason)
+        job.pop("started_at", None)
+        failed.append(job)
+        data["failed"] = failed
+        logger.warning("%s: %s", item["path"], reason)
+        return True
 
     @staticmethod
     def _now():

@@ -113,12 +113,16 @@ def test_validate_file_accepts_schema_v3(tmp_path):
 def test_validate_file_accepts_schema_1_and_2(tmp_path):
     for version in (1, 2):
         data = {"schema_version": version, "base_chords": [{"timestamp": 0.0, "chord": "C"}]}
-        assert _validate_file(tmp_path, f"v{version}.json", data) == ("valid", None)
+        kind, guidance = _validate_file(tmp_path, f"v{version}.json", data)
+        assert kind == "valid"
+        assert "migrate-schema" in guidance
 
 
 def test_validate_file_accepts_unversioned_legacy(tmp_path):
     data = {"base_chords": [{"timestamp": 0.0, "chord": "C"}]}
-    assert _validate_file(tmp_path, "legacy.json", data) == ("valid", None)
+    kind, guidance = _validate_file(tmp_path, "legacy.json", data)
+    assert kind == "valid"
+    assert "migrate-schema" in guidance
 
 
 def test_validate_file_ignores_foreign_json(tmp_path):

@@ -1,5 +1,6 @@
 """Focused Lyrics/BTC preparation capability, subprocess, route, and UI tests."""
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -10,6 +11,7 @@ from chordflask import media_preparation
 from chordflask.app import CLIENT_COOKIE, FlaskMP4App
 from chordflask.stem_preparation import BackgroundPreparationManager
 from chordflask_base import ChordData
+from chordflask_lyrics.freshness import FORMAT_VERSION, MARKER_PATH, fingerprint
 
 
 CLIENT_ID = "media-preparation-client"
@@ -80,6 +82,15 @@ def _executable(path):
     return path
 
 
+def _current_lyrics_runtime(runtime):
+    identity = fingerprint(Path(media_preparation.__file__).resolve().parents[1])
+    marker = runtime / MARKER_PATH
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({"format": FORMAT_VERSION, "sha256": identity}))
+    python = _executable(runtime / "bin/python")
+    python.write_text(f"#!/bin/sh\nprintf '%s\\n' '{identity}'\n")
+
+
 def test_source_lyrics_falls_back_to_current_venv(monkeypatch, tmp_path):
     venv_bin = tmp_path / "venv" / "bin"
     venv_bin.mkdir(parents=True)
@@ -89,6 +100,7 @@ def test_source_lyrics_falls_back_to_current_venv(monkeypatch, tmp_path):
     monkeypatch.setenv("CHORDFLASK_LYRICS_VENV", str(tmp_path / "missing"))
     monkeypatch.setattr(sys, "executable", str(python))
     monkeypatch.setattr(sys, "frozen", False, raising=False)
+    _current_lyrics_runtime(venv_bin.parent)
 
     assert media_preparation.lyrics_command() == helper
     assert media_preparation.lyrics_capability()["available"] is True
@@ -100,6 +112,7 @@ def test_external_lyrics_runtime_is_available_in_source_and_frozen(
 ):
     runtime = tmp_path / "lyrics"
     helper = _executable(runtime / "bin" / "chordflask-genlyrics")
+    _current_lyrics_runtime(runtime)
     monkeypatch.setenv("CHORDFLASK_LYRICS_VENV", str(runtime))
     monkeypatch.setattr(sys, "frozen", frozen, raising=False)
 
@@ -159,10 +172,11 @@ def test_lyrics_helper_uses_safe_argv_without_shell(monkeypatch):
         lambda: Path("/lyrics/bin/chordflask-genlyrics"),
     )
     monkeypatch.setattr(media_preparation.subprocess, "run", run)
+    monkeypatch.setattr(media_preparation, "lyrics_capability", _capability())
 
     assert media_preparation.run_lyrics_preparation(Path("/music/A & B song.mp3")) == 0
     assert calls[0][0] == [
-        "/lyrics/bin/chordflask-genlyrics", "/music/A & B song.mp3"
+        "/lyrics/bin/python", "-I", "/lyrics/bin/chordflask-genlyrics", "/music/A & B song.mp3"
     ]
     assert calls[0][1]["shell"] is False
 
@@ -180,6 +194,7 @@ def test_btc_preparation_uses_bundled_lightweight_connector(monkeypatch):
 def test_source_lyrics_capability_reaches_prepare_status(monkeypatch, tmp_path):
     runtime = tmp_path / "lyrics-runtime"
     _executable(runtime / "bin" / "chordflask-genlyrics")
+    _current_lyrics_runtime(runtime)
     monkeypatch.setenv("CHORDFLASK_LYRICS_VENV", str(runtime))
     monkeypatch.setattr(sys, "frozen", False, raising=False)
     app, client = _client()

@@ -7,23 +7,12 @@ Single-worker chord analysis queue consumer.
 import fcntl
 import logging
 from logging.handlers import RotatingFileHandler
-import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
 
 from .analysis_queue import AnalysisQueue
-from .chordflask_config import (
-    ANALYSIS_DIR_NAME,
-    LEGACY_ANALYSIS_DIR_NAME,
-)
-from .filerepr import FileRepr
-from chordflask_base import ChordTrackRepository, is_canonical_analysis_complete
+from .canonical_analysis import analyze_media, json_validation_error, preserve_corrupt_json
 
 
 def _worker_log(msg):
@@ -102,213 +91,15 @@ class AnalysisWorker:
             return False
 
     def _analyze(self, media_path, force=False, discard_edits=False):
-        media = Path(media_path).resolve()
-        if not media.exists():
-            raise FileNotFoundError(media_path)
-
-        analysis_dir = media.parent / ANALYSIS_DIR_NAME
-        legacy_dir = media.parent / LEGACY_ANALYSIS_DIR_NAME
-        file_repr = FileRepr(
-            str(media),
-            datapath=str(analysis_dir),
-            create=not analysis_dir.exists() and legacy_dir.is_dir(),
-        )
-        json_path = file_repr.get("json")
-        analysis_dir.mkdir(parents=True, exist_ok=True)
-        self.__cleanup_interrupted_work(analysis_dir, media.stem)
-        if force:
-            self.__reanalyze(media, file_repr, discard_edits=discard_edits)
-            return
-        if os.path.exists(json_path):
-            validation_error = self._json_validation_error(json_path)
-            if validation_error is None:
-                current_track = ChordTrackRepository().load(json_path)
-                if is_canonical_analysis_complete(current_track):
-                    _worker_log(f"Analysis already exists: {json_path}")
-                    return
-                self.__reanalyze(media, file_repr, discard_edits=discard_edits)
-                return
-            backup = self._preserve_corrupt_json(json_path)
-            _worker_log(
-                f"Existing analysis is invalid ({validation_error}); "
-                f"preserved as {backup} before reanalysis."
-            )
-
-        for suffix in ("mp3", "xml", "mid"):
-            try:
-                os.unlink(file_repr.get(suffix))
-            except FileNotFoundError:
-                pass
-
-        _worker_log(f"Analyzing queued file: {media_path}")
-        analyzer_cls = self.analyzer_cls
-        if analyzer_cls is None:
-            from .chordanalyzer import ChordAnalyzer
-
-            analyzer_cls = ChordAnalyzer
-
-        prefix = f".{media.stem}.analyze-"
-        with tempfile.TemporaryDirectory(
-            prefix=prefix,
-            dir=analysis_dir,
-            ignore_cleanup_errors=True,
-        ) as temp_name:
-            temp_dir = Path(temp_name)
-            temporary_file_repr = FileRepr(str(media), datapath=str(temp_dir))
-            analyzer = analyzer_cls(str(media), str(temp_dir))
-            analyzer.process()
-            temporary_json = temporary_file_repr.get("json")
-            if not os.path.exists(temporary_json):
-                raise RuntimeError(f"Analysis did not create {temporary_json}")
-            validation_error = self._json_validation_error(temporary_json)
-            if validation_error is not None:
-                backup = self._preserve_corrupt_json(
-                    temporary_json, destination_dir=analysis_dir
-                )
-                raise RuntimeError(
-                    f"Analysis created invalid chord data ({validation_error}); "
-                    f"preserved as {backup}"
-                )
-            if not is_canonical_analysis_complete(
-                ChordTrackRepository().load(temporary_json)
-            ):
-                raise RuntimeError("Analysis did not create complete canonical tracks")
-            for suffix in ("mp3", "xml", "mid"):
-                self.__replace_best_effort_artifact(
-                    temporary_file_repr.get(suffix), file_repr.get(suffix)
-                )
-            os.replace(temporary_json, json_path)
-            self.__fsync_directory(analysis_dir)
-        _worker_log(f"Finished analysis: {json_path}")
-
-    @staticmethod
-    def __cleanup_interrupted_work(analysis_dir, stem):
-        for kind in ("analyze", "reanalyze"):
-            for candidate in analysis_dir.glob(f".{stem}.{kind}-*"):
-                if candidate.is_dir() and not candidate.is_symlink():
-                    shutil.rmtree(candidate)
-
-    def __reanalyze(self, media, current_file_repr, discard_edits=False):
-        current_json = current_file_repr.get("json")
-        validation_error = self._json_validation_error(current_json)
-        if validation_error is not None:
-            raise RuntimeError(
-                f"Cannot reanalyze without a valid current analysis: {validation_error}"
-            )
-
-        analysis_dir = Path(current_file_repr.datapath)
-        prefix = f".{media.stem}.reanalyze-"
-        _worker_log(f"Reanalyzing queued file: {media}")
-        with tempfile.TemporaryDirectory(
-            prefix=prefix,
-            dir=analysis_dir,
-            ignore_cleanup_errors=True,
-        ) as temp_name:
-            temp_dir = Path(temp_name)
-            temporary_file_repr = FileRepr(str(media), datapath=str(temp_dir))
-
-            analyzer_cls = self.analyzer_cls
-            if analyzer_cls is None:
-                from .chordanalyzer import ChordAnalyzer
-
-                analyzer_cls = ChordAnalyzer
-
-            analyzer = analyzer_cls(str(media), str(temp_dir))
-            analyzer.process()
-
-            temporary_json = temporary_file_repr.get("json")
-            if not os.path.exists(temporary_json):
-                raise RuntimeError(f"Reanalysis did not create {temporary_json}")
-            validation_error = self._json_validation_error(temporary_json)
-            if validation_error is not None:
-                raise RuntimeError(
-                    f"Reanalysis created invalid chord data ({validation_error})"
-                )
-
-            self.__preserve_user_data(current_json, temporary_json, drop_edited=discard_edits)
-            validation_error = self._json_validation_error(temporary_json)
-            if validation_error is not None:
-                raise RuntimeError(
-                    f"Reanalysis created invalid merged chord data ({validation_error})"
-                )
-
-            if not is_canonical_analysis_complete(
-                ChordTrackRepository().load(temporary_json)
-            ):
-                raise RuntimeError("Analysis did not create complete canonical tracks")
-            for suffix in ("mp3", "xml", "mid"):
-                self.__replace_best_effort_artifact(
-                    temporary_file_repr.get(suffix),
-                    current_file_repr.get(suffix),
-                )
-
-            os.replace(temporary_json, current_json)
-            self.__fsync_directory(analysis_dir)
-        _worker_log(f"Finished reanalysis: {current_json}")
-
-    @staticmethod
-    def __preserve_user_data(current_json, temporary_json, drop_edited=False):
-        from chordflask_base import ChordTrackRepository, preserve_analysis_user_data
-
-        repository = ChordTrackRepository()
-        current_track = repository.load(current_json)
-        replacement_track = repository.load(temporary_json)
-        preserve_analysis_user_data(
-            current_track, replacement_track, drop_edited=drop_edited
-        )
-        repository.save(replacement_track, temporary_json)
-
-    @staticmethod
-    def __replace_best_effort_artifact(source_path, destination_path):
-        source = Path(source_path)
-        if not source.exists() or source.is_symlink():
-            return
-        try:
-            os.replace(source, destination_path)
-        except OSError as error:
-            _worker_log(
-                f"Could not refresh derived artifact {destination_path}: {error}"
-            )
-
-    @staticmethod
-    def __fsync_directory(directory):
-        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-        try:
-            descriptor = os.open(directory, flags)
-        except OSError as error:
-            _worker_log(f"Could not open {directory} for directory fsync: {error}")
-            return
-        try:
-            try:
-                os.fsync(descriptor)
-            except OSError as error:
-                _worker_log(f"Could not fsync directory {directory}: {error}")
-        finally:
-            os.close(descriptor)
+        return analyze_media(media_path, force=force, discard_edits=discard_edits,
+                             analyzer_cls=self.analyzer_cls)
 
     @staticmethod
     def _json_is_valid(json_path):
-        return AnalysisWorker._json_validation_error(json_path) is None
+        return json_validation_error(json_path) is None
 
-    @staticmethod
-    def _json_validation_error(json_path):
-        try:
-            from chordflask_base import ChordTrackRepository
-            ChordTrackRepository().load(json_path)
-            return None
-        except (OSError, UnicodeError, ValueError, TypeError, KeyError) as error:
-            return error
-
-    @staticmethod
-    def _preserve_corrupt_json(json_path, destination_dir=None):
-        source = Path(json_path)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        backup_dir = Path(destination_dir) if destination_dir is not None else source.parent
-        backup = backup_dir / (
-            f"{source.stem}.corrupt-{timestamp}-{uuid.uuid4().hex[:8]}{source.suffix}"
-        )
-        os.replace(source, backup)
-        return backup
+    _json_validation_error = staticmethod(json_validation_error)
+    _preserve_corrupt_json = staticmethod(preserve_corrupt_json)
 
 
 class WorkerSupervisor:

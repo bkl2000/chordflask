@@ -1,6 +1,6 @@
 """Validate ChordFlask analysis JSON files (framework-free).
 
-Validation is a pure load through ``chordflask_base.ChordTrackRepository``,
+Validation uses the same neutral validator as ``ChordTrackRepository``,
 which accepts schema v1/v2/v3 and unversioned legacy files. The analysis-file
 classification is shared with the migration path, so a non-analysis JSON file
 (such as ``*.training.json``) is ignored rather than reported as valid. No
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from chordflask_base import ChordTrackRepository
+from chordflask_base import validate_analysis
 
 from chordflask_maintain.migrate import (
     MigrationFileError,
@@ -24,7 +24,7 @@ def validate_file(json_path: Path) -> tuple[str, str | None]:
     """Classify and validate one JSON file.
 
     Returns ``("valid"|"invalid"|"ignore", message)`` where ``message`` is the
-    error text for ``"invalid"`` and ``None`` otherwise. A non-analysis JSON
+    error text for ``"invalid"`` or migration guidance for valid older storage. A non-analysis JSON
     file yields ``("ignore", None)``.
     """
     try:
@@ -41,8 +41,12 @@ def validate_file(json_path: Path) -> tuple[str, str | None]:
         return ("ignore", None)
 
     try:
-        ChordTrackRepository().load(str(json_path))
-        return ("valid", None)
+        status = validate_analysis(data, json_path)
+        guidance = (
+            "valid migratable schema; run chordflask-maintain migrate-schema on the media directory"
+            if status == "migratable" else None
+        )
+        return ("valid", guidance)
     except (OSError, UnicodeError, ValueError, TypeError, KeyError) as error:
         return ("invalid", str(error))
 
@@ -76,7 +80,7 @@ def validate_directory(directory: Path) -> dict[str, int]:
             continue
         if kind == "valid":
             counts["valid"] += 1
-            print(f"OK: {json_path.name}")
+            print(f"OK: {json_path.name}" + (f" ({message})" if message else ""))
         else:
             counts["invalid"] += 1
             print(f"ERROR: {json_path.name}: {message}")

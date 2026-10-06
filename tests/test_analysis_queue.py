@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from chordflask.analysis_queue import AnalysisQueue
+from chordflask.analysis_queue import MAX_ANALYSIS_ATTEMPTS, AnalysisQueue
 
 
 def test_default_queue_migrates_legacy_state(tmp_path, monkeypatch):
@@ -263,3 +263,97 @@ def test_peek_recovers_stale_or_invalid_processing_job(tmp_path, started_at):
     assert item["status"] == "processing"
     assert item["attempt_count"] == 1
     assert item["started_at"] != started_at
+
+
+@pytest.mark.parametrize("recovery", ["startup", "stale"])
+def test_interrupted_attempts_are_bounded_and_healthy_job_can_proceed(tmp_path, recovery):
+    q = AnalysisQueue(tmp_path)
+    broken = str(tmp_path / "broken.mp4")
+    healthy = str(tmp_path / "healthy.mp4")
+    q.enqueue(broken, force=True, discard_edits=True)
+    q.enqueue(healthy)
+    job_id = q.status()["pending"][0]["job_id"]
+
+    for attempt in range(1, MAX_ANALYSIS_ATTEMPTS + 1):
+        job = q.peek()
+        assert job["path"] == broken
+        assert job["attempt_count"] == attempt
+        # Reload persisted state as a restarted worker would.
+        q = AnalysisQueue(tmp_path)
+        assert q.status()["pending"][0]["attempt_count"] == attempt
+        if recovery == "startup":
+            assert q.requeue_processing() == (1 if attempt < MAX_ANALYSIS_ATTEMPTS else 0)
+        else:
+            data = json.loads(q.queue_file.read_text())
+            data["pending"][0]["started_at"] = "2000-01-01T00:00:00+00:00"
+            q.queue_file.write_text(json.dumps(data))
+
+    next_job = q.peek()
+    assert next_job["path"] == healthy
+    assert next_job["attempt_count"] == 1
+    q.complete(healthy)
+    failed = q.status()["failed"][0]
+    assert failed["job_id"] == job_id
+    assert failed["attempt_count"] == MAX_ANALYSIS_ATTEMPTS
+    assert failed["status"] == "failed"
+    assert failed["force"] is True
+    assert failed["discard_edits"] is True
+    assert "attempts" in failed["error"]
+    assert "Reanalyze" in failed["error"]
+    assert "failed_at" in failed
+    assert "started_at" not in failed
+    q = AnalysisQueue(tmp_path)
+    assert q.requeue_processing() == 0
+    assert q.peek() is None
+    assert q.status()["failed"] == [failed]
+
+
+@pytest.mark.parametrize("action", ["retry", "reanalyze", "batch"])
+def test_explicit_action_renews_exhausted_budget(tmp_path, action):
+    q = AnalysisQueue(tmp_path)
+    media = str(tmp_path / "song.mp4")
+    q.enqueue(media)
+    for _ in range(MAX_ANALYSIS_ATTEMPTS):
+        q.peek()
+        q.requeue_processing()
+    assert q.status()["failed"]
+
+    if action == "retry":
+        q.retry(media)
+    elif action == "reanalyze":
+        assert q.enqueue(media, force=True) == "queued"
+    else:
+        assert q.enqueue_many([media], limit=1)["queued"] == [media]
+    assert q.status()["failed"] == []
+    assert q.status()["pending"][0]["attempt_count"] == 0
+    job = q.peek()
+    assert job["attempt_count"] == 1
+    assert job["force"] is (action == "reanalyze")
+    q.complete(media)
+    assert q.status() == {"pending": [], "failed": []}
+
+
+def test_old_pending_job_over_limit_is_not_claimed(tmp_path):
+    q = AnalysisQueue(tmp_path)
+    q.enqueue(str(tmp_path / "song.mp4"))
+    data = json.loads(q.queue_file.read_text())
+    data["pending"][0].update(attempt_count=MAX_ANALYSIS_ATTEMPTS + 4, error="prior crash")
+    q.queue_file.write_text(json.dumps(data))
+
+    assert q.peek() is None
+    assert q.status()["failed"][0]["attempt_count"] == MAX_ANALYSIS_ATTEMPTS + 4
+    assert "prior crash" in q.status()["failed"][0]["error"]
+
+
+def test_live_final_attempt_is_not_failed_before_recovery(tmp_path):
+    q = AnalysisQueue(tmp_path)
+    media = str(tmp_path / "song.mp4")
+    q.enqueue(media)
+    for _ in range(MAX_ANALYSIS_ATTEMPTS - 1):
+        q.peek()
+        q.requeue_processing()
+    assert q.peek()["attempt_count"] == MAX_ANALYSIS_ATTEMPTS
+    assert q.peek() is None
+    assert q.status()["failed"] == []
+    q.complete(media)
+    assert q.status() == {"pending": [], "failed": []}

@@ -85,6 +85,8 @@ def format_export_chordpro(sheet):
         )
 
     lines = [f"{{title: {_directive_value(sheet.title)}}}"]
+    for name, value in sheet.lyrics_provenance:
+        lines.append(f"{{{name}: {_directive_value(value)}}}")
     if _usable_bpm(sheet.bpm):
         lines.append(f"{{tempo: {sheet.bpm}}}")
     if _usable_meter(sheet.meter):

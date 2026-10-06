@@ -420,3 +420,260 @@ def _fsync_directory(directory: Path) -> None:
         logging.warning("Could not fsync directory %s: %s", directory, error)
     finally:
         os.close(descriptor)
+
+
+class AnalysisMigrationRequired(SchemaV3Error):
+    """Valid older storage must be explicitly migrated before producer updates."""
+
+
+def analysis_schema_status(data, file_path="<analysis>"):
+    """Classify the version only; validate_analysis also checks the structure."""
+    if not isinstance(data, dict):
+        raise SchemaV3Error(f"Invalid chord data in {file_path}: root must be an object")
+    version = data.get("schema_version")
+    if version is not None and (
+        type(version) is not int or version not in SUPPORTED_SCHEMA_VERSIONS
+    ):
+        raise SchemaV3Error(
+            f"Unsupported chord data schema version {version!r} "
+            f"(current: {SCHEMA_VERSION}) in {file_path}"
+        )
+    return "current" if version == SCHEMA_VERSION else "migratable"
+
+
+def validate_analysis(data, file_path="<analysis>", *, require_current=False):
+    """Validate supported storage; return current/migratable, never migrate or write.
+
+    Producers requiring track dictionaries set require_current=True. Canonical
+    Chordino/QM completion is a separate predicate, independent of validity.
+    """
+    if not isinstance(data, dict):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: root must be an object"
+        )
+
+    status = analysis_schema_status(data, file_path)
+    version = data.get("schema_version")
+
+    prefer_flats = data.get("prefer_flats", True)
+    if not isinstance(prefer_flats, bool):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: prefer_flats must be a boolean"
+        )
+
+    transpose = data.get("transpose", 0)
+    if not isinstance(transpose, int) or isinstance(transpose, bool):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: transpose must be an integer"
+        )
+
+    user_data = data.get("user_data", {})
+    if not isinstance(user_data, dict):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: user_data must be an object"
+        )
+
+    if version is not None and version >= 3:
+        _validate_v3(data, file_path)
+    else:
+        _validate_legacy(data, file_path)
+    if require_current and status == "migratable":
+        raise AnalysisMigrationRequired(
+            f"Valid migratable analysis schema {version!r}; migration to Schema v{SCHEMA_VERSION} "
+            f"required before updating tracks: {file_path}. "
+            "Run chordflask-maintain migrate-schema on the media directory."
+        )
+    return status
+
+def _validate_v3(data, file_path):
+    for required in ("chord_tracks", "rhythm_tracks"):
+        if required not in data:
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: "
+                f"schema v3 must contain \"{required}\""
+            )
+
+    chord_tracks = data["chord_tracks"]
+    if not isinstance(chord_tracks, dict):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: chord_tracks must be an object"
+        )
+    for tid, entry in chord_tracks.items():
+        if not isinstance(tid, str) or not tid.strip():
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: chord_tracks key must be a non-empty string"
+            )
+        if not isinstance(entry, dict):
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: chord_tracks[\"{tid}\"] must be an object"
+            )
+        if "chords" not in entry:
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: chord_tracks[\"{tid}\"] must contain \"chords\""
+            )
+        validate_chord_entries(
+            entry["chords"], file_path, f"chord_tracks[\"{tid}\"].chords"
+        )
+        metadata = entry.get("metadata", {})
+        if not isinstance(metadata, dict):
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: chord_tracks[\"{tid}\"].metadata must be an object"
+            )
+
+    rhythm_tracks = data["rhythm_tracks"]
+    if not isinstance(rhythm_tracks, dict):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: rhythm_tracks must be an object"
+        )
+    for tid, entry in rhythm_tracks.items():
+        if not isinstance(tid, str) or not tid.strip():
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: rhythm_tracks key must be a non-empty string"
+            )
+        if not isinstance(entry, dict):
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: rhythm_tracks[\"{tid}\"] must be an object"
+            )
+        validate_rhythm_entry(
+            entry, file_path, f"rhythm_tracks[\"{tid}\"]"
+        )
+
+    audio_tracks = data.get(AUDIO_TRACKS_KEY, {})
+    if not isinstance(audio_tracks, dict):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: audio_tracks must be an object"
+        )
+    for set_id, entry in audio_tracks.items():
+        if not isinstance(set_id, str) or not set_id.strip():
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: "
+                "audio_tracks key must be a non-empty string"
+            )
+        validate_audio_track_set(
+            entry, file_path, f'audio_tracks["{set_id}"]'
+        )
+
+def _validate_legacy(data, file_path):
+    chords = data.get("base_chords", [])
+    validate_chord_entries(
+        chords, file_path, "base_chords"
+    )
+
+    bpm = data.get("bpm")
+    if bpm is not None:
+        if not _is_finite_number(bpm) or bpm <= 0:
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: bpm must be positive, got {bpm!r}"
+            )
+
+    meter = data.get("meter_signature")
+    if meter is not None:
+        if not isinstance(meter, int) or isinstance(meter, bool) or meter <= 0:
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: "
+                f"meter_signature must be a positive integer, got {meter!r}"
+            )
+
+    beat_times = data.get("beat_times", [])
+    beat_indexes = data.get("beat_chord_indexes")
+    if not isinstance(beat_times, list):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: beat_times must be a list"
+        )
+    if beat_indexes is not None and not isinstance(beat_indexes, list):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: beat_chord_indexes must be a list"
+        )
+    if beat_indexes is not None and len(beat_indexes) != len(beat_times):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: "
+            f"beat_chord_indexes length {len(beat_indexes)} "
+            f"does not match beat_times length {len(beat_times)}"
+        )
+
+    prev_bt = None
+    for i, bt in enumerate(beat_times):
+        if not _is_finite_number(bt) or bt < 0:
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: "
+                f"beat_times[{i}] is negative or not a finite number: {bt!r}"
+            )
+        if prev_bt is not None and bt < prev_bt:
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: "
+                f"beat_times[{i}] {bt} is before previous {prev_bt}"
+            )
+        prev_bt = bt
+
+    max_index = len(chords) - 1
+    for i, ci in enumerate(beat_indexes or []):
+        if (
+            not isinstance(ci, int)
+            or isinstance(ci, bool)
+            or ci < 0
+            or ci > max_index
+        ):
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: "
+                f"beat_chord_indexes[{i}] {ci!r} is out of range [0, {max_index}]"
+            )
+
+    beat_numbers = data.get("beat_numbers", [])
+    if not isinstance(beat_numbers, list):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: beat_numbers must be a list"
+        )
+    if beat_numbers and len(beat_numbers) != len(beat_times):
+        raise SchemaV3Error(
+            f"Invalid chord data in {file_path}: beat_numbers length "
+            f"{len(beat_numbers)} does not match beat_times length {len(beat_times)}"
+        )
+    for i, beat_number in enumerate(beat_numbers):
+        if (
+            not isinstance(beat_number, int)
+            or isinstance(beat_number, bool)
+            or beat_number <= 0
+        ):
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: beat_numbers[{i}] must be "
+                f"a positive integer, got {beat_number!r}"
+            )
+        if meter is not None and beat_number > meter:
+            raise SchemaV3Error(
+                f"Invalid chord data in {file_path}: beat_numbers[{i}] "
+                f"{beat_number} exceeds meter_signature {meter}"
+            )
+
+
+def load_analysis(
+    media_path: Path, *, discard_invalid_metadata_for: str | None = None,
+    require_current: bool = True,
+) -> tuple[dict[str, Any], Path]:
+    """Load validated analysis, optionally discarding one refreshed track's bad metadata.
+
+    This repairs only the parsed in-memory copy; the file is never written.
+    All chord entries and other tracks retain normal schema validation. Legacy
+    data requires explicit migration by default; require_current=False permits
+    read-only inspection of supported older storage without changing its layout.
+    """
+    json_path = analysis_json_path(media_path)
+    if json_path.is_symlink() or not json_path.is_file():
+        raise SchemaV3Error(f"Analysis file missing or not a regular file: {json_path}")
+    try:
+        data = read_analysis_json(json_path)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise SchemaV3Error(f"Analysis file unreadable or not valid JSON: {json_path}") from exc
+    if discard_invalid_metadata_for is not None and isinstance(data, dict):
+        tracks = data.get("chord_tracks")
+        track = tracks.get(discard_invalid_metadata_for) if isinstance(tracks, dict) else None
+        if isinstance(track, dict) and not isinstance(track.get("metadata", {}), dict):
+            track["metadata"] = {}
+    validate_analysis(data, json_path, require_current=require_current)
+    return data, json_path
+
+
+
+def read_analysis_json(json_path: Path | str) -> Any:
+    """Read JSON only, retaining standard IO/JSON errors for repository callers."""
+    with Path(json_path).open("r", encoding="utf-8") as handle:
+        return json.load(handle)

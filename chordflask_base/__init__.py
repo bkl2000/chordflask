@@ -6,7 +6,10 @@ and external chord-track producers import from here, so the model and the schema
 stay independent of the Flask view.
 """
 
-from .analysis import is_canonical_analysis_complete, preserve_analysis_user_data
+from .analysis import (
+    canonical_source_status, media_source_identity, record_canonical_source,
+    is_canonical_analysis_complete, preserve_analysis_user_data,
+)
 from .chordlabel import (
     expand_chord_labels,
     respell_chord_label,
@@ -18,6 +21,11 @@ from .chordlabel import (
 )
 from .model import ChordData, ChordTrackRepository
 from .schema import (
+    AnalysisMigrationRequired,
+    analysis_schema_status,
+    load_analysis,
+    read_analysis_json,
+    validate_analysis,
     ANALYSIS_DIR_NAME,
     ANALYSIS_SAMPLE_RATE,
     AUDIO_TRACKS_KEY,
@@ -42,7 +50,15 @@ from .schema import (
     write_atomic,
 )
 
+from .storage import analysis_json_lock
+
 __all__ = [
+    "analysis_json_lock",
+    "AnalysisMigrationRequired",
+    "analysis_schema_status",
+    "load_analysis",
+    "read_analysis_json",
+    "validate_analysis",
     "ANALYSIS_DIR_NAME",
     "ANALYSIS_SAMPLE_RATE",
     "AUDIO_TRACKS_KEY",
@@ -60,6 +76,9 @@ __all__ = [
     "USER_EDITED_TRACK_ID",
     "USER_EDITED_RHYTHM_TRACK_ID",
     "analysis_json_path",
+    "canonical_source_status",
+    "media_source_identity",
+    "record_canonical_source",
     "is_canonical_analysis_complete",
     "preserve_analysis_user_data",
     "chord_input_sha256",

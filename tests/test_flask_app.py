@@ -1752,6 +1752,39 @@ def test_song_endpoint_exposes_romanization_without_duplicate_sync_data(tmp_path
     ]
 
 
+def test_song_endpoint_reports_selected_rhythm_freshness_without_writes(tmp_path):
+    from chordflask_base.rhythm import rhythm_grid_fingerprint
+
+    wrapper, client = make_client()
+    media, _ = load_ready_media(client, tmp_path)
+    data = _state(wrapper).player.chord_data
+    sidecar = tmp_path / "song.cho"
+    sidecar.write_text(
+        f"{{x_chordflask_rhythm_fingerprint: {rhythm_grid_fingerprint(data)}}}\n"
+        "{x_chordflask_beats: 0}\n{x_chordflask_end: 2}\n[C]Hello",
+        encoding="utf-8",
+    )
+    before = sidecar.read_bytes()
+    analysis = Path(FileRepr(media).get("json"))
+    analysis_before = analysis.read_bytes()
+    current = client.get("/get_song_sheet").get_json()
+    assert current["rhythm_status"] == "CURRENT"
+    data.set_rhythm_track(
+        "manual", beat_times=[0, 1.2], beat_numbers=[1, 2], meter_signature=4,
+    )
+    assert client.post("/update_analysis_tracks", json={"rhythm_track_id": "manual"}).status_code == 200
+    stale = client.get("/get_song_sheet").get_json()
+    assert stale["rhythm_status"] == "STALE"
+    assert stale["blocks"] == current["blocks"]
+    assert sidecar.read_bytes() == before
+    assert analysis.read_bytes() == analysis_before
+    sidecar.write_text("[C]Hello", encoding="utf-8")
+    assert client.get("/get_song_sheet").get_json()["rhythm_status"] == "LEGACY"
+    body = client.get("/").get_data(as_text=True)
+    assert "song.rhythm_status === 'STALE'" in body
+    assert "Recreate the Lyrics sheet to realign." in body
+
+
 def test_song_endpoint_is_bound_to_active_media_and_revalidates_disappearance(tmp_path):
     app_wrapper, client = make_client()
     sidecar = tmp_path / "song.cho"

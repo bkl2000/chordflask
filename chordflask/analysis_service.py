@@ -4,13 +4,7 @@ Web, worker, and CLI entry points own user-facing reporting, retry, and exit
 behavior. This service does not turn failed analysis into an empty result.
 """
 
-import os
-
-from chordflask_base import (
-    ChordData,
-    is_canonical_analysis_complete,
-    preserve_analysis_user_data,
-)
+from .canonical_analysis import execute_analysis
 
 
 class ChordAnalysisService:
@@ -29,21 +23,17 @@ class ChordAnalysisService:
         self.exporter = exporter
 
     def ensure_analyzed(self, file_repr, use_madmom=False, export_midi=True):
-        existing = None
-        if os.path.exists(file_repr.get("json")):
-            existing = ChordData(file_repr.get("json"))
-            if is_canonical_analysis_complete(existing):
-                print(f"Chord analysis already exists: {file_repr.get('json')}")
-                return existing
+        return execute_analysis(
+            file_repr,
+            lambda staged: self.analyze_staged(staged, use_madmom, export_midi),
+            require_canonical=not use_madmom,
+        )
 
+    def analyze_staged(self, file_repr, use_madmom=False, export_midi=True):
+        """Produce only staged output; the shared executor owns final publication."""
         analysis_audio = self.converter.ensure_mp3(file_repr)
         chord_data = self.analyzer.analyze(analysis_audio, use_madmom=use_madmom)
-        if not use_madmom and not is_canonical_analysis_complete(chord_data):
-            raise RuntimeError("Analysis did not create complete canonical tracks")
-        if existing is not None:
-            preserve_analysis_user_data(existing, chord_data)
         if export_midi:
             self.exporter.write_midi_and_musicxml(chord_data, file_repr)
         chord_data.save_to_file(file_repr.get("json"))
-        print(f"Chord data saved to {file_repr.get('json')}")
         return chord_data

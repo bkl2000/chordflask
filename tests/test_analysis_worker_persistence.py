@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from chordflask.analysis_queue import AnalysisQueue
+import pytest
+
+from chordflask.analysis_queue import MAX_ANALYSIS_ATTEMPTS, AnalysisQueue
 from chordflask.analysis_worker import AnalysisWorker
 from chordflask_base import ChordData
 
@@ -135,7 +137,7 @@ def test_worker_rejects_and_preserves_invalid_new_analysis(tmp_path):
     assert "created invalid chord data" in queue.status()["failed"][0]["error"]
 
 
-def test_worker_cleans_interrupted_work_and_publishes_json_last(tmp_path):
+def test_worker_leaves_sibling_workdirs_and_publishes_json_last(tmp_path):
     media, queue, analysis_dir = _setup_job(tmp_path)
     stale_analysis = analysis_dir / ".song.analyze-crashed"
     stale_reanalysis = analysis_dir / ".song.reanalyze-crashed"
@@ -151,10 +153,10 @@ def test_worker_cleans_interrupted_work_and_publishes_json_last(tmp_path):
             self.data_dir = Path(data_dir)
 
         def process(self):
-            assert not stale_analysis.exists()
-            assert not stale_reanalysis.exists()
+            assert stale_analysis.exists()
+            assert stale_reanalysis.exists()
             assert unrelated.exists()
-            assert not (analysis_dir / "song.mp3").exists()
+            assert (analysis_dir / "song.mp3").read_bytes() == b"old partial"
             _write_track(self.data_dir / "song.json", "C")
             (self.data_dir / "song.mp3").write_bytes(b"complete audio")
             (self.data_dir / "song.xml").write_text("complete xml", encoding="utf-8")
@@ -166,7 +168,8 @@ def test_worker_cleans_interrupted_work_and_publishes_json_last(tmp_path):
     assert (analysis_dir / "song.xml").read_text(encoding="utf-8") == "complete xml"
     assert (analysis_dir / "song.json").exists()
     assert unrelated.exists()
-    assert list(analysis_dir.glob(".song.analyze-*")) == []
+    assert list(analysis_dir.glob(".song.analyze-*")) == [stale_analysis]
+    assert stale_reanalysis.exists()
     assert queue.status() == {"pending": [], "failed": []}
 
 
@@ -408,3 +411,60 @@ def test_forced_reanalysis_leaves_missing_optional_exports_unchanged(tmp_path):
     assert worker.run_once() is True
     assert (analysis_dir / "song.xml").read_text(encoding="utf-8") == "old xml"
     assert (analysis_dir / "song.mid").read_bytes() == b"old midi"
+
+
+@pytest.mark.parametrize("crashes", [1, MAX_ANALYSIS_ATTEMPTS])
+def test_worker_recovers_crashes_with_bounded_attempts(tmp_path, monkeypatch, crashes):
+    class SimulatedCrash(BaseException):
+        pass
+
+    queue_dir = tmp_path / "queue"
+    media = tmp_path / "broken.mp4"
+    healthy = tmp_path / "healthy.mp4"
+    queue = AnalysisQueue(queue_dir)
+    queue.enqueue(media)
+    queue.enqueue(healthy)
+    calls = []
+
+    def fake_analyze(self, media_path, **options):
+        calls.append(media_path)
+        if media_path == str(media) and calls.count(str(media)) <= crashes:
+            raise SimulatedCrash()
+
+    monkeypatch.setattr(AnalysisWorker, "_analyze", fake_analyze)
+    for attempt in range(1, crashes + 1):
+        worker = AnalysisWorker(queue=queue)
+        with pytest.raises(SimulatedCrash):
+            worker.run_once()
+        interrupted = queue.status()["pending"][0]
+        assert interrupted["status"] == "processing"
+        assert interrupted["attempt_count"] == attempt
+        queue = AnalysisQueue(queue_dir)
+        queue.requeue_processing()
+
+    worker = AnalysisWorker(queue=queue)
+    if crashes < MAX_ANALYSIS_ATTEMPTS:
+        assert worker.run_once() is True  # Retry succeeds.
+        assert queue.status()["failed"] == []
+    else:
+        assert queue.status()["failed"][0]["attempt_count"] == MAX_ANALYSIS_ATTEMPTS
+    assert worker.run_once() is True  # Healthy job is never blocked indefinitely.
+    assert calls[-1] == str(healthy)
+    assert worker.run_once() is False
+    assert queue.status()["pending"] == []
+
+
+def test_normal_worker_failure_remains_terminal_on_first_attempt(tmp_path, monkeypatch):
+    queue = AnalysisQueue(tmp_path / "queue")
+    queue.enqueue(tmp_path / "song.mp4")
+
+    def fail_analysis(*args, **kwargs):
+        raise RuntimeError("ordinary analyzer failure")
+
+    monkeypatch.setattr(AnalysisWorker, "_analyze", fail_analysis)
+    assert AnalysisWorker(queue=queue).run_once() is True
+    failed = queue.status()["failed"][0]
+    assert failed["attempt_count"] == 1
+    assert failed["error"] == "ordinary analyzer failure"
+    assert queue.requeue_processing() == 0
+    assert queue.peek() is None

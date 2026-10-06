@@ -228,6 +228,12 @@ make setup-lyrics
 make lyrics-check
 ```
 
+For source runs, Lyrics preparation verifies that the runtime's installed Lyrics
+and shared helper code matches the current source, including same-version edits.
+If it reports **needs update**, rerun `make setup-lyrics` from the current checkout.
+`make lyrics-check` verifies the same identity. Older runtimes without an identity
+marker also need this setup refresh; existing `.cho` files are left unchanged.
+
 Source installations retain their installed `chordflask-genlyrics` command;
 the standalone invokes only the external runtime helper. Source priority,
 embedded-tag limits, LRCLIB matching, all CLI options, alignment, romanization

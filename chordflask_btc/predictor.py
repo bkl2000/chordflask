@@ -13,6 +13,8 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
+
+from chordflask_base import AnalysisMigrationRequired, load_analysis
 from typing import Any
 
 from .audio_encoder import AudioAnalysisError, decode_mono_audio
@@ -22,7 +24,6 @@ from .schema import (
     BTC_TRACK_ID,
     SchemaV3Error,
     analysis_json_path,
-    load_analysis,
     write_btc_track,
 )
 
@@ -100,6 +101,8 @@ def predict_btc_media(media_path: Path, *, replace: bool = False) -> dict[str, A
     if analysis_json_path(media_path).exists(follow_symlinks=False):
         try:
             analysis, _ = load_analysis(media_path)
+        except AnalysisMigrationRequired as exc:
+            raise BtcPredictionError(f"ChordFlask analysis requires migration ({exc})") from exc
         except SchemaV3Error as exc:
             raise BtcPredictionError(f"invalid ChordFlask analysis ({exc})") from exc
         existing = analysis["chord_tracks"].get(BTC_TRACK_ID)

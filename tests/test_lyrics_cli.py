@@ -849,3 +849,87 @@ def test_directory_uses_preferred_media_continues_and_rejects_tag(monkeypatch, t
     assert first_mp4.with_suffix(".cho").exists()
     assert len(client.calls) == 1
     assert cli.run(args(tmp_path, tag="Artist Song"), client=client) == 2
+
+
+def test_generated_provenance_identifies_actual_runtime_without_changing_song(monkeypatch, tmp_path):
+    from importlib.metadata import version
+
+    from chordflask.chordpro_song import LYRICS_PROVENANCE_DIRECTIVES, parse_chordpro
+    from chordflask_lyrics.freshness import installed_fingerprint
+    from chordflask_base.rhythm import rhythm_grid_fingerprint
+
+    media = tmp_path / "Song.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    status, _ = cli.generate_file(media, client=FakeClient(lyrics_record()))
+    assert status == "written"
+    content = media.with_suffix(".cho").read_text()
+    parsed = parse_chordpro(content)
+    assert {name: parsed["metadata"][name] for name in LYRICS_PROVENANCE_DIRECTIVES} == {
+        "x_chordflask_generator": "ChordFlask Lyrics",
+        "x_chordflask_version": version("chordflask"),
+        "x_chordflask_fingerprint": installed_fingerprint(),
+        "x_chordflask_rhythm_fingerprint": rhythm_grid_fingerprint(cli._load_analysis(media, "auto")),
+    }
+    legacy = "\n".join(
+        line for line in content.splitlines()
+        if not any(line.startswith("{" + name + ":") for name in LYRICS_PROVENANCE_DIRECTIVES)
+    ) + "\n"
+    assert parse_chordpro(legacy)["blocks"] == parsed["blocks"]
+    assert not any(name in parse_chordpro(legacy)["metadata"] for name in LYRICS_PROVENANCE_DIRECTIVES)
+
+
+def test_regeneration_refreshes_grid_identity_without_mutating_analysis(monkeypatch, tmp_path):
+    from chordflask.chordpro_song import sheet_rhythm_status
+
+    media = tmp_path / "Song.mp3"
+    make_analysis(media)
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    analysis = Path(FileRepr(media).get("json"))
+    before = analysis.read_bytes()
+    cli.generate_file(media, client=FakeClient(lyrics_record()))
+    song = read_chordpro(media.with_suffix(".cho"))
+    assert analysis.read_bytes() == before
+    data = cli._load_analysis(media, "auto")
+    assert sheet_rhythm_status(song, data) == "CURRENT"
+    data.set_rhythm_track(
+        "qm_barbeattracker", bpm=60, meter_signature=4,
+        beat_times=[0, 1.1, 2, 3, 4, 5, 6, 7], beat_numbers=[1, 2, 3, 4] * 2,
+    )
+    data.save_to_file(analysis)
+    before = analysis.read_bytes()
+    assert sheet_rhythm_status(song, data) == "STALE"
+    assert cli.generate_file(media, client=FakeClient(lyrics_record()))[0] == "skipped"
+    assert read_chordpro(media.with_suffix(".cho")) == song
+    assert cli.generate_file(media, client=FakeClient(lyrics_record()), force=True)[0] == "written"
+    refreshed = read_chordpro(media.with_suffix(".cho"))
+    assert sheet_rhythm_status(refreshed, data) == "CURRENT"
+    assert refreshed["metadata"]["x_chordflask_fingerprint"] == song["metadata"]["x_chordflask_fingerprint"]
+    assert analysis.read_bytes() == before
+
+
+def test_generation_identifies_actual_edited_rhythm(monkeypatch, tmp_path):
+    from chordflask.chordpro_song import sheet_rhythm_status
+
+    media = tmp_path / "Edited.mp3"
+    make_analysis(media, extra_tracks=((
+        "user_edited", track_chords("Am"),
+        {"sources": {"chord": "chordino", "rhythm": "user_edited_rhythm"}},
+    ),))
+    analysis = Path(FileRepr(media).get("json"))
+    data = ChordData()
+    data.load_from_file(analysis)
+    data.set_rhythm_track(
+        "user_edited_rhythm", bpm=60, meter_signature=4,
+        beat_times=[0, 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1],
+        beat_numbers=[2, 3, 4, 1] * 2,
+    )
+    data.save_to_file(analysis)
+    before = analysis.read_bytes()
+    monkeypatch.setattr(cli, "probe_media", lambda path: SongIdentity(duration=8))
+    assert cli.generate_file(media, client=FakeClient(lyrics_record()))[0] == "written"
+    song = read_chordpro(media.with_suffix(".cho"))
+    assert sheet_rhythm_status(song, data) == "STALE"  # canonical is still selected
+    data.select_rhythm_track("user_edited_rhythm")
+    assert sheet_rhythm_status(song, data) == "CURRENT"
+    assert analysis.read_bytes() == before

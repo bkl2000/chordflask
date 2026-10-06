@@ -8,6 +8,8 @@ Per-file errors are isolated so one failure never aborts the batch.
 from __future__ import annotations
 
 from pathlib import Path
+
+from chordflask_base import AnalysisMigrationRequired, load_analysis
 from typing import Any
 
 from .discovery import discover_media_directory
@@ -18,7 +20,7 @@ from .predictor import (
     sha256,
 )
 from .runtime import BtcRuntimeError, require_btc_runtime
-from .schema import BTC_TRACK_ID, SchemaV3Error, analysis_json_path, load_analysis
+from .schema import BTC_TRACK_ID, SchemaV3Error, analysis_json_path
 
 CLASS_TODO = "TODO"
 CLASS_CURRENT = "CURRENT"
@@ -39,6 +41,8 @@ def classify_btc_file(media_path: Path, model_hash: str) -> tuple[str, str]:
         return CLASS_TODO, ""
     try:
         data, _ = load_analysis(media_path)
+    except AnalysisMigrationRequired as exc:
+        return CLASS_NO_ANALYSIS, f"ChordFlask analysis requires migration ({exc})"
     except SchemaV3Error as exc:
         return CLASS_NO_ANALYSIS, f"invalid ChordFlask analysis ({exc})"
     existing = data["chord_tracks"].get(BTC_TRACK_ID)

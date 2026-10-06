@@ -2870,6 +2870,10 @@
       activeLyricMarkerIndex = -1;
       activeLyricLineIndex = -1;
       const metadata = song.metadata || {};
+      if (song.rhythm_status === 'STALE') {
+        appendSongText(fragment, 'song-sheet-message',
+          'Lyrics rhythm grid is stale. Recreate the Lyrics sheet to realign.');
+      }
       if (metadata.title) appendSongText(fragment, 'song-sheet-title', metadata.title);
       if (metadata.artist) appendSongText(fragment, 'song-sheet-artist', metadata.artist);
       if (metadata.subtitle) appendSongText(fragment, 'song-sheet-subtitle', metadata.subtitle);
@@ -3012,7 +3016,7 @@
         localStorage.setItem(storageKeys.preferredSongView, 'lyrics');
         songViewMode = 'song';
         applySongViewMode();
-        loadSongSheet();
+        refreshSongSheetLabels();
         // Reuse the existing Grid synchronization request so an already-running
         // playback immediately highlights the current chord without a restart.
         syncPlaybackPosition(true);
@@ -3175,6 +3179,7 @@
           activeRhythmTrackId = data.active_rhythm_track_id;
           exitEditMode();
           updateTrackSelectors(data);
+          refreshSongSheetLabels();
           syncPlaybackPosition(true);
         }
       })
@@ -4065,6 +4070,13 @@
           return;
         }
         const previousState = action.state;
+        const previouslyNeededUpdate = action.needsUpdate;
+        action.needsUpdate = data.needs_update === true;
+        if (name === 'lyrics' && action.needsUpdate) {
+          showPrepareToolbarStatus(data.message, 0);
+        } else if (name === 'lyrics' && previouslyNeededUpdate) {
+          showPrepareToolbarStatus('', 0);
+        }
         action.available = data.available === true;
         action.state = name === 'stems' && stemsAvailable
           ? 'ready' : (data.state || 'idle');
@@ -4551,7 +4563,9 @@
         loadedAnalysisValid = data.analysis_valid === true;
         fileStatus.innerText = pendingAnalysisLoad
           ? `Waiting for analysis: ${pendingAnalysisLoad.filename}`
-          : filename;
+          : data.analysis_source_status === 'stale'
+            ? `${filename} — analysis is stale; use Reanalyze`
+            : filename;
         updateReanalyzeButton();
         updateTrackSelectors(data);
         updateStemsAvailability(data.stems);

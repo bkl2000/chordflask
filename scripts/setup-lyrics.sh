@@ -30,6 +30,9 @@ if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
         fail "Could not create venv; ensure python3-venv is installed"
 fi
 
+SOURCE_IDENTITY="$("${VENV_DIR}/bin/python" -I "${ROOT_DIR}/chordflask_lyrics/freshness.py" \
+    fingerprint --source "$ROOT_DIR")" || fail "Could not identify the Lyrics source"
+
 info "Installing the Lyrics generator and PyThaiNLP/ONNX runtime"
 "${VENV_DIR}/bin/python" -m pip install --quiet --upgrade pip
 "${VENV_DIR}/bin/python" -m pip uninstall --quiet --yes \
@@ -44,6 +47,10 @@ info "Installing the Lyrics generator and PyThaiNLP/ONNX runtime"
 info "Verifying Lyrics runtime"
 "${VENV_DIR}/bin/chordflask-genlyrics" --help >/dev/null || \
     fail "The installed chordflask-genlyrics helper could not start"
+
+"${VENV_DIR}/bin/python" -I "${ROOT_DIR}/chordflask_lyrics/freshness.py" \
+    record --source "$ROOT_DIR" --runtime "$VENV_DIR" --expected "$SOURCE_IDENTITY" || \
+    fail "Could not verify and record the installed Lyrics source identity"
 
 echo ""
 echo "Lyrics runtime ready: ${VENV_DIR}"

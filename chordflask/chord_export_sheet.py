@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from .chordpro_song import LYRICS_PROVENANCE_DIRECTIVES
+
 
 @dataclass(frozen=True)
 class ExportLyricRun:
@@ -44,6 +46,7 @@ class ExportSheet:
     beats: tuple[tuple[int | str, str], ...]
     repeat_mode: str
     lyrics: tuple[ExportLyricBlock, ...] = ()
+    lyrics_provenance: tuple[tuple[str, str], ...] = ()
 
 
 def build_export_sheet(title, snapshot, song=None):
@@ -114,6 +117,11 @@ def build_export_sheet(title, snapshot, song=None):
         beats=tuple(snapshot["beats"]),
         repeat_mode=snapshot["repeat_mode"],
         lyrics=tuple(lyric_blocks),
+        lyrics_provenance=tuple(
+            (name, (song or {}).get("metadata", {})[name])
+            for name in LYRICS_PROVENANCE_DIRECTIVES
+            if name in (song or {}).get("metadata", {})
+        ),
     )
 
 

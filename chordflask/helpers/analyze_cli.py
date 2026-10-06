@@ -1,7 +1,7 @@
 """``chordflask-analyze`` — analyze a media file or directory with ChordFlask.
 
 Chordino is the built-in default analyzer and runs in-process through the
-canonical :class:`AnalysisWorker` / :class:`ChordAnalyzer` path. When the
+shared locked canonical executor used by the worker and service. When the
 optional BTC backend is installed, it is reached only through a subprocess
 call to its private backend; this module never imports torch, BTC code, or the
 private training package. The private frozen V3 connector is imported only
@@ -141,13 +141,14 @@ def _chordino_status(media: Path) -> str:
 
     A valid analysis JSON is not enough to call Chordino "current": in the
     Schema-v3 multi-analyzer model, a file may carry only a BTC track. Chordino
-    is current only when both the built-in Chordino chord track and the QM
-    rhythm track are present.
+    is complete only when both built-in tracks are present. Current additionally
+    requires matching source identity; provenance-free complete data is legacy.
     """
     from chordflask_base import (
         ChordTrackRepository,
         analysis_json_path,
         is_canonical_analysis_complete,
+        canonical_source_status,
     )
 
     json_path = analysis_json_path(media)
@@ -157,17 +158,16 @@ def _chordino_status(media: Path) -> str:
         repository = ChordTrackRepository().load(json_path)
     except (OSError, UnicodeError, ValueError, TypeError, KeyError):
         return "invalid"
-    return "current" if is_canonical_analysis_complete(repository) else "todo"
+    return canonical_source_status(repository, media) if is_canonical_analysis_complete(repository) else "todo"
 
 
 def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
-    from ..analysis_worker import AnalysisWorker
+    from ..canonical_analysis import analyze_media
 
     media_files = _resolve_media_files(target)
     if media_files is None:
         return 2
 
-    worker = None
     counts = {"ok": 0, "skipped": 0, "failed": 0}
     guidance: set[str] = set()
     total = len(media_files)
@@ -177,6 +177,8 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
         if dry_run:
             if status == "current":
                 label = "REANALYZE" if replace else "CURRENT"
+            elif status in ("stale", "legacy"):
+                label = "REANALYZE" if replace else status.upper()
             elif status == "invalid":
                 label = "INVALID"
                 guidance.add("invalid_analysis")
@@ -184,16 +186,12 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
                 label = "TODO"
             print(f"       {label}")
             continue
-        if status == "current" and not replace:
-            print("       SKIP: analysis already exists")
+        if status in ("current", "legacy") and not replace:
+            print("       SKIP: analysis already exists" + (" (LEGACY: source identity unknown)" if status == "legacy" else ""))
             counts["skipped"] += 1
             continue
-        if worker is None:
-            from ..chordanalyzer import ChordAnalyzer
-
-            worker = AnalysisWorker(analyzer_cls=ChordAnalyzer)
         try:
-            worker._analyze(media, force=status in ("current", "todo"))
+            analyze_media(media, force=status in ("current", "todo", "stale", "legacy"))
         except Exception as exc:
             print(f"       ERROR: {exc}", file=sys.stderr)
             hint = _chordino_failure_hint(exc)
@@ -220,7 +218,7 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
 
 def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
     from chordflask_base import ChordData, analysis_json_path, chord_input_sha256, write_atomic
-    from chordflask_btc.schema import load_analysis, validate_analysis
+    from chordflask_base import analysis_json_lock, load_analysis, validate_analysis
 
     media_files = _resolve_media_files(target)
     if media_files is None:
@@ -268,22 +266,23 @@ def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
                 data, path = load_analysis(media, discard_invalid_metadata_for="chordflask_v3")
             original = data["chord_tracks"]["chordino"]
             result = predict_media(media)
-            # Reload to retain other tracks/edits written while inference ran.
-            data, path = load_analysis(media, discard_invalid_metadata_for="chordflask_v3")
-            if data["chord_tracks"].get("chordino") != original:
-                raise RuntimeError("Canonical Chordino track changed during V3 inference; retry")
-            track = ChordData()
-            track.set_chord_track(
-                "chordflask_v3", result["chords"],
-                metadata={**result["metadata"], "display_name": "ChordFlask V3"},
-            )
-            data["chord_tracks"]["chordflask_v3"] = {
-                "chords": track.chord_track_chords("chordflask_v3"),
-                "metadata": track.chord_track_metadata("chordflask_v3"),
-            }
-            # Preserve canonical raw Chordino and all other persisted data exactly.
-            validate_analysis(data, path)
-            write_atomic(path, data)
+            with analysis_json_lock(path):
+                # Reload to retain other tracks/edits written while inference ran.
+                data, path = load_analysis(media, discard_invalid_metadata_for="chordflask_v3")
+                if data["chord_tracks"].get("chordino") != original:
+                    raise RuntimeError("Canonical Chordino track changed during V3 inference; retry")
+                track = ChordData()
+                track.set_chord_track(
+                    "chordflask_v3", result["chords"],
+                    metadata={**result["metadata"], "display_name": "ChordFlask V3"},
+                )
+                data["chord_tracks"]["chordflask_v3"] = {
+                    "chords": track.chord_track_chords("chordflask_v3"),
+                    "metadata": track.chord_track_metadata("chordflask_v3"),
+                }
+                # Preserve canonical raw Chordino and all other persisted data exactly.
+                validate_analysis(data, path)
+                write_atomic(path, data)
             counts["ok"] += 1
             print("       OK")
         except Exception as exc:

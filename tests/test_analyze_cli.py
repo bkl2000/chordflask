@@ -33,7 +33,8 @@ def reset_fake_worker():
 
 
 def _patch_worker(monkeypatch):
-    monkeypatch.setattr("chordflask.analysis_worker.AnalysisWorker", FakeAnalysisWorker)
+    monkeypatch.setattr("chordflask.canonical_analysis.analyze_media",
+                        lambda media, force=False: FakeAnalysisWorker()._analyze(media, force=force))
     monkeypatch.setattr(
         "chordflask_base.analysis_json_path", lambda media: media.parent / ".chordflask" / "x.json"
     )
@@ -309,7 +310,7 @@ def test_chordino_dry_run_classifies_without_side_effects(monkeypatch, capsys, t
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main(["--dry-run", str(media)])
     assert exc.value.code == 0
-    assert "CURRENT" in capsys.readouterr().out
+    assert "LEGACY" in capsys.readouterr().out
     assert FakeAnalysisWorker.analyzed == []
 
     with pytest.raises(SystemExit) as exc:
@@ -517,11 +518,11 @@ def test_dispatcher_has_no_torch_or_training_import():
     assert "chordflask-training" not in src
 
 
-def test_dispatcher_reuses_worker_and_batch_core():
+def test_dispatcher_reuses_shared_executor_and_batch_core():
     src = (REPO_ROOT / "chordflask" / "helpers" / "analyze_cli.py").read_text(encoding="utf-8")
-    assert "from ..analysis_worker import AnalysisWorker" in src
+    assert "from ..canonical_analysis import analyze_media" in src
     assert "from .batch_core import find_media_files" in src
-    assert "from ..chordanalyzer import ChordAnalyzer" in src
+    assert "worker._analyze" not in src
     assert "from chordflask_btc.analyze import analyze_btc" in src
     # No re-implementation of the chordino analysis itself.
     assert "def analyze_chords" not in src
@@ -646,17 +647,12 @@ def test_v3_generates_missing_chordino_with_normal_worker(tmp_path, monkeypatch,
         track.save_to_file(path)
     calls = []
 
-    class Worker:
-        def __init__(self, analyzer_cls):
-            from chordflask.chordanalyzer import ChordAnalyzer
-            assert analyzer_cls is ChordAnalyzer
+    def analyze(target, force=False):
+        calls.append((target, force))
+        assert not v3_runtime[0]
+        _v3_media(tmp_path)
 
-        def _analyze(self, target, force=False):
-            calls.append((target, force))
-            assert not v3_runtime[0]
-            _v3_media(tmp_path)
-
-    monkeypatch.setattr("chordflask.analysis_worker.AnalysisWorker", Worker)
+    monkeypatch.setattr("chordflask.canonical_analysis.analyze_media", analyze)
     assert _invoke_v3(media) == 0
     assert calls == [(media, existing)]
     assert v3_runtime[0] == [media]
@@ -843,8 +839,6 @@ def test_v3_missing_canonical_input_is_stale(tmp_path, v3_runtime, capsys):
 
 def test_v3_chordino_reanalysis_preserves_then_refreshes_stale_track(tmp_path, v3_runtime, capsys):
     from chordflask_base import ChordData, analysis_json_path
-    from chordflask.analysis_worker import AnalysisWorker
-
     media = _v3_media(tmp_path)
     assert _invoke_v3(media) == 0
     path = analysis_json_path(media)
@@ -854,7 +848,11 @@ def test_v3_chordino_reanalysis_preserves_then_refreshes_stale_track(tmp_path, v
     track.set_chord_track("chordino", [{"timestamp": 0.0, "chord": "D"}])
     track.set_rhythm_track("qm_barbeattracker", bpm=100, beat_times=[0.0, 0.6])
     track.save_to_file(replacement)
-    AnalysisWorker._AnalysisWorker__preserve_user_data(path, replacement)
+    from chordflask_base import ChordTrackRepository, preserve_analysis_user_data
+    repository = ChordTrackRepository()
+    refreshed = repository.load(replacement)
+    preserve_analysis_user_data(repository.load(path), refreshed)
+    repository.save(refreshed, replacement)
     path.write_bytes(replacement.read_bytes())
     stale = json.loads(path.read_text())
     assert stale["chord_tracks"]["chordflask_v3"] == before["chord_tracks"]["chordflask_v3"]

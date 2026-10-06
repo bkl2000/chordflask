@@ -12,7 +12,7 @@ from pathlib import Path
 from .analysis_service import ChordAnalysisService
 from .audio_analyzer import AudioAnalyzer
 from .chord_exporter import ChordExporter
-from chordflask_base import ChordData
+from chordflask_base import ChordData, analysis_json_lock
 from .chordflask_config import ANALYSIS_DIR_NAME
 from .filerepr import FileRepr
 from .media_converter import MediaConverter
@@ -26,6 +26,7 @@ class ChordAnalyzer:
             print("Data path:", data_dir)
 
         self.file_repr = FileRepr(mp4_filename, data_dir, create=True)
+        self._json_snapshot = self._read_json_snapshot()
         self.chord_data = ChordData(prefer_flats=True, use_unicode=False)
         self.converter = MediaConverter()
         self.audio_analyzer = AudioAnalyzer(sample_rate=self.chord_data.sr)
@@ -89,6 +90,10 @@ class ChordAnalyzer:
             self.file_repr,
             use_madmom=use_madmom,
         )
+        if Path(self.file_repr.get("json")).is_file():
+            with analysis_json_lock(self.file_repr.get("json")):
+                self.chord_data.load_from_file(self.file_repr.get("json"))
+                self._json_snapshot = self._read_json_snapshot()
 
     def print_chords(self):
         chords = self.chord_data.get_chords()
@@ -105,10 +110,24 @@ class ChordAnalyzer:
     def transpose_chords(self, semitones):
         self.chord_data.transpose(semitones)
 
+    def _read_json_snapshot(self):
+        try:
+            return Path(self.file_repr.get("json")).read_bytes()
+        except FileNotFoundError:
+            return None
+
     def save_chords_to_file(self):
-        self.chord_data.save_to_file(self.file_repr.get("json"))
+        # Compatibility callers hold an in-memory snapshot, not a mutation.
+        # Reject a concurrent change rather than publishing stale unrelated data.
+        with analysis_json_lock(self.file_repr.get("json")):
+            if self._read_json_snapshot() != self._json_snapshot:
+                raise ValueError("Analysis changed on disk; reload before saving")
+            self.chord_data.save_to_file(self.file_repr.get("json"))
+            self._json_snapshot = self._read_json_snapshot()
         print(f"Chord data saved to {self.file_repr.get('json')}")
 
     def load_chords_from_file(self):
-        self.chord_data.load_from_file(self.file_repr.get("json"))
+        with analysis_json_lock(self.file_repr.get("json")):
+            self.chord_data.load_from_file(self.file_repr.get("json"))
+            self._json_snapshot = self._read_json_snapshot()
         print(f"Chord data loaded from {self.file_repr.get('json')}")
