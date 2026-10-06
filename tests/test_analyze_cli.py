@@ -533,6 +533,8 @@ def test_dispatcher_reuses_worker_and_batch_core():
 def v3_runtime(monkeypatch):
     """Fake only the optional connector, including in public source exports."""
     from types import ModuleType
+    from chordflask_base import chord_input_sha256
+    from chordflask_btc.schema import load_analysis
 
     calls = []
     metadata = {
@@ -549,6 +551,8 @@ def v3_runtime(monkeypatch):
 
     def predict(media):
         calls.append(media)
+        data, _ = load_analysis(media, discard_invalid_metadata_for="chordflask_v3")
+        metadata["input_sha256"] = chord_input_sha256(data["chord_tracks"]["chordino"]["chords"])
         return {
             "chords": [{"timestamp": 0.0, "chord": "N"},
                        {"timestamp": 0.18575963718820862, "chord": "G#min"}],
@@ -769,6 +773,116 @@ def test_v3_dry_run_existing_track_classification(tmp_path, v3_runtime, capsys):
     assert "REANALYZE" in capsys.readouterr().out
     assert v3_runtime[0] == [media]
     assert analysis_json_path(media).read_bytes() == before
+
+
+@pytest.mark.parametrize("metadata", [{"input_sha256": "wrong"}, {},
+                                      {"input_sha256": None}, {"input_sha256": []},
+                                      None, [], "broken", 42])
+def test_v3_stale_metadata_regenerates_without_touching_other_data(
+    tmp_path, v3_runtime, capsys, metadata
+):
+    from chordflask_base import analysis_json_path, chord_input_sha256
+
+    media = _v3_media(tmp_path)
+    assert _invoke_v3(media) == 0
+    path = analysis_json_path(media)
+    data = json.loads(path.read_text())
+    data["chord_tracks"]["chordflask_v3"]["metadata"] = metadata
+    path.write_text(json.dumps(data))
+    before = path.read_bytes()
+    capsys.readouterr()
+    assert _invoke_v3(media, "--dry-run") == 0
+    assert "STALE" in capsys.readouterr().out
+    assert path.read_bytes() == before
+    assert v3_runtime[0] == [media]
+    assert _invoke_v3(media) == 0
+    updated = json.loads(path.read_text())
+    v3 = updated["chord_tracks"].pop("chordflask_v3")
+    data["chord_tracks"].pop("chordflask_v3")
+    assert updated == data
+    assert v3["metadata"]["input_sha256"] == chord_input_sha256(data["chord_tracks"]["chordino"]["chords"])
+    assert v3_runtime[0] == [media, media]
+    capsys.readouterr()
+    assert _invoke_v3(media, "--dry-run") == 0
+    assert "CURRENT" in capsys.readouterr().out
+    assert _invoke_v3(media) == 0
+    assert v3_runtime[0] == [media, media]
+
+
+def test_v3_missing_metadata_is_stale(tmp_path, v3_runtime, capsys):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    assert _invoke_v3(media) == 0
+    path = analysis_json_path(media)
+    data = json.loads(path.read_text())
+    del data["chord_tracks"]["chordflask_v3"]["metadata"]
+    path.write_text(json.dumps(data))
+    capsys.readouterr()
+    assert _invoke_v3(media, "--dry-run") == 0
+    assert "STALE" in capsys.readouterr().out
+    assert _invoke_v3(media) == 0
+    assert v3_runtime[0] == [media, media]
+
+
+def test_v3_missing_canonical_input_is_stale(tmp_path, v3_runtime, capsys):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    assert _invoke_v3(media) == 0
+    path = analysis_json_path(media)
+    data = json.loads(path.read_text())
+    del data["chord_tracks"]["chordino"]
+    path.write_text(json.dumps(data))
+    before = path.read_bytes()
+    capsys.readouterr()
+    assert _invoke_v3(media, "--dry-run") == 0
+    assert "STALE" in capsys.readouterr().out
+    assert path.read_bytes() == before
+
+
+def test_v3_chordino_reanalysis_preserves_then_refreshes_stale_track(tmp_path, v3_runtime, capsys):
+    from chordflask_base import ChordData, analysis_json_path
+    from chordflask.analysis_worker import AnalysisWorker
+
+    media = _v3_media(tmp_path)
+    assert _invoke_v3(media) == 0
+    path = analysis_json_path(media)
+    before = json.loads(path.read_text())
+    replacement = tmp_path / "replacement.json"
+    track = ChordData()
+    track.set_chord_track("chordino", [{"timestamp": 0.0, "chord": "D"}])
+    track.set_rhythm_track("qm_barbeattracker", bpm=100, beat_times=[0.0, 0.6])
+    track.save_to_file(replacement)
+    AnalysisWorker._AnalysisWorker__preserve_user_data(path, replacement)
+    path.write_bytes(replacement.read_bytes())
+    stale = json.loads(path.read_text())
+    assert stale["chord_tracks"]["chordflask_v3"] == before["chord_tracks"]["chordflask_v3"]
+    capsys.readouterr()
+    assert _invoke_v3(media, "--dry-run") == 0
+    assert "STALE" in capsys.readouterr().out
+    assert _invoke_v3(media) == 0
+    updated = json.loads(path.read_text())
+    assert updated["chord_tracks"]["chordflask_v3"]["metadata"]["input_sha256"] != before["chord_tracks"]["chordflask_v3"]["metadata"]["input_sha256"]
+    updated["chord_tracks"].pop("chordflask_v3")
+    stale["chord_tracks"].pop("chordflask_v3")
+    assert updated == stale
+    assert v3_runtime[0] == [media, media]
+
+
+def test_v3_invalid_other_metadata_is_not_repaired(tmp_path, v3_runtime):
+    from chordflask_base import analysis_json_path
+
+    media = _v3_media(tmp_path)
+    path = analysis_json_path(media)
+    data = json.loads(path.read_text())
+    data["chord_tracks"]["btc"]["metadata"] = None
+    path.write_text(json.dumps(data))
+    before = path.read_bytes()
+    assert _invoke_v3(media, "--dry-run") == 1
+    assert _invoke_v3(media) == 1
+    assert path.read_bytes() == before
+    assert not v3_runtime[0]
 
 
 def test_v3_missing_private_package_fails_without_generating_chordino(tmp_path, monkeypatch, capsys):

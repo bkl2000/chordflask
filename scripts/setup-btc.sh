@@ -98,6 +98,7 @@ if [[ "$(readlink -f "$BTC_SOURCE_DIR")" != "$(readlink -f "$BTC_DIR")" ]]; then
         "${BTC_SOURCE_DIR}/transformer_modules.py" \
         "${BTC_SOURCE_DIR}/vocabulary.py" \
         "${BTC_SOURCE_DIR}/checkpoint.sha256" \
+        "${BTC_SOURCE_DIR}/BTC-LICENSE.txt" \
         "$BTC_DIR/"
 fi
 

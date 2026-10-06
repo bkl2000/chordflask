@@ -41,14 +41,14 @@ def _song(tmp_path, name="song.mp3", *, analyzed=True, edited=False):
         analysis_dir.mkdir(exist_ok=True)
         data = ChordData()
         data.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+        data.set_rhythm_track(
+            "qm_barbeattracker",
+            bpm=120,
+            meter_signature=4,
+            beat_times=[0.0],
+            beat_numbers=[1],
+        )
         if edited:
-            data.set_rhythm_track(
-                "qm_barbeattracker",
-                bpm=120,
-                meter_signature=4,
-                beat_times=[0.0],
-                beat_numbers=[1],
-            )
             data.create_beat_aligned_track("user_edited")
             data.edit_chord_track_beat("user_edited", 0, "G")
         data.user_data = {"note": "keep"}

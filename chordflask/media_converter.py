@@ -13,10 +13,8 @@ class MediaConverter:
         if Path(source_path).suffix.lower() == ".mp3":
             return source_path
 
-        if os.path.exists(file_repr.get("mp3")):
-            print(f"MP3 file already exists: {file_repr.get('mp3')}")
-            return file_repr.get("mp3")
-
+        # Derived MP3 files carry no source identity. Reconvert rather than
+        # risk analyzing audio from media replaced under the same filename.
         require_system_ffmpeg()
         destination = Path(file_repr.get("mp3"))
         destination.parent.mkdir(parents=True, exist_ok=True)

@@ -3620,14 +3620,14 @@
         return;
       }
 
-      const preferredBase = preferredFile.split(' | ')[0];
-      for (const file of currentFiles) {
-        if (file.name === preferredFile || file.name === preferredBase) {
-          selectedFileName = file.name;
-          return;
+      let preferred = currentFiles.find(file => file.name === preferredFile);
+      if (!preferred) {
+        const legacy = preferredFile.match(/^(.+) \| [0-9]+M$/);
+        if (legacy) {
+          preferred = currentFiles.find(file => file.name === legacy[1]);
         }
       }
-      selectedFileName = currentFiles[0].name;
+      selectedFileName = (preferred || currentFiles[0]).name;
     }
 
     function compareNames(left, right) {

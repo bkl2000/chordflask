@@ -25,7 +25,14 @@ from chordflask_base import (
 )
 
 
-def load_analysis(media_path: Path) -> tuple[dict[str, Any], Path]:
+def load_analysis(
+    media_path: Path, *, discard_invalid_metadata_for: str | None = None
+) -> tuple[dict[str, Any], Path]:
+    """Load validated analysis, optionally discarding one refreshed track's bad metadata.
+
+    This repairs only the parsed in-memory copy; the file is never written.
+    All chord entries and other tracks retain normal schema validation.
+    """
     json_path = analysis_json_path(media_path)
     if json_path.is_symlink() or not json_path.is_file():
         raise SchemaV3Error(f"Analysis file missing or not a regular file: {json_path}")
@@ -37,6 +44,11 @@ def load_analysis(media_path: Path) -> tuple[dict[str, Any], Path]:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise SchemaV3Error(f"Analysis file is not valid JSON: {json_path}") from exc
+    if discard_invalid_metadata_for is not None and isinstance(data, dict):
+        tracks = data.get("chord_tracks")
+        track = tracks.get(discard_invalid_metadata_for) if isinstance(tracks, dict) else None
+        if isinstance(track, dict) and not isinstance(track.get("metadata", {}), dict):
+            track["metadata"] = {}
     validate_analysis(data, json_path)
     return data, json_path
 

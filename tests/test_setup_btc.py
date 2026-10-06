@@ -68,6 +68,9 @@ def test_supported_python_installs_new_torch(btc_setup, version, existing):
     assert ("'-m', 'venv'" in calls) == (not existing)
     assert (venv / "bin/python").exists()
     assert (venv.parent / "missing-model" / "predict_raw.py").is_file()
+    assert (venv.parent / "missing-model" / "BTC-LICENSE.txt").read_bytes() == (
+        SCRIPT.parents[1] / "chordflask_btc/model/BTC-LICENSE.txt"
+    ).read_bytes()
     assert "'numpy', 'librosa'" not in calls
 
 

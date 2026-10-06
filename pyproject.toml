@@ -40,6 +40,7 @@ version = {file = ["VERSION"]}
 dependencies = {file = ["requirements-core.txt"]}
 
 [tool.setuptools.package-data]
+chordflask_btc = ["model/BTC-LICENSE.txt"]
 chordflask = [
     "templates/*.html",
     "assets/fonts/*.ttf",

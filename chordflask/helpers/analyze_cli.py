@@ -145,10 +145,9 @@ def _chordino_status(media: Path) -> str:
     rhythm track are present.
     """
     from chordflask_base import (
-        DEFAULT_CHORD_TRACK,
-        DEFAULT_RHYTHM_TRACK,
         ChordTrackRepository,
         analysis_json_path,
+        is_canonical_analysis_complete,
     )
 
     json_path = analysis_json_path(media)
@@ -158,9 +157,7 @@ def _chordino_status(media: Path) -> str:
         repository = ChordTrackRepository().load(json_path)
     except (OSError, UnicodeError, ValueError, TypeError, KeyError):
         return "invalid"
-    has_chordino = DEFAULT_CHORD_TRACK in repository.available_chord_track_ids
-    has_rhythm = DEFAULT_RHYTHM_TRACK in repository.available_rhythm_track_ids
-    return "current" if (has_chordino and has_rhythm) else "todo"
+    return "current" if is_canonical_analysis_complete(repository) else "todo"
 
 
 def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
@@ -222,7 +219,7 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
 
 
 def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
-    from chordflask_base import ChordData, analysis_json_path, write_atomic
+    from chordflask_base import ChordData, analysis_json_path, chord_input_sha256, write_atomic
     from chordflask_btc.schema import load_analysis, validate_analysis
 
     media_files = _resolve_media_files(target)
@@ -243,24 +240,36 @@ def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
         print(f"[{index}/{len(media_files)}] {media.name}")
         try:
             path = analysis_json_path(media)
-            data = load_analysis(media)[0] if path.exists() else None
+            data = load_analysis(media, discard_invalid_metadata_for="chordflask_v3")[0] if path.exists() else None
             exists = data is not None and "chordflask_v3" in data["chord_tracks"]
+            chordino = data["chord_tracks"].get("chordino") if data is not None else None
+            metadata = data["chord_tracks"]["chordflask_v3"].get("metadata", {}) if exists else {}
+            current = (
+                exists and chordino is not None
+                and isinstance(metadata.get("input_sha256"), str)
+                and metadata["input_sha256"] == chord_input_sha256(chordino["chords"])
+            )
             if dry_run:
-                label = ("REANALYZE" if replace else "CURRENT") if exists else "TODO"
+                if replace:
+                    label = "REANALYZE"
+                elif exists:
+                    label = "CURRENT" if current else "STALE"
+                else:
+                    label = "TODO"
                 print(f"       {label}")
                 continue
-            if exists and not replace:
+            if current and not replace:
                 print("       SKIP: analysis already exists")
                 counts["skipped"] += 1
                 continue
             if data is None or "chordino" not in data["chord_tracks"]:
                 if _run_chordino(media, replace=False, dry_run=False):
                     raise RuntimeError("Could not generate canonical Chordino analysis")
-                data, path = load_analysis(media)
+                data, path = load_analysis(media, discard_invalid_metadata_for="chordflask_v3")
             original = data["chord_tracks"]["chordino"]
             result = predict_media(media)
             # Reload to retain other tracks/edits written while inference ran.
-            data, path = load_analysis(media)
+            data, path = load_analysis(media, discard_invalid_metadata_for="chordflask_v3")
             if data["chord_tracks"].get("chordino") != original:
                 raise RuntimeError("Canonical Chordino track changed during V3 inference; retry")
             track = ChordData()

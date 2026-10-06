@@ -117,7 +117,8 @@ validation, not full application or standalone acceptance across the matrix.
 ## Files
 
 - `btc_model.py`, `transformer_modules.py` — model architecture (adapted from
-  the MIT-licensed BTC code; kept verbatim so the checkpoint state dict loads).
+  the MIT-licensed BTC code; imports and NumPy compatibility adapted while
+  preserving the checkpoint state-dict structure).
 - `features.py` — modernized CQT feature pipeline (144 bins, 24 bins/octave,
   hop 2048, sr 22050, log magnitude, z-score, `FRAME_SECONDS = 2048/22050`).
 - `vocabulary.py` — the 170-class index → label mapping.
@@ -128,6 +129,10 @@ validation, not full application or standalone acceptance across the matrix.
 - Code: BTC-ISMIR19 (`jayg996/BTC-ISMIR19`), MIT, "Copyright (c) 2019 Jonggwon
   Park" (ISMIR 2019 paper "A Bi-Directional Transformer for Musical Chord
   Recognition").
+  The full upstream notice is shipped in [BTC-LICENSE.txt](BTC-LICENSE.txt);
+  see [third-party notices](../../THIRD_PARTY_NOTICES.md#btc-ismir19-source-code)
+  for the source scope and verified upstream reference. The original import
+  revision was not recorded.
 - Checkpoint `btc_model_large_voca.pt` (12,229,576 bytes): the pretrained
   large-vocabulary (170-class) weights are redistributed by the
   `benasterisk/stemtube-desktop-app` fork (`external/BTC-ISMIR19/test/`).

@@ -133,6 +133,7 @@ def test_flask_loads_plain_and_audio_track_v3_json_without_demucs_import(tmp_pat
                 analysis_dir = root / ".chordflask"
                 analysis_dir.mkdir(exist_ok=True)
                 data = ChordData()
+                data.set_base_chords([{"timestamp": 0.0, "chord": "C"}], beat_times=[0.0])
                 if with_audio:
                     data.set_audio_track("demucs:htdemucs", audio_set())
                 data.save_to_file(analysis_dir / f"{media.stem}.json")

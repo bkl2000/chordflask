@@ -136,3 +136,28 @@ weight terms before using or redistributing generated material.
 - **Demucs:** https://github.com/facebookresearch/demucs
 - **PyTorch:** https://github.com/pytorch/pytorch
 - **torchaudio:** https://github.com/pytorch/audio
+
+## BTC-ISMIR19 Source Code
+
+ChordFlask's public source contains adaptations of the BTC-ISMIR19 model
+architecture in `chordflask_btc/model/btc_model.py` and
+`chordflask_btc/model/transformer_modules.py` (upstream `btc_model.py` and
+`utils/transformer_modules.py`). Separately, `features.py` and `vocabulary.py`
+implement BTC's preprocessing and label mapping for this runtime;
+`predict_raw.py` supplies ChordFlask's inference wrapper.
+
+- **License:** MIT
+- **Copyright:** Copyright (c) 2019 Jonggwon Park
+- **Upstream:** https://github.com/jayg996/BTC-ISMIR19
+- **Full upstream license:** [BTC-LICENSE.txt](chordflask_btc/model/BTC-LICENSE.txt)
+- **License/source comparison verified against:** upstream revision
+  `2682317be668032e6e4b269ded36adaa2ad57df0`.
+  The original ChordFlask import revision was not recorded; this is the
+  verification reference, not an assertion about the original import version.
+  [Upstream license at that revision](https://github.com/jayg996/BTC-ISMIR19/blob/2682317be668032e6e4b269ded36adaa2ad57df0/LICENSE).
+
+The public source export ships the full upstream MIT notice unchanged in the
+BTC-specific license file. The isolated runtime installer copies it alongside
+the adapted source. This code license does not establish permission to
+redistribute pretrained checkpoint weights; weights remain excluded from the
+repository and releases as described in the BTC runtime documentation.

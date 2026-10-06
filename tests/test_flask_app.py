@@ -74,6 +74,7 @@ def load_ready_media(client, tmp_path, name="song.mp4"):
     )
     chord_data = ChordData()
     chord_data.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+    chord_data.set_rhythm_track("qm_barbeattracker", beat_times=[0.0])
     chord_data.save_to_file(file_repr.get("json"))
     response = client.post(
         "/load_file",
@@ -1197,6 +1198,7 @@ def test_enqueue_batch_uses_submitted_gui_order_and_next_limit(tmp_path):
     done_repr = FileRepr(str(tmp_path / "done.mp4"), create=True)
     done = ChordData()
     done.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+    done.set_rhythm_track("qm_barbeattracker", beat_times=[0.0])
     done.save_to_file(done_repr.get("json"))
     app_wrapper.analysis_queue.enqueue(tmp_path / "b.mp3")
 
@@ -1514,6 +1516,7 @@ def test_load_file_uses_existing_json_without_starting_analysis(tmp_path, monkey
     chord_data.set_base_chords([
         {"timestamp": 0.0, "chord": "C"},
     ])
+    chord_data.set_rhythm_track("qm_barbeattracker", beat_times=[0.0])
     chord_data.save_to_file(str(chord_dir / "song.json"))
     players = []
 
@@ -1624,6 +1627,7 @@ def test_song_sidecar_is_derived_beside_resolved_media_target(tmp_path):
     )
     chord_data = ChordData()
     chord_data.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+    chord_data.set_rhythm_track("qm_barbeattracker", beat_times=[0.0])
     chord_data.save_to_file(file_repr.get("json"))
 
     response = client.post(
@@ -1860,6 +1864,7 @@ def test_load_file_reads_legacy_analysis_directory(tmp_path, monkeypatch):
     legacy_dir.mkdir()
     chord_data = ChordData()
     chord_data.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+    chord_data.set_rhythm_track("qm_barbeattracker", beat_times=[0.0])
     chord_data.save_to_file(str(legacy_dir / "song.json"))
 
     class FakePlayer:
@@ -1996,6 +2001,7 @@ def test_analysis_worker_processes_one_queued_file(tmp_path):
             chord_data.set_base_chords([
                 {"timestamp": 0.0, "chord": "G"},
             ])
+            chord_data.set_rhythm_track("qm_barbeattracker", beat_times=[0.0])
             chord_data.save_to_file(str(self.data_dir / "song.json"))
 
     worker = AnalysisWorker(queue=queue, poll_seconds=0, analyzer_cls=FakeAnalyzer)

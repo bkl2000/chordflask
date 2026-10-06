@@ -17,7 +17,7 @@ def _setup_job(tmp_path, force=False):
 
 def _write_track(path, chord, *, transpose=0, prefer_flats=True, user_data=None):
     track = ChordData(prefer_flats=prefer_flats)
-    track.set_base_chords([{"timestamp": 0.0, "chord": chord}])
+    track.set_base_chords([{"timestamp": 0.0, "chord": chord}], beat_times=[0.0])
     track.transpose(transpose)
     track.user_data = user_data or {}
     track.save_to_file(path)
@@ -80,7 +80,7 @@ def test_worker_preserves_corrupt_existing_analysis_before_reanalysis(tmp_path):
 
         def process(self):
             track = ChordData()
-            track.set_base_chords([{"timestamp": 0.0, "chord": "C"}])
+            track.set_base_chords([{"timestamp": 0.0, "chord": "C"}], beat_times=[0.0])
             track.save_to_file(self.data_dir / "song.json")
 
     worker = AnalysisWorker(queue=queue, analyzer_cls=ValidAnalyzer)

@@ -20,11 +20,10 @@ from pathlib import Path
 from .analysis_queue import AnalysisQueue
 from .chordflask_config import (
     ANALYSIS_DIR_NAME,
-    DEFAULT_CHORD_TRACK,
-    DEFAULT_RHYTHM_TRACK,
     LEGACY_ANALYSIS_DIR_NAME,
 )
 from .filerepr import FileRepr
+from chordflask_base import ChordTrackRepository, is_canonical_analysis_complete
 
 
 def _worker_log(msg):
@@ -123,7 +122,11 @@ class AnalysisWorker:
         if os.path.exists(json_path):
             validation_error = self._json_validation_error(json_path)
             if validation_error is None:
-                _worker_log(f"Analysis already exists: {json_path}")
+                current_track = ChordTrackRepository().load(json_path)
+                if is_canonical_analysis_complete(current_track):
+                    _worker_log(f"Analysis already exists: {json_path}")
+                    return
+                self.__reanalyze(media, file_repr, discard_edits=discard_edits)
                 return
             backup = self._preserve_corrupt_json(json_path)
             _worker_log(
@@ -166,6 +169,10 @@ class AnalysisWorker:
                     f"Analysis created invalid chord data ({validation_error}); "
                     f"preserved as {backup}"
                 )
+            if not is_canonical_analysis_complete(
+                ChordTrackRepository().load(temporary_json)
+            ):
+                raise RuntimeError("Analysis did not create complete canonical tracks")
             for suffix in ("mp3", "xml", "mid"):
                 self.__replace_best_effort_artifact(
                     temporary_file_repr.get(suffix), file_repr.get(suffix)
@@ -199,7 +206,6 @@ class AnalysisWorker:
         ) as temp_name:
             temp_dir = Path(temp_name)
             temporary_file_repr = FileRepr(str(media), datapath=str(temp_dir))
-            self.__reuse_cached_mp3(current_file_repr, temporary_file_repr)
 
             analyzer_cls = self.analyzer_cls
             if analyzer_cls is None:
@@ -226,6 +232,10 @@ class AnalysisWorker:
                     f"Reanalysis created invalid merged chord data ({validation_error})"
                 )
 
+            if not is_canonical_analysis_complete(
+                ChordTrackRepository().load(temporary_json)
+            ):
+                raise RuntimeError("Analysis did not create complete canonical tracks")
             for suffix in ("mp3", "xml", "mid"):
                 self.__replace_best_effort_artifact(
                     temporary_file_repr.get(suffix),
@@ -237,99 +247,15 @@ class AnalysisWorker:
         _worker_log(f"Finished reanalysis: {current_json}")
 
     @staticmethod
-    def __reuse_cached_mp3(current_file_repr, temporary_file_repr):
-        current_mp3 = Path(current_file_repr.get("mp3"))
-        temporary_mp3 = Path(temporary_file_repr.get("mp3"))
-        if current_mp3.is_file():
-            temporary_mp3.symlink_to(current_mp3)
-
-    @staticmethod
     def __preserve_user_data(current_json, temporary_json, drop_edited=False):
-        from chordflask_base import (
-            USER_EDITED_RHYTHM_TRACK_ID,
-            USER_EDITED_TRACK_ID,
-            ChordTrackRepository,
-        )
+        from chordflask_base import ChordTrackRepository, preserve_analysis_user_data
 
         repository = ChordTrackRepository()
         current_track = repository.load(current_json)
         replacement_track = repository.load(temporary_json)
-
-        edited_metadata = None
-        edited_rhythm_id = None
-        if current_track.has_chord_track(USER_EDITED_TRACK_ID):
-            metadata = current_track.chord_track_metadata(USER_EDITED_TRACK_ID)
-            sources = metadata.get("sources")
-            if isinstance(sources, dict) and isinstance(sources.get("rhythm"), str):
-                edited_rhythm_id = sources["rhythm"]
-
-            if not drop_edited:
-                if not edited_rhythm_id or not current_track.has_rhythm_track(
-                    edited_rhythm_id
-                ):
-                    raise RuntimeError(
-                        "Cannot safely preserve Edited chords: their rhythm "
-                        "source is missing or invalid"
-                    )
-                edited_metadata = metadata
-                if edited_rhythm_id == DEFAULT_RHYTHM_TRACK:
-                    if current_track.has_rhythm_track(USER_EDITED_RHYTHM_TRACK_ID):
-                        raise RuntimeError(
-                            "Cannot safely preserve Edited chords: reserved Edited "
-                            "rhythm snapshot already exists"
-                        )
-                    rhythm = current_track.rhythm_track_data(DEFAULT_RHYTHM_TRACK)
-                    snapshot_metadata = rhythm.get("metadata", {})
-                    snapshot_metadata.update({
-                        "display_name": "Edited rhythm snapshot",
-                        "snapshot_for": USER_EDITED_TRACK_ID,
-                        "source_track_id": DEFAULT_RHYTHM_TRACK,
-                    })
-                    rhythm["metadata"] = snapshot_metadata
-                    replacement_track.set_rhythm_track(
-                        USER_EDITED_RHYTHM_TRACK_ID, **rhythm
-                    )
-                    edited_metadata["sources"]["rhythm"] = (
-                        USER_EDITED_RHYTHM_TRACK_ID
-                    )
-                    edited_rhythm_id = USER_EDITED_RHYTHM_TRACK_ID
-
-        for track_id in current_track.available_chord_track_ids:
-            if track_id == DEFAULT_CHORD_TRACK:
-                continue
-            if drop_edited and track_id == USER_EDITED_TRACK_ID:
-                continue
-            metadata = (
-                edited_metadata
-                if track_id == USER_EDITED_TRACK_ID and edited_metadata is not None
-                else current_track.chord_track_metadata(track_id)
-            )
-            replacement_track.set_chord_track(
-                track_id,
-                current_track.chord_track_chords(track_id),
-                metadata=metadata,
-            )
-        for track_id in current_track.available_rhythm_track_ids:
-            if track_id == DEFAULT_RHYTHM_TRACK:
-                continue
-            if (
-                drop_edited
-                and track_id == USER_EDITED_RHYTHM_TRACK_ID
-                and edited_rhythm_id == USER_EDITED_RHYTHM_TRACK_ID
-            ):
-                continue
-            rhythm = current_track.rhythm_track_data(track_id)
-            replacement_track.set_rhythm_track(track_id, **rhythm)
-
-        for track_id in current_track.available_audio_track_ids:
-            replacement_track.set_audio_track(
-                track_id,
-                current_track.audio_track_data(track_id),
-            )
-
-        replacement_track.transpose(current_track.transpose_semitones)
-        replacement_track.set_prefer_flats(current_track.prefer_flats)
-        replacement_track.user_data = current_track.user_data
+        preserve_analysis_user_data(
+            current_track, replacement_track, drop_edited=drop_edited
+        )
         repository.save(replacement_track, temporary_json)
 
     @staticmethod

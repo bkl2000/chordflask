@@ -71,6 +71,7 @@ def _write_analyzed_song(tmp_path, *, name="song.mp3", with_audio=True, set_data
     analysis_dir = tmp_path / ".chordflask"
     analysis_dir.mkdir(exist_ok=True)
     data = ChordData()
+    data.set_base_chords([{"timestamp": 0.0, "chord": "C"}], beat_times=[0.0])
     if with_audio:
         data.set_audio_track(STEMS_AUDIO_SET_ID, set_data or _audio_set(_stems_rel_dir()))
     data.save_to_file(analysis_dir / f"{media.stem}.json")

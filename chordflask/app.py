@@ -7,6 +7,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import math
 import os
+import re
 import secrets
 import socket
 import sys
@@ -319,10 +320,15 @@ class FlaskMP4App:
         directory = self._existing_directory(dirname)
         if not isinstance(filename, str) or not filename.strip():
             raise ValueError("filename must be a non-empty string")
-        filename = filename.split(" | ", 1)[0]
         if Path(filename).name != filename or filename in {".", ".."}:
             raise ValueError("filename must not contain a path")
         requested_media = directory / filename
+        if not requested_media.exists():
+            # Only decode the legacy listing's trailing size when no exact
+            # entry exists; literal separators belong to the filename.
+            legacy = re.fullmatch(r"(.+) \| [0-9]+M", filename)
+            if legacy is not None:
+                requested_media = directory / legacy.group(1)
         if requested_media.suffix.lower() not in SUPPORTED_MEDIA_SUFFIXES:
             raise ValueError("Only .mp3, .mp4, and .webm files are supported")
         if not requested_media.is_file():
@@ -369,6 +375,16 @@ class FlaskMP4App:
             return True
         except (OSError, UnicodeError, ValueError, TypeError, KeyError) as error:
             logging.warning("Invalid current analysis %s: %s", json_path, error)
+            return False
+
+    @staticmethod
+    def __analysis_is_complete(json_path):
+        from chordflask_base import ChordTrackRepository, is_canonical_analysis_complete
+
+        try:
+            return is_canonical_analysis_complete(ChordTrackRepository().load(json_path))
+        except (OSError, UnicodeError, ValueError, TypeError, KeyError) as error:
+            logging.warning("Cannot load current analysis %s: %s", json_path, error)
             return False
 
     def resource_path(self, relative_path):
@@ -685,7 +701,7 @@ class FlaskMP4App:
         for media in ordered_media:
             file_repr = FileRepr(str(media), datapath=ANALYSIS_DIR_NAME)
             json_path = file_repr.get("json")
-            if os.path.exists(json_path) and self.__analysis_is_valid(json_path):
+            if os.path.exists(json_path) and self.__analysis_is_complete(json_path):
                 analyzed_count += 1
             else:
                 candidates.append(media)
@@ -752,17 +768,20 @@ class FlaskMP4App:
         analysis_dir = os.path.join(dirname, ANALYSIS_DIR_NAME)
         requested_file_repr = FileRepr(str(media), datapath=analysis_dir)
 
-        # Queue missing or invalid analysis and keep the currently playing
-        # media/player active. The worker preserves an invalid existing JSON
-        # before rebuilding it.
+        # Queue missing, invalid or incomplete canonical analysis while keeping
+        # the current player active. The worker preserves valid partial tracks
+        # and backs up invalid JSON before rebuilding it.
         analysis_exists = os.path.exists(requested_file_repr.get("json"))
         analysis_valid = (
             analysis_exists
             and self.__analysis_is_valid(requested_file_repr.get("json"))
         )
-        if not analysis_valid:
+        analysis_complete = analysis_valid and self.__analysis_is_complete(
+            requested_file_repr.get("json")
+        )
+        if not analysis_complete:
             queue_status = self.analysis_queue.enqueue(requested_file_repr.get())
-            reason = "invalid" if analysis_exists else "missing"
+            reason = "incomplete" if analysis_valid else "invalid" if analysis_exists else "missing"
             logging.info(
                 f"Queued {reason} analysis for {filename}: {queue_status}"
             )

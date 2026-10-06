@@ -6,7 +6,11 @@ behavior. This service does not turn failed analysis into an empty result.
 
 import os
 
-from chordflask_base import ChordData
+from chordflask_base import (
+    ChordData,
+    is_canonical_analysis_complete,
+    preserve_analysis_user_data,
+)
 
 
 class ChordAnalysisService:
@@ -25,14 +29,19 @@ class ChordAnalysisService:
         self.exporter = exporter
 
     def ensure_analyzed(self, file_repr, use_madmom=False, export_midi=True):
+        existing = None
         if os.path.exists(file_repr.get("json")):
-            print(f"Chord analysis already exists: {file_repr.get('json')}")
-            chord_data = ChordData(prefer_flats=True, use_unicode=False)
-            chord_data.load_from_file(file_repr.get("json"))
-            return chord_data
+            existing = ChordData(file_repr.get("json"))
+            if is_canonical_analysis_complete(existing):
+                print(f"Chord analysis already exists: {file_repr.get('json')}")
+                return existing
 
         analysis_audio = self.converter.ensure_mp3(file_repr)
         chord_data = self.analyzer.analyze(analysis_audio, use_madmom=use_madmom)
+        if not use_madmom and not is_canonical_analysis_complete(chord_data):
+            raise RuntimeError("Analysis did not create complete canonical tracks")
+        if existing is not None:
+            preserve_analysis_user_data(existing, chord_data)
         if export_midi:
             self.exporter.write_midi_and_musicxml(chord_data, file_repr)
         chord_data.save_to_file(file_repr.get("json"))

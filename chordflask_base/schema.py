@@ -12,6 +12,7 @@ means both sides import one contract instead of two drifted copies.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -46,6 +47,11 @@ class SchemaV3Error(ValueError):
 
 def analysis_json_path(media_path: Path) -> Path:
     return media_path.parent / ANALYSIS_DIR_NAME / f"{media_path.stem}.json"
+
+
+def chord_input_sha256(chords: list[dict[str, Any]]) -> str:
+    """Identify chord input with the historical V3 sorted-key JSON encoding."""
+    return hashlib.sha256(json.dumps(chords, sort_keys=True).encode()).hexdigest()
 
 
 def _is_finite_number(value: Any) -> bool:
