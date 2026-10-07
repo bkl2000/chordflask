@@ -40,6 +40,11 @@ space each category uses (analysis JSON, cached audio, MusicXML, MIDI,
 leadsheet exports, temporary files, etc.) and its status. It never deletes
 anything and never follows symlinks.
 
+Per-song `journals/*.journal.json` sidecars are **protected user journals**, separate from
+generated analysis. Generic cleanup preserves them, and analysis validation and
+schema migration skip them even if malformed. See [Journal](JOURNAL.md) for the
+schema and explicit whole-journal removal; there is no generic journal cleanup.
+
 ## Storage cleanup
 
 ```bash

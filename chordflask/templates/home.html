@@ -988,6 +988,52 @@
       transform: rotate(90deg);
     }
 
+    .song-panel-controls { display: flex; }
+    .song-panel-controls #filesToggle { flex: 1; }
+    #journalToggle { width: auto; flex: 0 0 auto; }
+    #journalPanel { display: none; }
+    @media (max-width: 1023px) {
+      #journalToggle, #journalPanel { display: none !important; }
+    }
+    .journal-panel {
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      max-height: 300px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+    }
+    .journal-panel > * { flex-shrink: 0; min-width: 0; }
+    .journal-panel [hidden] { display: none !important; }
+    .journal-panel textarea { width: 100%; min-height: 48px; resize: vertical; }
+    .journal-panel button { height: 24px; padding: 2px 8px; font-size: 12px; }
+    .journal-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+    .journal-title { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+    #journalSong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+    .journal-toolbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .journal-toolbar button,
+    .journal-actions button { background: var(--panel); border-color: var(--line); color: var(--accent-dark); }
+    .journal-toolbar button:hover:not(:disabled),
+    .journal-actions button:hover:not(:disabled) { background: var(--panel-soft); border-color: var(--accent); }
+    .journal-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; grid-column: 2; }
+    .journal-actions button { color: var(--muted); font-size: 11px; padding: 2px 7px; }
+    .journal-panel .journal-time { min-height: 22px; padding: 1px 5px; border-color: transparent; background: transparent; color: var(--accent-dark); text-decoration: underline; font-variant-numeric: tabular-nums; }
+    .journal-panel .journal-time.current { background: var(--accent-dark); color: #fff; }
+    .journal-fields { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .journal-fields input[type="number"] { width: 110px; }
+    #journalForm { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+    #journalEntries { display: flex; flex-direction: column; gap: 6px; }
+    .journal-entry { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 4px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel-soft); padding: 6px 10px; min-width: 0; }
+    .journal-entry-heading { display: flex; flex-wrap: wrap; align-items: center; align-content: start; gap: 6px; grid-column: 1; grid-row: 1 / span 2; color: var(--muted); font-size: 11px; font-weight: 400; min-height: 22px; }
+    .journal-scope { color: var(--text); font-weight: 700; }
+    .journal-entry p { grid-column: 2; margin: 0; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100ch; }
+    #journalStatus { color: var(--muted); flex-basis: 100%; }
+    #journalStatus:empty { display: none; }
+
     .file-panel {
       display: none;
       flex-direction: column;
@@ -1454,6 +1500,13 @@
 
     /* The 801–1023px tablet layout retains its existing ratio and controls. */
     @media (min-width: 1024px) {
+      .song-bar.journal-open #journalPanel { display: flex; }
+      .song-panel-controls { justify-content: center; gap: 2px; padding: 2px 10px; }
+      .song-panel-controls #filesToggle { flex: 0 0 auto; width: auto; }
+      .song-panel-controls .files-toggle { height: 26px; border-bottom: 2px solid transparent; }
+      .song-panel-controls .files-toggle[aria-expanded="true"] { color: var(--accent-dark); background: var(--panel-soft); border-bottom-color: var(--accent-dark); }
+      .song-bar.journal-open #journalToggle .files-toggle-chevron { transform: rotate(90deg); }
+      .song-bar.open #journalToggle .files-toggle-chevron { transform: none; }
       .chord-tools-row {
         flex-direction: column;
         align-items: stretch;
@@ -2439,10 +2492,54 @@
   </div>
 
   <section class="song-bar">
+    <div class="song-panel-controls">
     <button id="filesToggle" type="button" class="files-toggle" aria-expanded="false">
       <span class="files-toggle-label">Files</span>
       <span class="files-toggle-chevron" aria-hidden="true">&#9656;</span>
     </button>
+    <button id="journalToggle" type="button" class="files-toggle" aria-expanded="false"
+            aria-controls="journalPanel" onclick="toggleJournalPanel()">
+      <span class="files-toggle-label">Journal</span>
+      <span class="files-toggle-chevron" aria-hidden="true">&#9656;</span>
+    </button>
+    </div>
+    <div id="journalPanel" class="journal-panel" aria-label="Song Journal">
+      <div class="journal-toolbar">
+        <div class="journal-title"><strong>Journal</strong><span id="journalSong"></span></div>
+        <div class="journal-toolbar-actions">
+          <button id="journalAdd" type="button" onclick="openJournalEntry()">+ Add note</button>
+          <button id="journalAddPosition" type="button" onclick="openJournalEntry(null, true)">+ Add at current position</button>
+        </div>
+        <span id="journalStatus" role="status"></span>
+      </div>
+      <form id="journalForm" hidden onsubmit="saveJournalEntry(event)">
+        <div class="journal-fields">
+          <label>Position (seconds, optional) <input id="journalTimestamp" type="number" min="0" step="any"
+                   placeholder="Whole song" title="Leave empty for a song-wide entry"></label>
+          <label>Category <select id="journalCategory" onchange="updateJournalFields()">
+            <option value="note">Note</option><option value="info">Info</option><option value="agent">Agent</option>
+          </select></label>
+          <label id="journalKindLabel" hidden>Type <select id="journalKind" onchange="updateJournalFields()">
+            <option value="general">General</option><option value="chord">Chord</option>
+            <option value="lyrics">Lyrics</option><option value="rhythm">Rhythm</option>
+          </select></label>
+          <label id="journalExpectedLabel" hidden>Expected chord (optional)
+            <input id="journalExpected" type="text" maxlength="100"></label>
+        </div>
+        <label><span id="journalTextLabel">Text</span>
+          <textarea id="journalText" required maxlength="10000"></textarea></label>
+        <div id="journalAgentFields" hidden>
+          <label>A / resolution (optional, short summary)
+            <textarea id="journalAnswer" maxlength="2000"></textarea></label>
+          <label><input id="journalResolved" type="checkbox"> Resolved</label>
+        </div>
+        <div class="journal-fields">
+          <button id="journalSave" type="submit">Save</button>
+          <button type="button" onclick="closeJournalEntry()">Cancel</button>
+        </div>
+      </form>
+      <div id="journalEntries"></div>
+    </div>
     <div class="file-panel" id="filePanel">
       <div class="song-tools-head">
         <div class="directory-tools">
@@ -2827,9 +2924,221 @@
       const shouldOpen = open === undefined
         ? !songBar.classList.contains('open')
         : open;
+      if (shouldOpen) {
+        songBar.classList.toggle('journal-open', false);
+        document.getElementById('journalToggle').setAttribute('aria-expanded', 'false');
+      }
       songBar.classList.toggle('open', shouldOpen);
       filesToggle.setAttribute('aria-expanded', String(shouldOpen));
       if (shouldOpen) scrollCurrentFileIntoView();
+    }
+
+    let journalEntries = [];
+    let journalEditingId = null;
+    let journalGeneration = 0;
+    let journalBusy = false;
+    let journalReady = false;
+
+    function toggleJournalPanel() {
+      if (!window.matchMedia('(min-width: 1024px)').matches) return;
+      const open = !songBar.classList.contains('journal-open');
+      toggleFilesPanel(false);
+      songBar.classList.toggle('journal-open', open);
+      document.getElementById('journalToggle').setAttribute('aria-expanded', String(open));
+      if (open) resetJournal();
+    }
+
+    function closeJournalEntry() {
+      journalEditingId = null;
+      document.getElementById('journalForm').hidden = true;
+      updateJournalHighlight();
+    }
+
+    function resetJournal() {
+      journalGeneration += 1;
+      journalEntries = [];
+      journalBusy = false;
+      journalReady = false;
+      closeJournalEntry();
+      document.getElementById('journalSong').textContent = loadedFileName || 'Journal';
+      document.getElementById('journalStatus').textContent = '';
+      renderJournal();
+      if (songBar.classList.contains('journal-open') && loadedFileName) journalRequest('load');
+    }
+
+    async function journalRequest(action, extra = {}) {
+      if (!loadedFileName || journalBusy) return false;
+      const generation = journalGeneration;
+      journalBusy = true;
+      renderJournal();
+      const status = document.getElementById('journalStatus');
+      status.textContent = action === 'load' ? 'Loading…' : 'Saving…';
+      try {
+        const response = await fetch('/journal', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({dirname: loadedFileDirectory, filename: loadedFileName, action, ...extra}),
+        });
+        const data = await response.json();
+        if (generation !== journalGeneration) return false;
+        if (!response.ok) throw new Error(data.error || 'Journal request failed');
+        journalEntries = data.entries;
+        journalReady = true;
+        status.textContent = '';
+        return true;
+      } catch (error) {
+        if (generation === journalGeneration) status.textContent = error.message;
+        return false;
+      } finally {
+        if (generation === journalGeneration) {
+          journalBusy = false;
+          renderJournal();
+        }
+      }
+    }
+
+    function updateJournalFields() {
+      const agent = document.getElementById('journalCategory').value === 'agent';
+      document.getElementById('journalKindLabel').hidden = !agent;
+      document.getElementById('journalAgentFields').hidden = !agent;
+      document.getElementById('journalExpectedLabel').hidden = !agent
+        || document.getElementById('journalKind').value !== 'chord';
+      document.getElementById('journalTextLabel').textContent = agent ? 'Q / problem description' : 'Text';
+    }
+
+    function openJournalEntry(entry = null, atCurrentPosition = false) {
+      if (!journalReady || journalBusy) return;
+      journalEditingId = entry ? entry.id : null;
+      // Audio playback seconds, captured once on Add; never updated by playback callbacks.
+      document.getElementById('journalTimestamp').value = entry
+        ? (entry.timestamp ?? '') : atCurrentPosition ? video.currentTime : '';
+      document.getElementById('journalCategory').value = entry ? entry.category : 'note';
+      document.getElementById('journalKind').value = entry?.kind || 'general';
+      document.getElementById('journalText').value = entry ? (entry.text || entry.question) : '';
+      document.getElementById('journalAnswer').value = entry?.answer || '';
+      document.getElementById('journalExpected').value = entry?.expected_chord || '';
+      document.getElementById('journalResolved').checked = entry?.resolved || false;
+      updateJournalFields();
+      document.getElementById('journalForm').hidden = false;
+      document.querySelectorAll('#journalEntries .journal-time.current').forEach(time => {
+        time.classList.remove('current');
+      });
+      document.getElementById('journalText').focus();
+    }
+
+    async function saveJournalEntry(event) {
+      event.preventDefault();
+      const generation = journalGeneration;
+      const category = document.getElementById('journalCategory').value;
+      const timestamp = document.getElementById('journalTimestamp').value;
+      const entry = {
+        timestamp: timestamp === '' ? null : Number(timestamp), category,
+      };
+      if (category === 'agent') {
+        Object.assign(entry, {
+          kind: document.getElementById('journalKind').value,
+          question: document.getElementById('journalText').value,
+          answer: document.getElementById('journalAnswer').value,
+          expected_chord: document.getElementById('journalExpected').value,
+          resolved: document.getElementById('journalResolved').checked,
+        });
+      } else entry.text = document.getElementById('journalText').value;
+      if (await journalRequest(journalEditingId ? 'edit' : 'add', {id: journalEditingId, entry})
+          && generation === journalGeneration) closeJournalEntry();
+    }
+
+    async function deleteJournalEntry(entry) {
+      if (!confirm('Delete this journal entry?')) return;
+      const generation = journalGeneration;
+      if (await journalRequest('delete', {id: entry.id}) && generation === journalGeneration) closeJournalEntry();
+    }
+
+    function journalTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes}:${(seconds % 60).toFixed(1).padStart(4, '0')}`;
+    }
+
+    function updateJournalHighlight() {
+      if (!songBar.classList.contains('journal-open')
+          || !window.matchMedia('(min-width: 1024px)').matches
+          || !document.getElementById('journalForm').hidden) return;
+      const panel = document.getElementById('journalPanel').getBoundingClientRect();
+      for (const time of document.querySelectorAll('#journalEntries .journal-time')) {
+        const timestamp = Number(time.dataset.timestamp);
+        // Playback seconds, without Grid lookahead: [timestamp, timestamp + 2).
+        let current = video.currentTime >= timestamp && video.currentTime < timestamp + 2;
+        if (current) {
+          const rect = time.getBoundingClientRect();
+          current = rect.bottom > Math.max(0, panel.top)
+            && rect.top < Math.min(window.innerHeight, panel.bottom);
+        }
+        if (time.classList.contains('current') !== current) time.classList.toggle('current', current);
+      }
+    }
+
+    function renderJournal() {
+      document.getElementById('journalAdd').disabled = !journalReady || journalBusy;
+      document.getElementById('journalAddPosition').disabled = !journalReady || journalBusy;
+      document.getElementById('journalSave').disabled = !journalReady || journalBusy;
+      const list = document.getElementById('journalEntries');
+      list.replaceChildren();
+      if (!journalEntries.length) list.textContent = loadedFileName ? 'No entries' : 'Load a song to use Journal';
+      for (const entry of journalEntries) {
+        const row = document.createElement('div');
+        row.className = 'journal-entry';
+        const heading = document.createElement('strong');
+        heading.className = 'journal-entry-heading';
+        if (entry.timestamp !== null) {
+          const time = document.createElement('button');
+          time.type = 'button';
+          time.className = 'journal-time';
+          time.dataset.timestamp = entry.timestamp;
+          time.textContent = journalTime(entry.timestamp);
+          time.setAttribute('aria-label', `Seek to ${time.textContent}`);
+          time.addEventListener('click', () => { video.currentTime = entry.timestamp; });
+          heading.appendChild(time);
+        } else {
+          const scope = document.createElement('span');
+          scope.className = 'journal-scope';
+          scope.textContent = 'Song';
+          heading.appendChild(scope);
+        }
+        const label = document.createElement('span');
+        label.textContent = entry.category
+          + (entry.kind ? ` / ${entry.kind}${entry.resolved ? ' · Resolved' : ' · Open'}` : '');
+        heading.appendChild(label);
+        row.appendChild(heading);
+        const text = document.createElement('p');
+        text.textContent = entry.text || `Q: ${entry.question}`;
+        row.appendChild(text);
+        if (entry.expected_chord) {
+          const expected = document.createElement('p');
+          expected.textContent = `Expected chord: ${entry.expected_chord}`;
+          row.appendChild(expected);
+        }
+        if (entry.answer) {
+          const answer = document.createElement('p');
+          answer.textContent = `A: ${entry.answer}`;
+          row.appendChild(answer);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'journal-actions';
+        for (const [label, action] of [
+          ['Edit', () => openJournalEntry(entry)],
+          ['Delete', () => deleteJournalEntry(entry)],
+          ...(entry.category === 'agent' ? [[entry.resolved ? 'Reopen' : 'Resolve',
+            () => journalRequest('resolve', {id: entry.id, resolved: !entry.resolved})]] : []),
+        ]) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = label;
+          button.disabled = journalBusy;
+          button.addEventListener('click', action);
+          actions.appendChild(button);
+        }
+        row.appendChild(actions);
+        list.appendChild(row);
+      }
+      updateJournalHighlight();
     }
 
     function updatePlayPauseButton() {
@@ -4633,6 +4942,7 @@
         loadedFileName = filename;
         loadedFileDirectory = dirname;
         updateCurrentFileRow(true);
+        resetJournal();
         loadedMediaPath = data.mp4_file || requestedPath;
         loadedMediaIdentity = requestedPath;
         loadedAnalysisValid = data.analysis_valid === true;
@@ -5333,6 +5643,7 @@
       if (isNaN(video.currentTime)) {
         return;
       }
+      updateJournalHighlight();
       const gridMode = isDesktopChordGrid() ? 'desktop' : 'compact';
       if (playbackFallbackData && playbackFallbackData.gridMode !== gridMode) {
         invalidatePlaybackFallbackGeneration();

@@ -39,6 +39,7 @@ from .chordflask_config import (
     SUPPORTED_MEDIA_SUFFIXES,
 )
 from .filerepr import FileRepr  # Import FileRepr class for file path management
+from .journal import load_journal, update_journal
 from .ffmpeg_runtime import require_system_ffmpeg
 from .media_library import preferred_media_files
 from .media_preparation import (
@@ -520,6 +521,7 @@ class FlaskMP4App:
         self.app.add_url_rule('/enqueue_batch', 'enqueue_batch', self.enqueue_batch, methods=['POST'])
         self.app.add_url_rule('/load_file', 'load_file', self.load_file, methods=['POST'])
         self.app.add_url_rule('/reanalyze', 'reanalyze', self.reanalyze, methods=['POST'])
+        self.app.add_url_rule('/journal', 'journal', self.journal, methods=['POST'])
         self.app.add_url_rule('/video', 'serve_video', self.serve_video)
         self.app.add_url_rule('/stem/<stem_name>', 'serve_stem', self.serve_stem)
         self.app.add_url_rule('/prepare_stems', 'prepare_stems', self.prepare_stems, methods=['POST'])
@@ -856,6 +858,34 @@ class FlaskMP4App:
             'song_view_available': song_view_available,
             **player_state,
         })
+
+    def journal(self):
+        """Read or explicitly mutate only the requested recording's user sidecar."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        try:
+            media = self._existing_media_file(data.get('dirname'), data.get('filename'))
+        except (ValueError, FileNotFoundError, PermissionError) as error:
+            return self._path_error(error)
+        files = FileRepr(media)
+        if not self._is_allowed_directory(Path(files.journal_path).resolve().parent):
+            return self._path_error(PermissionError("Journal is outside allowed media roots"))
+        try:
+            action = data.get('action', 'load')
+            if action == 'load':
+                result = load_journal(files.journal_path)
+            else:
+                result = update_journal(
+                    files.journal_path, action, data.get('entry'),
+                    data.get('id'), data.get('resolved'),
+                )
+            return jsonify(result)
+        except (ValueError, UnicodeError) as error:
+            return jsonify(error=str(error)), 400
+        except OSError:
+            logging.exception("Journal storage failed for %s", media)
+            return jsonify(error="Journal could not be read or saved"), 500
 
     def reanalyze(self):
         """Queue a safe refresh of the currently loaded media analysis."""

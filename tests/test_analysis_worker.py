@@ -12,6 +12,7 @@ from chordflask.analysis_worker import AnalysisWorker, WorkerSupervisor
 from chordflask_base import ChordData
 from chordflask.chordflask_config import ANALYSIS_DIR_NAME
 from chordflask.filerepr import FileRepr
+from chordflask.journal import update_journal
 
 
 class FakeProcess:
@@ -166,6 +167,10 @@ def test_forced_reanalysis_replaces_builtins_and_preserves_other_tracks(tmp_path
     analysis_dir = tmp_path / ANALYSIS_DIR_NAME
     analysis_dir.mkdir()
     current_repr = FileRepr(str(media), datapath=str(analysis_dir))
+    update_journal(current_repr.journal_path, "add", {
+        "timestamp": 12.3, "category": "note", "text": "Keep across reanalysis",
+    })
+    journal_before = Path(current_repr.journal_path).read_bytes()
 
     current = ChordData()
     current.set_chord_track(
@@ -210,6 +215,8 @@ def test_forced_reanalysis_replaces_builtins_and_preserves_other_tracks(tmp_path
         queue=AnalysisQueue(tmp_path / "queue"), analyzer_cls=FreshAnalyzer
     )
     worker._analyze(str(media), force=True)
+
+    assert Path(current_repr.journal_path).read_bytes() == journal_before
 
     loaded = ChordData(current_repr.get("json"))
     assert loaded.chord_track_chords("chordino") == [

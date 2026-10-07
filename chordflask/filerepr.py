@@ -64,6 +64,11 @@ class FileRepr:
         return self.get("json")
 
     @property
+    def journal_path(self):
+        # A separate namespace cannot collide with any stem-based analysis file.
+        return str(self._data_path / "journals" / f"{self._media_path.name}.journal.json")
+
+    @property
     def mp3_path(self):
         return self.get("mp3")
 

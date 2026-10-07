@@ -312,6 +312,8 @@ state coordination, not authentication or hardened multi-user isolation.
   transformed by Grid display state.
 - Templates and runtime assets remain package-owned and available in editable,
   installed, and frozen operation.
+- Per-song [Journal](JOURNAL.md) sidecars are optional user-authored data,
+  independent of analysis. Reanalysis and generic maintenance preserve them.
 - Existing routes, browser behavior, persistence formats, security assumptions,
   and standalone/publication safety gates remain unchanged unless a task
   explicitly changes them.

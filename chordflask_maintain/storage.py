@@ -76,6 +76,9 @@ def _classify_entry(entry: Path, media_dir: Path) -> tuple[str, str]:
 
     name = entry.name
 
+    if name == "journals" and entry.is_dir():
+        return "user journals", PROTECTED
+
     if entry.is_dir():
         if name.startswith(".") and (".analyze-" in name or ".reanalyze-" in name):
             return "orphan temp dirs", REVIEW
@@ -192,6 +195,7 @@ def inspect_storage(media_dir) -> StorageInspection:
         categories[key]
         for key in (
             "analysis JSON",
+            "user journals",
             "cached audio",
             "unverified audio",
             "MusicXML",
