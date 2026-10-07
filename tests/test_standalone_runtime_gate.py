@@ -100,3 +100,12 @@ def test_unrelated_torch_compatibility_shims_are_allowed():
     )
 
     assert offenders == []
+
+
+def test_packaging_rejects_research_and_external_binaries():
+    names = (
+        "training.pipeline", "chordflask_v3.analyzer", "chordflask_v4.model",
+        "listening_lab.server", ".agents.TRACE",
+        "imageio_ffmpeg/binaries/ffmpeg-linux64-v7", "vendor/vamp/linux-x86_64/chordino.so",
+    )
+    assert module.find_offenders(_listing(*names)) == list(names)

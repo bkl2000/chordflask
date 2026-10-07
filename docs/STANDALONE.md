@@ -35,6 +35,8 @@ From a ChordFlask source directory on a supported system:
 ```bash
 make setup
 make standalone
+# Alternatively, build the same bundle plus a Debian package:
+make deb
 ```
 
 The build first runs the complete project checks. It then creates an archive
@@ -51,7 +53,27 @@ Run the freshly built local copy with:
 make standalone-run
 ```
 
-## Install on the target machine
+## Debian package
+
+`make deb` builds the canonical standalone and creates
+`flask/dist/<standalone-release-name>.deb` with `dpkg-deb`, without root or
+installation. To wrap an already built bundle, use
+`make deb STANDALONE_DIR=/path/to/standalone-dir`.
+
+On a compatible Debian / Ubuntu / Mint machine:
+
+```bash
+sudo apt install ./<release-package>.deb
+/opt/chordflask/install_vamp.sh
+chordflask
+```
+
+Remove with `sudo apt remove chordflask`. The complete bundle lives in
+`/opt/chordflask`; commands are linked into `/usr/bin`. The package has the same
+glibc constraints and external Vamp requirement as the archive. It does not
+install the optional helper virtual environments.
+
+## Install the portable archive on the target machine
 
 Copy the archive (for example `chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz`)
 to the target. Then run:
@@ -126,7 +148,7 @@ before exposing it beyond localhost.
 | Display romanization already stored in `.cho` | Included | Included |
 | BTC model runtime and generation | Optional external BTC venv | Lightweight connector bundled; model runtime remains external |
 | Demucs runtime/model | Optional external Demucs venv | Not bundled; an existing compatible external runtime can serve desktop Prepare |
-| Maintenance and separate helper commands | Installed console commands | Not shipped as separate commands |
+| Maintenance and separate helper commands | Installed console commands | Supplied scripts use configured external virtual environments |
 
 The standalone can use previously generated analysis and `.cho` data that
 travel with the media collection. It can also prepare Lyrics or BTC when their
@@ -200,6 +222,12 @@ plugin installer and diagnostic procedure are documented in
 - `VERSION` — human-readable copy of the embedded build identity (version, build time, commit)
 - `README.md` — this guide
 - `THIRD_PARTY_NOTICES.md` — dependency licences and provenance
+- `LICENSE` and `LIBERATION-FONTS-LICENSE.txt` — application and bundled font licenses
+- `chordflask-analyze`, `chordflask-demucs`, `chordflask-export`,
+  `chordflask-maintain`, `chordflask-genlyrics` — the existing helper scripts;
+  these select their configured/default external virtual environment, preserve
+  the caller's directory and arguments, and report missing runtimes explicitly.
+  Copying or installing these scripts does not bundle their external runtimes.
 
 The standalone reads and displays same-stem lowercase `.cho` song sheets in
 the Lyrics view, including chord-follow synchronization. It does not include

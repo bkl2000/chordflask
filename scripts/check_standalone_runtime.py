@@ -25,6 +25,8 @@ MODEL_WEIGHT = re.compile(r"\.(?:pt|pth|th|onnx|safetensors|ckpt)$")
 MODEL_CACHE = re.compile(r"(?:^|/)(?:htdemucs|htdemucs_ft|mdx_extra)(?:[./-]|$)")
 EXTERNAL_LYRICS_PACKAGE = re.compile(r"^chordflask_lyrics(?:[./-]|$)")
 BTC_MODEL_PACKAGE = re.compile(r"^chordflask_btc[./-]model(?:[./-]|$)")
+PRIVATE_RESEARCH = re.compile(r"^(?:chordflask_v4|training|listening_lab|listening|[.]agents)(?:[./-]|$)")
+PROHIBITED_BINARY = re.compile(r"(?:imageio_ffmpeg/binaries/[^/]*ffmpeg[^/]*|(?:vamp_plugins|vendor/vamp)/.*[.]so)$")
 PRIVATE_V3_PACKAGE = re.compile(r"^chordflask_v3(?:[./-]|$)")
 ROMANIZATION_PACKAGE = re.compile(r"^(?:pythainlp|onnxruntime|tltk)(?:[./-]|$)")
 
@@ -58,6 +60,8 @@ def find_offenders(listing: str) -> list[str]:
             or EXTERNAL_LYRICS_PACKAGE.match(name)
             or BTC_MODEL_PACKAGE.match(name)
             or PRIVATE_V3_PACKAGE.match(name)
+            or PRIVATE_RESEARCH.match(name)
+            or PROHIBITED_BINARY.search(name)
             or ROMANIZATION_PACKAGE.match(name)
         ):
             offenders.append(name)

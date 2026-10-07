@@ -24,7 +24,7 @@ EXTRA_PYTHONPATH ?=
 -include $(ROOT_DIR)/.extra-checks.mk
 
 .PHONY: help all install setup setup-runtime setup-dev setup-recreate \
-	fix-permissions test check lint run worker standalone standalone-run \
+	fix-permissions test check lint run worker standalone deb standalone-run \
 	plugins analyze demucs export maintain setup-lyrics lyrics-check setup-btc \
 	btc-check setup-demucs demucs-check status clean clean-report
 
@@ -55,6 +55,7 @@ help:
 		'  make setup-demucs        Set up the optional Demucs runtime [installs]' \
 		'  make demucs-check        Diagnose the optional Demucs runtime' \
 		'  make standalone          Check, build, and package the standalone release [long]' \
+		'  make deb                 Package the standalone runtime as a Debian .deb [long]' \
 		'  make standalone-run      Start an already-built standalone release' \
 		'  make plugins             Install Vamp plugins into the user plugin directory [network]' \
 		'  make status              Show Git status (read-only)' \
@@ -152,6 +153,9 @@ demucs-check:
 
 standalone: check
 	@PATH="$(VENV_DIR)/bin:$$PATH" bash "$(ROOT_DIR)/flask/build_standalone.sh"
+
+deb:
+	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/flask/build_deb.sh" $(if $(STANDALONE_DIR),--standalone-dir "$(STANDALONE_DIR)")
 
 standalone-run:
 	@release_name=$$(cat "$(ROOT_DIR)/flask/dist/.latest-release" 2>/dev/null || true); \

@@ -64,7 +64,7 @@ At a glance, ChordFlask lets you:
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.19.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.19/chordflask-mint22-x86_64-py3.12-v0.9.19.tar.gz)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.20.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.20/chordflask-mint22-x86_64-py3.12-v0.9.20.tar.gz)**
 
 The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is based on Ubuntu 24.04.
 
@@ -80,7 +80,28 @@ excluded features, and glibc compatibility.
 
 ## Quick start
 
-### Standalone bundle
+### Debian / Ubuntu / Mint package
+
+For future releases, the recommended download on compatible Debian-family
+systems, matching the standalone build platform, is
+`chordflask-<platform>-x86_64-py<X.Y>-v<VERSION>.deb` from the
+[release assets](https://github.com/bkl2000/chordflask/releases). It installs the
+same standalone runtime and helper scripts. Replace `<release-package>` with
+the matching download filename:
+
+```bash
+sudo apt install ./<release-package>.deb
+/opt/chordflask/install_vamp.sh
+chordflask
+```
+
+Remove with `sudo apt remove chordflask`. The build's Linux/glibc compatibility
+requirements still apply; see the [bundle guide](docs/STANDALONE.md).
+
+### Portable standalone archive
+
+The archive remains available as a portable fallback. Extracting and running
+it needs no root access or system installation (FFmpeg must already be available).
 
 Download the archive above, then run:
 

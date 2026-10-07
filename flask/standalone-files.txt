@@ -1,0 +1,13 @@
+chordflask
+chordflask.sh
+install_vamp.sh
+chordflask-analyze
+chordflask-demucs
+chordflask-export
+chordflask-maintain
+chordflask-genlyrics
+VERSION
+README.md
+LICENSE
+THIRD_PARTY_NOTICES.md
+LIBERATION-FONTS-LICENSE.txt

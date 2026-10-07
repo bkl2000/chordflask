@@ -132,6 +132,11 @@ EOF
 
 cp "${SCRIPT_DIR}/install_vamp.sh" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/docs/STANDALONE.md" "${RELEASE_DIR}/README.md"
+cp "${PROJECT_ROOT}/LICENSE" "${RELEASE_DIR}/"
+for helper in $(grep '^chordflask-' "${SCRIPT_DIR}/standalone-files.txt"); do
+    [[ -x "${PROJECT_ROOT}/scripts/$helper" ]] || { echo "Missing standalone helper: $helper" >&2; exit 1; }
+    cp "${PROJECT_ROOT}/scripts/$helper" "${RELEASE_DIR}/"
+done
 cp "${PROJECT_ROOT}/THIRD_PARTY_NOTICES.md" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/chordflask/assets/fonts/LICENSE.txt" "${RELEASE_DIR}/LIBERATION-FONTS-LICENSE.txt"
 printf '%s\n' "$BUILD_VERSION" > "${RELEASE_DIR}/VERSION"
@@ -143,9 +148,11 @@ printf '\n'
 printf 'Standalone: %s\n' "${RELEASE_DIR}/chordflask"
 printf 'Archive:    %s\n' "${RELEASE_ARCHIVE}"
 printf 'Start:      %s\n' "${RELEASE_DIR}/chordflask.sh"
-printf '\nCopy to ~/bin:\n'
-printf 'cp "%s"/* ~/bin\n' "${RELEASE_DIR}"
-printf 'cp "%s"/scripts/chordflask-* ~/bin\n' "${PROJECT_ROOT}"
+if [[ "${CHORDFLASK_SUPPRESS_COPY_HINT:-0}" != 1 ]]; then
+    printf '\nCopy to ~/bin:\n'
+    printf 'cp "%s"/* ~/bin\n' "${RELEASE_DIR}"
+fi
+
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
     printf 'MISSING: ffmpeg — sudo apt install ffmpeg\n'
