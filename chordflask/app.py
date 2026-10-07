@@ -704,7 +704,7 @@ class FlaskMP4App:
             file_repr = FileRepr(str(media), datapath=ANALYSIS_DIR_NAME)
             json_path = file_repr.get("json")
             if (os.path.exists(json_path) and self.__analysis_is_complete(json_path)
-                    and canonical_source_status(ChordData(json_path), media) != "stale"):
+                    and canonical_source_status(ChordData(json_path), media, cache_identity=True) != "stale"):
                 analyzed_count += 1
             else:
                 candidates.append(media)
@@ -797,7 +797,9 @@ class FlaskMP4App:
                 'title': f"ChordFlask - {filename}"
             })
 
-        source_status = canonical_source_status(ChordData(requested_file_repr.get("json")), media)
+        source_status = canonical_source_status(
+            ChordData(requested_file_repr.get("json")), media, cache_identity=True,
+        )
         state = self._client()
         with state.lock:
             state.semitones = requested_semitones

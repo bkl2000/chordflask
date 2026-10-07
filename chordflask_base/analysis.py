@@ -1,6 +1,8 @@
 """Canonical analysis completion and preservation, independent of runtimes."""
 
 import copy
+from functools import lru_cache
+from pathlib import Path
 
 from .schema import (
     DEFAULT_CHORD_TRACK,
@@ -116,11 +118,14 @@ def preserve_analysis_user_data(current_track, replacement_track, *, drop_edited
     replacement_track._opaque_document = opaque
 
 
+def _source_stamp(stat):
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+
 def media_source_identity(media_path):
     """Hash original media bytes with the same streaming SHA-256 used by producers."""
     import hashlib
     import os
-    from pathlib import Path
 
     path = Path(media_path)
     with path.open("rb") as handle:
@@ -129,19 +134,28 @@ def media_source_identity(media_path):
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
         after = os.fstat(handle.fileno())
-    def stamp(stat):
-        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
-    if stamp(before) != stamp(after) or stamp(after) != stamp(path.stat()):
+    if _source_stamp(before) != _source_stamp(after) or _source_stamp(after) != _source_stamp(path.stat()):
         raise RuntimeError("Media changed while reading source identity; retry")
     return {"sha256": digest.hexdigest(), "size": after.st_size}
 
 
-def canonical_source_status(chord_data, media_path, *, identity=None):
+@lru_cache(maxsize=128)
+def _cached_source_identity(path, stamp):
+    identity = media_source_identity(path)
+    if _source_stamp(path.stat()) != stamp:
+        raise RuntimeError("Media changed while reading source identity; retry")
+    return identity
+
+
+def canonical_source_status(chord_data, media_path, *, identity=None, cache_identity=False):
     """Return current/stale/legacy independently of schema validity/completeness.
 
     Missing or unverifiable metadata is legacy/unknown, never proof of currency.
     Legacy inspection does not hash media. Checks run only at explicit load or
-    analysis boundaries, not playback polling.
+    analysis boundaries, not playback polling. Web callers may reuse a verified
+    digest while the full filesystem stamp is unchanged (including ctime, so
+    same-size rewrites with restored mtime invalidate it). The cache is bounded,
+    process-local and never persisted. Analysis/CLI verification remains uncached.
     """
     if not is_canonical_analysis_complete(chord_data):
         return "legacy"
@@ -158,7 +172,16 @@ def canonical_source_status(chord_data, media_path, *, identity=None):
     if sources[0] != sources[1]:
         return "stale"
     try:
-        current = identity if identity is not None else media_source_identity(media_path)
+        if identity is not None:
+            current = identity
+        elif cache_identity:
+            path = Path(media_path).resolve(strict=True)
+            stamp = _source_stamp(path.stat())
+            current = _cached_source_identity(path, stamp)
+            if _source_stamp(path.stat()) != stamp:
+                raise RuntimeError("Media changed during source verification; retry")
+        else:
+            current = media_source_identity(media_path)
     except (OSError, RuntimeError):
         return "legacy"
     return "current" if sources[0] == current else "stale"

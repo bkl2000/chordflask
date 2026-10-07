@@ -278,3 +278,67 @@ def test_service_failure_stages_all_artifacts_and_leaves_prior_state(tmp_path, p
     assert not list(Path(fr.datapath).glob(".song.reanalyze-*"))
     with media_analysis_lock(media):
         pass
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_killed_analysis_workdir_is_removed_under_lock_on_retry(tmp_path, force):
+    from chordflask.canonical_analysis import execute_analysis
+
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"source")
+    fr = FileRepr(media, create=True)
+    if force:
+        complete().save_to_file(fr.get("json"))
+    store = Path(fr.datapath)
+    protected = {media: media.read_bytes()}
+    for name in ("song.mp3", "song.xml", "song.mid", "song.lrc", "unrelated.txt",
+                 ".song.reanalyze-abcdefgh"):
+        path = store / name
+        path.write_bytes(b"keep")
+        protected[path] = path.read_bytes()
+    if force:
+        protected[Path(fr.get("json"))] = Path(fr.get("json")).read_bytes()
+    for name in ("stems", ".other.analyze-abcdefgh", ".song.analyze-user-notes"):
+        path = store / name / "keep.txt"
+        path.parent.mkdir()
+        path.write_bytes(b"keep")
+        protected[path] = path.read_bytes()
+    # Even an exactly matching symlink must never be followed or removed.
+    link = store / ".song.analyze-abcdefgh"
+    link.symlink_to(tmp_path, target_is_directory=True)
+    parent, child_pipe = CTX.Pipe()
+
+    def interrupted():
+        def stage(staged):
+            Path(staged.get("mp3")).write_bytes(b"incomplete")
+            complete().save_to_file(staged.get("json"))
+            child_pipe.send(staged.datapath)
+            child_pipe.recv()
+        execute_analysis(fr, stage, force=force)
+
+    child = CTX.Process(target=interrupted)
+    child.start()
+    try:
+        assert parent.poll(5)
+        orphan = Path(parent.recv())
+        assert orphan.is_dir()
+        child.kill()
+        child.join(5)
+        assert not child.is_alive()
+        assert orphan.is_dir()  # SIGKILL bypasses TemporaryDirectory cleanup.
+        assert all(path.read_bytes() == content for path, content in protected.items())
+
+        def retry(staged):
+            assert not orphan.exists()
+            assert link.is_symlink()
+            assert all(path.read_bytes() == content for path, content in protected.items())
+            complete().save_to_file(staged.get("json"))
+        execute_analysis(fr, retry, force=force)
+        assert not orphan.exists()
+        assert ChordTrackRepository().load(fr.get("json")).has_chord_track("chordino")
+    finally:
+        if child.is_alive():
+            child.kill()
+        child.join(5)
+        parent.close()
+        child_pipe.close()

@@ -222,3 +222,137 @@ def test_gui_batch_queues_stale_but_leaves_legacy_usable(song):
     })
     assert response.status_code == 200
     assert len(wrapper.analysis_queue.status()["pending"]) == 1
+
+
+def test_http_freshness_reuses_hashes_but_detects_same_size_restored_mtime(song, monkeypatch):
+    from chordflask.app import FlaskMP4App
+    import chordflask_base.analysis as provenance
+
+    media, fr = song
+    analyze_media(media, analyzer_cls=FakeAnalyzer)
+    other = media.with_name("other.mp3")
+    other.write_bytes(b"other source")
+    analyze_media(other, analyzer_cls=FakeAnalyzer)
+    wrapper = FlaskMP4App()
+    client = wrapper.app.test_client()
+    calls = []
+    original = provenance.media_source_identity
+
+    def counted(path):
+        calls.append(Path(path))
+        return original(path)
+    monkeypatch.setattr(provenance, "media_source_identity", counted)
+    batch = {"dirname": str(media.parent), "filenames": [media.name, other.name], "limit": 1}
+    for _ in range(2):
+        result = client.post("/enqueue_batch", json=batch).get_json()
+        assert result["skipped_analyzed_count"] == 2
+        assert result["queued_count"] == 0
+    load = {"dirname": str(media.parent), "filename": media.name}
+    for _ in range(2):
+        assert client.post("/load_file", json=load).get_json()["analysis_source_status"] == "current"
+        assert client.get("/analysis_queue_status").status_code == 200
+        assert client.post("/set_position", json={"position": 0}).status_code == 200
+    assert calls == [media, other]
+
+    timestamp = media.stat().st_mtime_ns
+    media.write_bytes(b"source B")
+    os.utime(media, ns=(timestamp, timestamp))
+    for _ in range(2):
+        assert client.post("/load_file", json=load).get_json()["analysis_source_status"] == "stale"
+    assert calls == [media, other, media]
+    assert client.post("/enqueue_batch", json=batch).get_json()["queued_count"] == 1
+    assert calls == [media, other, media]
+    # Canonical/CLI callers retain strict byte verification by default.
+    assert canonical_source_status(ChordData(fr.get("json")), media) == "stale"
+    assert calls == [media, other, media, media]
+
+
+def test_legacy_http_checks_never_hash(song, monkeypatch):
+    from chordflask.app import FlaskMP4App
+    import chordflask_base.analysis as provenance
+
+    media, fr = song
+    complete().save_to_file(fr.get("json"))
+    def forbidden(path):
+        pytest.fail("LEGACY must not read media bytes")
+    monkeypatch.setattr(provenance, "media_source_identity", forbidden)
+    client = FlaskMP4App().app.test_client()
+    load = {"dirname": str(media.parent), "filename": media.name}
+    assert client.post("/load_file", json=load).get_json()["analysis_source_status"] == "legacy"
+    batch = {"dirname": str(media.parent), "filenames": [media.name], "limit": 1}
+    assert client.post("/enqueue_batch", json=batch).get_json()["skipped_analyzed_count"] == 1
+
+
+@pytest.mark.parametrize("change", ["size", "mtime", "inode"])
+def test_cached_verification_invalidates_changed_file_metadata(song, monkeypatch, change):
+    import chordflask_base.analysis as provenance
+
+    media, fr = song
+    analyze_media(media, analyzer_cls=FakeAnalyzer)
+    data = ChordData(fr.get("json"))
+    calls = []
+    original = provenance.media_source_identity
+    def counted(path):
+        calls.append(path)
+        return original(path)
+    monkeypatch.setattr(provenance, "media_source_identity", counted)
+    assert canonical_source_status(data, media, cache_identity=True) == "current"
+    before = media.stat()
+    if change == "size":
+        media.write_bytes(b"longer source")
+        os.utime(media, ns=(before.st_atime_ns, before.st_mtime_ns))
+    elif change == "mtime":
+        os.utime(media, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
+    else:
+        replacement = media.with_suffix(".new")
+        replacement.write_bytes(b"source B")
+        os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
+        os.replace(replacement, media)
+        assert media.stat().st_ino != before.st_ino
+    expected = "current" if change == "mtime" else "stale"
+    assert canonical_source_status(data, media, cache_identity=True) == expected
+    assert canonical_source_status(data, media, cache_identity=True) == expected
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("failure", ["unreadable", "changed"])
+def test_failed_cached_verification_never_proves_currency_or_caches_failure(song, monkeypatch, failure):
+    import chordflask_base.analysis as provenance
+
+    media, fr = song
+    analyze_media(media, analyzer_cls=FakeAnalyzer)
+    data = ChordData(fr.get("json"))
+    original = provenance.media_source_identity
+    calls = []
+    def unstable(path):
+        calls.append(path)
+        if len(calls) == 1 and failure == "unreadable":
+            raise PermissionError("unreadable")
+        identity = original(path)
+        if len(calls) == 1:
+            media.write_bytes(b"source B")
+        return identity
+    monkeypatch.setattr(provenance, "media_source_identity", unstable)
+    assert canonical_source_status(data, media, cache_identity=True) == "legacy"
+    expected = "current" if failure == "unreadable" else "stale"
+    assert canonical_source_status(data, media, cache_identity=True) == expected
+    assert canonical_source_status(data, media, cache_identity=True) == expected
+    assert len(calls) == 2
+
+
+def test_cache_hit_rechecks_metadata_before_reporting_current(song, monkeypatch):
+    import chordflask_base.analysis as provenance
+
+    media, fr = song
+    analyze_media(media, analyzer_cls=FakeAnalyzer)
+    data = ChordData(fr.get("json"))
+    assert canonical_source_status(data, media, cache_identity=True) == "current"
+    original = provenance._cached_source_identity
+    def changed_on_hit(path, stamp):
+        identity = original(path, stamp)
+        media.write_bytes(b"source B")
+        return identity
+    with monkeypatch.context() as patch:
+        patch.setattr(provenance, "_cached_source_identity", changed_on_hit)
+        assert canonical_source_status(data, media, cache_identity=True) == "legacy"
+    assert canonical_source_status(data, media, cache_identity=True) == "stale"

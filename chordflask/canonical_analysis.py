@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 import logging
 import os
 from pathlib import Path
+import re
+import shutil
 import tempfile
 import uuid
 
@@ -47,6 +49,23 @@ def preserve_corrupt_json(json_path, destination_dir=None):
     return backup
 
 
+def _remove_orphaned_workdirs(directory, stem):
+    """Called only while owning the stem's analysis lock, before creating staging.
+
+    Cooperating producers hold that lock for the entire staging lifetime, so
+    matching directories cannot be active. Recognize only tempfile's reserved
+    eight-character suffix, not arbitrary similarly prefixed user directories.
+    """
+    pattern = re.compile(rf"\.{re.escape(stem)}\.(?:analyze|reanalyze)-[a-z0-9_]{{8}}")
+    for path in directory.iterdir():
+        if not pattern.fullmatch(path.name) or path.is_symlink() or not path.is_dir():
+            continue
+        try:
+            shutil.rmtree(path)
+        except OSError as error:
+            logger.warning("Could not remove orphaned analysis directory %s: %s", path, error)
+
+
 def execute_analysis(file_repr, analyze_staged, *, force=False, discard_edits=False,
                      recover_invalid=False, require_canonical=True):
     """Run a staging callback under a per-media lock and publish validated JSON last.
@@ -60,6 +79,7 @@ def execute_analysis(file_repr, analyze_staged, *, force=False, discard_edits=Fa
         directory = Path(file_repr.datapath)
         directory.mkdir(parents=True, exist_ok=True)
         json_path = Path(file_repr.get("json"))
+        _remove_orphaned_workdirs(directory, json_path.stem)
         repository = ChordTrackRepository()
         existing = None
         if json_path.exists():
