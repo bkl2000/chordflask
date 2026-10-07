@@ -718,6 +718,7 @@
 
     .repeat-on,
     .continue-on,
+    .shuffle-on,
     .display-on {
       background: #1b7a43;
       border-color: #1b7a43;
@@ -725,6 +726,7 @@
 
     .repeat-on:hover,
     .continue-on:hover,
+    .shuffle-on:hover,
     .display-on:hover {
       background: #135f33;
       border-color: #135f33;
@@ -898,10 +900,15 @@
       background: #eef6fc;
     }
 
-    .browser-row.selected {
+    .browser-row.selected,
+    .browser-row.current {
       background: #dceefb;
       color: #0c4d7e;
       font-weight: 700;
+    }
+
+    .browser-row.current td:first-child {
+      box-shadow: inset 4px 0 #1767a8;
     }
 
     .directory-row {
@@ -1424,7 +1431,8 @@
 
     .control-bar .loop-controls button,
     .control-bar #repeatButton,
-    .control-bar #continueButton {
+    .control-bar #continueButton,
+    .control-bar #shuffleButton {
       height: 28px;
       font-size: 13px;
     }
@@ -1435,7 +1443,8 @@
     }
 
     .control-bar #repeatButton,
-    .control-bar #continueButton {
+    .control-bar #continueButton,
+    .control-bar #shuffleButton {
       padding: 0 10px;
     }
 
@@ -2127,6 +2136,7 @@
 
       .playback-controls {
         gap: 1px;
+        flex-wrap: nowrap;
       }
 
       #playPauseButton {
@@ -2147,9 +2157,25 @@
       }
 
       .control-bar #repeatButton,
-      .control-bar #continueButton {
+      .control-bar #continueButton,
+      .control-bar #shuffleButton {
         height: 38px;
         padding: 0 3px;
+        flex-shrink: 0;
+      }
+
+      .control-bar #repeatButton.repeat-on,
+      .control-bar #continueButton.continue-on,
+      .control-bar #shuffleButton.shuffle-on {
+        color: #4ade80;
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .control-bar #repeatButton.repeat-on:hover,
+      .control-bar #continueButton.continue-on:hover,
+      .control-bar #shuffleButton.shuffle-on:hover {
+        background: var(--accent-dark);
       }
 
       .control-bar .playback-navigation {
@@ -2400,6 +2426,10 @@
                 title="Automatically play the next file when this one ends"
                 aria-label="Automatically play the next file"
                 aria-pressed="false">Auto Off</button>
+        <button id="shuffleButton" type="button" onclick="toggleShuffle()"
+                title="Shuffle the file list and playback order"
+                aria-label="Shuffle playback order"
+                aria-pressed="false">Shuffle</button>
         <div class="status">
           <span id="currentPosition">Position: 0.00s</span>
           <span id="bpmStatus">BPM: --</span>
@@ -2643,6 +2673,7 @@
 
     let isRepeating = false;
     let isContinuing = false;
+    let isShuffling = false;
     let isLooping = false;
     let loopStart = null;
     let loopEnd = null;
@@ -2789,6 +2820,7 @@
         : open;
       document.body.classList.toggle('drawer-open', shouldOpen);
       mobileMenuButton.setAttribute('aria-expanded', String(shouldOpen));
+      if (shouldOpen) scrollCurrentFileIntoView();
     }
 
     function toggleFilesPanel(open) {
@@ -2797,6 +2829,7 @@
         : open;
       songBar.classList.toggle('open', shouldOpen);
       filesToggle.setAttribute('aria-expanded', String(shouldOpen));
+      if (shouldOpen) scrollCurrentFileIntoView();
     }
 
     function updatePlayPauseButton() {
@@ -3272,10 +3305,14 @@
     function updatePlaybackControlLabels() {
       const repeatButton = document.getElementById('repeatButton');
       const continueButton = document.getElementById('continueButton');
+      const shuffleButton = document.getElementById('shuffleButton');
       repeatButton.textContent = mobilePlaybackControls.matches
-        ? `Rep ${isRepeating ? 'On' : 'Off'}`
+        ? 'Rep'
         : `Repeat ${isRepeating ? 'On' : 'Off'}`;
-      continueButton.textContent = `Auto ${isContinuing ? 'On' : 'Off'}`;
+      continueButton.textContent = mobilePlaybackControls.matches
+        ? 'Auto'
+        : `Auto ${isContinuing ? 'On' : 'Off'}`;
+      shuffleButton.textContent = mobilePlaybackControls.matches ? 'Rnd' : 'Shuffle';
     }
 
     function normalizedBatchLimit() {
@@ -3598,6 +3635,8 @@
         return response.json();
       })
       .then(data => {
+        const previousFiles = currentFiles;
+        const sameDirectory = currentDirectory === (data.current_dir || dirname);
         currentDirectory = data.current_dir || dirname;
         parentDirectory = data.parent_dir || '';
         currentDirectories = data.directories || [];
@@ -3606,7 +3645,18 @@
         dirnameInput.value = currentDirectory;
         updateCurrentPath();
         fileStatus.innerText = `${currentDirectories.length} dirs, ${currentFiles.length} files`;
-        selectPreferredFile(preferredFile);
+        selectPreferredFile(!autoload && loadedFileDirectory === currentDirectory
+          ? loadedFileName : preferredFile);
+        if (isShuffling) {
+          const sameFiles = sameDirectory && previousFiles.length === currentFiles.length
+            && previousFiles.every(old => currentFiles.some(file => file.name === old.name));
+          if (sameFiles) {
+            const byName = new Map(currentFiles.map(file => [file.name, file]));
+            currentFiles = previousFiles.map(file => byName.get(file.name));
+          } else {
+            shuffleFileOrder();
+          }
+        }
         renderBrowserTable(currentDirectories, currentFiles);
         updateBatchButton();
         if (autoload && currentFiles.length) {
@@ -3665,13 +3715,15 @@
       const directoryKey = sortKey === 'size' ? 'name' : sortKey;
       const directoryDirection = sortKey === 'size' ? 'asc' : sortDirection;
       currentDirectories = sortedEntries(currentDirectories, directoryKey, directoryDirection);
-      currentFiles = sortedEntries(currentFiles, sortKey, sortDirection);
+      if (!isShuffling) {
+        currentFiles = sortedEntries(currentFiles, sortKey, sortDirection);
+      }
       updateSortHeaders();
     }
 
     function updateSortHeaders() {
       document.querySelectorAll('.sort-button').forEach(button => {
-        const active = button.dataset.sortKey === sortKey;
+        const active = !isShuffling && button.dataset.sortKey === sortKey;
         const header = button.closest('th');
         const indicator = button.querySelector('.sort-indicator');
         header.setAttribute('aria-sort', active
@@ -3729,6 +3781,7 @@
       files.forEach(file => {
         const row = document.createElement('tr');
         row.className = 'browser-row file-row';
+        row.dataset.filename = file.name;
         if (file.name === selectedFileName) {
           row.classList.add('selected');
         }
@@ -3758,6 +3811,27 @@
       });
       updateNavigationButtons();
       updateBatchButton();
+      updateCurrentFileRow(true);
+    }
+
+    function updateCurrentFileRow(scroll = false) {
+      fileTableBody.querySelectorAll('.file-row').forEach(row => {
+        const current = loadedFileDirectory === currentDirectory
+          && row.dataset.filename === loadedFileName;
+        row.classList.toggle('current', current);
+        if (current) {
+          row.setAttribute('aria-current', 'true');
+        } else {
+          row.removeAttribute('aria-current');
+        }
+      });
+      if (scroll) scrollCurrentFileIntoView();
+    }
+
+    function scrollCurrentFileIntoView() {
+      fileTableBody.querySelector('.file-row.current')?.scrollIntoView({
+        block: 'nearest', inline: 'nearest'
+      });
     }
 
     function renderDirectoryRow(name, path, title, mtime = '') {
@@ -4558,6 +4632,7 @@
         pageTitle.innerText = data.title;
         loadedFileName = filename;
         loadedFileDirectory = dirname;
+        updateCurrentFileRow(true);
         loadedMediaPath = data.mp4_file || requestedPath;
         loadedMediaIdentity = requestedPath;
         loadedAnalysisValid = data.analysis_valid === true;
@@ -5572,6 +5647,35 @@
         setRepeat(false);
         setLoop(false);
       }
+    }
+
+    function toggleShuffle() {
+      isShuffling = !isShuffling;
+      const shuffleButton = document.getElementById('shuffleButton');
+      shuffleButton.classList.toggle('shuffle-on', isShuffling);
+      shuffleButton.setAttribute('aria-pressed', String(isShuffling));
+      if (isShuffling) {
+        shuffleFileOrder();
+      } else {
+        currentFiles = sortedEntries(currentFiles, sortKey, sortDirection);
+      }
+      if (loadedFileDirectory === currentDirectory
+          && currentFiles.some(file => file.name === loadedFileName)) {
+        selectedFileName = loadedFileName;
+      }
+      updateSortHeaders();
+      renderBrowserTable(currentDirectories, currentFiles);
+    }
+
+    function shuffleFileOrder() {
+      const current = loadedFileDirectory === currentDirectory
+        ? currentFiles.find(file => file.name === loadedFileName) : null;
+      const remaining = currentFiles.filter(file => file !== current);
+      for (let i = remaining.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+      }
+      currentFiles = current ? [current, ...remaining] : remaining;
     }
 
     function navigateFile(offset, reason = 'manual') {

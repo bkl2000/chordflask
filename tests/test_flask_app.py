@@ -901,9 +901,10 @@ def test_index_updates_dynamic_state_labels():
 
     body = client.get("/").get_data(as_text=True)
 
-    # Playback and display-mode toggles rewrite their visible labels and expose
-    # pressed state without hiding mobile On/Off text.
-    assert "? `Rep ${isRepeating ? 'On' : 'Off'}`" in body
+    # Phone labels stay fixed; pressed state is exposed independently.
+    assert "? 'Rep'" in body
+    assert "? 'Auto'" in body
+    assert "mobilePlaybackControls.matches ? 'Rnd' : 'Shuffle'" in body
     assert "`Auto ${isContinuing ? 'On' : 'Off'}`" in body
     assert "repeatButton.setAttribute('aria-pressed', String(isRepeating))" in body
     assert "continueButton.setAttribute('aria-pressed', String(isContinuing))" in body
