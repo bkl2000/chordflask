@@ -71,6 +71,12 @@ The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is base
 Built from the same ChordFlask release source as the public release. FFmpeg and
 Vamp plugin binaries are not bundled; see the portable bundle guide for
 requirements.
+
+Recommended Debian-family package for this build platform:
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.20.deb](https://github.com/bkl2000/chordflask/releases/download/v0.9.20/chordflask-mint22-x86_64-py3.12-v0.9.20.deb)**
+
+Install: `sudo apt install ./chordflask-mint22-x86_64-py3.12-v0.9.20.deb`. Remove: `sudo apt remove chordflask`.
+The archive remains a portable fallback needing no root or system installation.
 <!-- standalone-download:end -->
 
 The bundle targets Linux x86_64 in the supported Ubuntu, Mint, and Debian
