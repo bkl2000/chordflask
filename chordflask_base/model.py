@@ -16,6 +16,26 @@ from . import chordlabel
 from . import schema
 from .schema import ANALYSIS_SAMPLE_RATE, DEFAULT_CHORD_TRACK, DEFAULT_RHYTHM_TRACK
 
+_DOCUMENT_FIELDS = {
+    "schema_version", "prefer_flats", "transpose", "user_data", "chord_tracks",
+    "rhythm_tracks", "audio_tracks",
+}
+_LEGACY_FIELDS = {"base_chords", "bpm", "meter_signature", "beat_times",
+                  "beat_numbers", "beat_chord_indexes"}
+_TRACK_FIELDS = {
+    "chord_tracks": {"chords", "metadata"},
+    "rhythm_tracks": {"bpm", "meter_signature", "beat_times", "beat_numbers", "metadata"},
+}
+
+
+def _retain_opaque_fields(original, updated, known_fields):
+    """Overlay interpreted fields without dropping opaque object members."""
+    result = {key: copy.deepcopy(value) for key, value in original.items()
+              if key not in known_fields}
+    result.update(updated)
+    return result
+
+
 class ChordTrackRepository:
     SCHEMA_VERSION = schema.SCHEMA_VERSION
     SUPPORTED_SCHEMA_VERSIONS = schema.SUPPORTED_SCHEMA_VERSIONS
@@ -33,6 +53,11 @@ class ChordTrackRepository:
             )
 
         track._clear_tracks()
+        track._opaque_document = copy.deepcopy(data)
+        if version != self.SCHEMA_VERSION:
+            # Explicit migration consumes the legacy layout; retain extensions.
+            for key in _LEGACY_FIELDS | _DOCUMENT_FIELDS:
+                track._opaque_document.pop(key, None)
 
         if version is not None and version >= 3:
             self.__load_v3(track, data)
@@ -157,6 +182,15 @@ class ChordTrackRepository:
             for set_id in chord_data.available_audio_track_ids
         }
 
+        original = chord_data._opaque_document
+        data = _retain_opaque_fields(original, data, _DOCUMENT_FIELDS)
+        for collection, known_fields in _TRACK_FIELDS.items():
+            old_tracks = original.get(collection, {})
+            for track_id, entry in data[collection].items():
+                data[collection][track_id] = _retain_opaque_fields(
+                    old_tracks.get(track_id, {}), entry, known_fields,
+                )
+
         self._validate(data, file_path)
 
         schema.write_atomic(file_path, data)
@@ -183,6 +217,9 @@ class ChordData:
         self._beat_numbers = []
         self._meter_signature = None
         self.user_data = {}
+        # One isolated raw snapshot protects extensions across typed roundtrips.
+        # Shared-file callers still own the lock/latest-read or stale-save guard.
+        self._opaque_document = {}
 
         self.__chord_tracks = {}
         self.__rhythm_tracks = {}
@@ -746,7 +783,10 @@ class ChordData:
         ]
 
     def _sanitize_chords(self, chords):
-        return [{"timestamp": e["timestamp"], "chord": self._unicode_to_ascii(e.get("chord", ""))} for e in chords]
+        result = copy.deepcopy(chords)
+        for entry in result:
+            entry["chord"] = self._unicode_to_ascii(entry.get("chord", ""))
+        return result
 
     def get_chord_index_by_timestamp(self, timestamp):
         import bisect

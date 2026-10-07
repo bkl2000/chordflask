@@ -1,5 +1,7 @@
 """Canonical analysis completion and preservation, independent of runtimes."""
 
+import copy
+
 from .schema import (
     DEFAULT_CHORD_TRACK,
     DEFAULT_RHYTHM_TRACK,
@@ -101,6 +103,17 @@ def preserve_analysis_user_data(current_track, replacement_track, *, drop_edited
     replacement_track.transpose(current_track.transpose_semitones)
     replacement_track.set_prefer_flats(current_track.prefer_flats)
     replacement_track.user_data = current_track.user_data
+    # Canonical refresh rebuilds known canonical data, while extensions and
+    # preserved optional tracks come from the latest locked document.
+    opaque = copy.deepcopy(current_track._opaque_document)
+    for key, value in replacement_track._opaque_document.items():
+        if key in ("chord_tracks", "rhythm_tracks"):
+            tracks = opaque.setdefault(key, {})
+            for track_id, entry in value.items():
+                tracks.setdefault(track_id, {}).update(copy.deepcopy(entry))
+        else:
+            opaque[key] = copy.deepcopy(value)
+    replacement_track._opaque_document = opaque
 
 
 def media_source_identity(media_path):

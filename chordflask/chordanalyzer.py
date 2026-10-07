@@ -12,7 +12,7 @@ from pathlib import Path
 from .analysis_service import ChordAnalysisService
 from .audio_analyzer import AudioAnalyzer
 from .chord_exporter import ChordExporter
-from chordflask_base import ChordData, analysis_json_lock
+from chordflask_base import ChordData, ChordTrackRepository, analysis_json_lock
 from .chordflask_config import ANALYSIS_DIR_NAME
 from .filerepr import FileRepr
 from .media_converter import MediaConverter
@@ -122,6 +122,9 @@ class ChordAnalyzer:
         with analysis_json_lock(self.file_repr.get("json")):
             if self._read_json_snapshot() != self._json_snapshot:
                 raise ValueError("Analysis changed on disk; reload before saving")
+            if self._json_snapshot is not None:
+                current = ChordTrackRepository().load(self.file_repr.get("json"))
+                self.chord_data._opaque_document = current._opaque_document
             self.chord_data.save_to_file(self.file_repr.get("json"))
             self._json_snapshot = self._read_json_snapshot()
         print(f"Chord data saved to {self.file_repr.get('json')}")

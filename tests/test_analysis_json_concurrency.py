@@ -31,6 +31,9 @@ def seed(tmp_path, name="song"):
     path = analysis_json_path(media)
     path.parent.mkdir(exist_ok=True)
     complete().save_to_file(path)
+    raw = read_analysis_json(path)
+    raw["x_external_metadata"] = {"source": "test", "value": 123}
+    write_atomic(path, raw)
     return media
 
 
@@ -134,6 +137,9 @@ def test_same_media_publications_serialize_and_preserve_updates(tmp_path, first,
                 child, done = launch(kind, media)
                 children.append(child)
                 assert not done.wait(.25), f"{kind} bypassed the shared lock"
+            latest = read_analysis_json(analysis_json_path(media))
+            latest["x_latest_extension"] = {"added": "while writers waited"}
+            write_atomic(analysis_json_path(media), latest)
         for child in children:
             reap(child)
     finally:
@@ -142,6 +148,12 @@ def test_same_media_publications_serialize_and_preserve_updates(tmp_path, first,
                 child.terminate()
                 child.join(5)
     result = ChordTrackRepository().load(analysis_json_path(media))
+    assert read_analysis_json(analysis_json_path(media))["x_external_metadata"] == {
+        "source": "test", "value": 123,
+    }
+    assert read_analysis_json(analysis_json_path(media))["x_latest_extension"] == {
+        "added": "while writers waited",
+    }
     if "btc" in (first, second):
         assert result.has_chord_track("btc")
     if "v3" in (first, second):
@@ -224,6 +236,25 @@ for name in ('flask', 'torch', 'numpy', 'librosa', 'chordflask_btc', 'chordflask
     subprocess.run([sys.executable, "-c", script], check=True)
 
 
+def test_crashed_process_releases_analysis_lock_and_keeps_json(tmp_path):
+    media = seed(tmp_path)
+    path = analysis_json_path(media)
+    before = path.read_bytes()
+    script = """
+import os
+import sys
+from chordflask_base import analysis_json_lock
+with analysis_json_lock(sys.argv[1]):
+    os._exit(7)
+"""
+    result = subprocess.run([sys.executable, "-c", script, str(path)], timeout=5)
+    assert result.returncode == 7
+    assert path.read_bytes() == before
+    child, _ = launch("btc", media)
+    reap(child)
+    assert read_analysis_json(path)["x_external_metadata"] == {"source": "test", "value": 123}
+
+
 def stale_snapshot(path, key, barrier):
     data = read_analysis_json(path)
     barrier.wait(5)
@@ -292,6 +323,7 @@ def test_successful_publication_is_atomic_and_validated(tmp_path, monkeypatch):
         pending = read_analysis_json(source)
         validate_analysis(pending, source)
         assert "btc" in pending["chord_tracks"]
+        assert pending["x_external_metadata"] == {"source": "test", "value": 123}
         replacements.append(source)
         return real_replace(source, destination)
 

@@ -18,7 +18,7 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from chordflask_base import analysis_json_lock
+from chordflask_base import analysis_json_lock, ChordTrackRepository
 
 from flask import Flask, g, render_template, jsonify, request, send_file, make_response
 
@@ -957,6 +957,8 @@ class FlaskMP4App:
                     error="Edited chords changed on disk; reload and re-edit."
                 ), 409
             try:
+                current = ChordTrackRepository().load(json_path)
+                state.player.chord_data._opaque_document = current._opaque_document
                 state.player.chord_data.save_to_file(json_path)
             except (OSError, ValueError) as error:
                 self._reload_player_chord_data(state, previous_track_state)
