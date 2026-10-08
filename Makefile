@@ -13,6 +13,7 @@ endif
 VENV_PYTHON := $(VENV_DIR)/bin/python
 PYTHON_BIN ?=
 TEST_ARGS ?=
+EXTRA_TEST_ARGS ?=
 ANALYZE_ARGS ?=
 DEMUCS_ARGS ?=
 EXPORT_ARGS ?=
@@ -100,7 +101,7 @@ setup-recreate:
 test:
 	@PYTHONPATH="$(EXTRA_PYTHONPATH)" CHORDFLASK_VENV="$(VENV_DIR)" \
 		bash "$(ROOT_DIR)/scripts/run_tests.sh" \
-		"$(ROOT_DIR)/tests" $(EXTRA_TEST_DIRS) $(TEST_ARGS)
+		"$(ROOT_DIR)/tests" $(EXTRA_TEST_DIRS) $(EXTRA_TEST_ARGS) $(TEST_ARGS)
 
 check: test lint
 	@"$(VENV_PYTHON)" -m compileall -q "$(ROOT_DIR)/chordflask" "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" \

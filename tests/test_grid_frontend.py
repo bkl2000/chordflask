@@ -111,13 +111,13 @@ def test_grid_css_uses_equal_tracks_and_non_layout_playhead():
 
 
 @pytest.mark.parametrize('columns', [3, 4])
-def test_phone_follow_reserves_next_row_and_handles_seeks_and_end(columns):
+def test_grid_follow_target_handles_rows_seeks_and_boundaries(columns):
     node = shutil.which('node')
     if not node:
         pytest.skip('Node is unavailable')
     source = TEMPLATE.read_text()
-    follow = 'function followPhoneBeatGrid(' + source.split(
-        '    function followPhoneBeatGrid(', 1
+    follow = 'function followBeatGrid(' + source.split(
+        '    function followBeatGrid(', 1
     )[1].split('    function renderCallbackData(', 1)[0]
     script = r'''
 const assert = require('node:assert/strict');
@@ -147,9 +147,9 @@ function fixture(start = 0, count = 18 * columns) {
   callbackContainer.scrollHeight = Math.ceil(count / columns) * 48 + 8;
   return {compact_columns: columns, cells};
 }
-function update(grid, index) {
+function update(grid, index, preferredRowFromTop = null) {
   activeGridCell = gridCells.get(index);
-  followPhoneBeatGrid(grid, index);
+  followBeatGrid(grid, index, preferredRowFromTop);
 }
 function nextRowFits(grid, index) {
   const offset = grid.cells.findIndex(c => c.index === index);
@@ -158,6 +158,7 @@ function nextRowFits(grid, index) {
 }
 ''' .replace('COLUMNS', str(columns)) + follow + r'''
 let grid = fixture();
+// The default/null target retains the old minimal row-follow behavior.
 // Upper/middle/current fifth row and its last beat are safe: no movement.
 for (const index of [0, 2 * columns, 5 * columns - 1]) update(grid, index);
 assert.deepEqual(writes, []);
@@ -203,16 +204,56 @@ grid = fixture(); top = 0; callbackContainer.clientHeight = 56;
 update(grid, 5 * columns);
 assert.equal(top, 5 * 48);
 assert(activeGridCell.getBoundingClientRect().top >= 104);
-// Desktop/tablet and the Lyrics/Edit views do no geometry reads or scrolling.
+// A preferred second-row target applies only when movement is needed.
+callbackContainer.clientHeight = 308;
+grid = fixture(); top = 0; writes = [];
+update(grid, 0, 1);
+assert.equal(top, 0);  // no artificial top padding at song start
+assert.deepEqual(writes, []);
+update(grid, 5 * columns, 1);
+assert.equal(top, 4 * 48);
+assert.equal(activeGridCell.getBoundingClientRect().top, 104 + 48);
+update(grid, 5 * columns, 1);
+assert.equal(writes.length, 1);  // repeated update does not double-step
+update(grid, 9 * columns, 1);
+assert.equal(top, 8 * 48);
+assert.equal(activeGridCell.getBoundingClientRect().top, 104 + 48);
+// Far-forward and backward seeks land on the preferred rendered row.
+grid = fixture(); top = 0; writes = [];
+update(grid, 10 * columns, 1);
+assert.equal(top, 9 * 48);
+assert.equal(writes.length, 1);
+update(grid, columns, 1);
+assert.equal(top, 0);
+assert.equal(writes.length, 2);
+assert.equal(activeGridCell.getBoundingClientRect().top, 104 + 48);
+// At song end the browser scroll range wins over the preferred position.
+grid = fixture(0, 8 * columns - 1); top = 0; writes = [];
+update(grid, 7 * columns - 1, 1);
+assert.equal(top, callbackContainer.scrollHeight - callbackContainer.clientHeight);
+update(grid, 8 * columns - 2, 1);
+assert.equal(writes.length, 1);
+assert(activeGridCell.getBoundingClientRect().bottom <= 404);
+// Desktop/tablet and Lyrics/Edit views still do no geometry reads or scrolling.
 for (const mode of ['desktop', 'tablet', 'lyrics', 'edit']) {
   narrow = !['desktop', 'tablet'].includes(mode);
   songViewMode = mode === 'lyrics' ? 'song' : 'grid';
   editMode = mode === 'edit';
   top = 0; writes = []; reads = 0;
-  update(grid, 10 * columns);
+  update(grid, 6 * columns, 1);
   assert.deepEqual(writes, []);
   assert.equal(reads, 0);
 }
 '''
     result = subprocess.run([node, '-e', script], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
+
+    # Desktop/tablet pass null, while phones use the internal target.
+    renderer = source.split('    function renderBeatGrid(', 1)[1].split(
+        '    function followBeatGrid(', 1
+    )[0]
+    assert (
+        'isNarrowViewport() ? PHONE_GRID_FOLLOW_ROW : null' in renderer
+    )
+    assert 'followBeatGrid(grid, activeIndex, preferredRowFromTop)' in renderer
+    assert 'const PHONE_GRID_FOLLOW_ROW = 1;' in source

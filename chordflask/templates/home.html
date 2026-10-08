@@ -5567,6 +5567,7 @@
     let displayedGridKey = null;
     let activeGridCell = null;
     let gridCells = new Map();
+    const PHONE_GRID_FOLLOW_ROW = 1;
 
     function renderBeatGrid(grid, activeIndex) {
       // Active state is intentionally excluded: beats within a musical row
@@ -5618,10 +5619,11 @@
         next.setAttribute('aria-current', 'true');
       }
       activeGridCell = next;
-      followPhoneBeatGrid(grid, activeIndex);
+      const preferredRowFromTop = isNarrowViewport() ? PHONE_GRID_FOLLOW_ROW : null;
+      followBeatGrid(grid, activeIndex, preferredRowFromTop);
     }
 
-    function followPhoneBeatGrid(grid, activeIndex) {
+    function followBeatGrid(grid, activeIndex, preferredRowFromTop = null) {
       if (!isNarrowViewport() || songViewMode === 'song' || editMode || !activeGridCell) return;
       const position = grid.cells.findIndex(beat => beat.index === activeIndex);
       const columns = grid.compact_columns;
@@ -5641,7 +5643,15 @@
       if (currentRect.top >= upper && bottom <= lower) return;
       const rows = grid.cells.filter((_, index) => index % columns === 0);
       let target = scrollTop;
-      if (currentRect.top < upper) {
+      if (preferredRowFromTop !== null) {
+        const currentRow = Math.floor(position / columns);
+        const firstRow = rows[Math.max(0, currentRow - preferredRowFromTop)];
+        const preferred = scrollTop
+          + gridCells.get(firstRow.index).getBoundingClientRect().top - upper;
+        target = Math.max(preferred, scrollTop + bottom - lower);
+        // Preserve the active row even in unusually short viewports.
+        target = Math.min(target, scrollTop + currentRect.top - upper);
+      } else if (currentRect.top < upper) {
         target = scrollTop + currentRect.top - upper;
       } else {
         const required = scrollTop + bottom - lower;
