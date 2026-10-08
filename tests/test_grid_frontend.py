@@ -215,18 +215,34 @@ assert.equal(top, 4 * 48);
 assert.equal(activeGridCell.getBoundingClientRect().top, 104 + 48);
 update(grid, 5 * columns, 1);
 assert.equal(writes.length, 1);  // repeated update does not double-step
-update(grid, 9 * columns, 1);
-assert.equal(top, 8 * 48);
-assert.equal(activeGridCell.getBoundingClientRect().top, 104 + 48);
+// Every beat in each subsequent row stays at one stable preferred position.
+grid = fixture(); top = 0; writes = [];
+const positions = [];
+for (let row = 4; row <= 8; row++) {
+  for (let beat = 0; beat < columns; beat++) {
+    update(grid, row * columns + beat, 1);
+    positions.push(top);
+  }
+}
+assert.deepEqual(writes, [3, 4, 5, 6, 7].map(row => row * 48));
+assert.deepEqual(positions, [3, 4, 5, 6, 7].flatMap(
+  row => Array(columns).fill(row * 48)
+));
 // Far-forward and backward seeks land on the preferred rendered row.
 grid = fixture(); top = 0; writes = [];
 update(grid, 10 * columns, 1);
+assert.equal(top, 9 * 48);
+assert.equal(writes.length, 1);
+update(grid, 10 * columns + 1, 1);
 assert.equal(top, 9 * 48);
 assert.equal(writes.length, 1);
 update(grid, columns, 1);
 assert.equal(top, 0);
 assert.equal(writes.length, 2);
 assert.equal(activeGridCell.getBoundingClientRect().top, 104 + 48);
+update(grid, columns + 1, 1);
+assert.equal(top, 0);
+assert.equal(writes.length, 2);
 // At song end the browser scroll range wins over the preferred position.
 grid = fixture(0, 8 * columns - 1); top = 0; writes = [];
 update(grid, 7 * columns - 1, 1);

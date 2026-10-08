@@ -5627,31 +5627,37 @@
       if (!isNarrowViewport() || songViewMode === 'song' || editMode || !activeGridCell) return;
       const position = grid.cells.findIndex(beat => beat.index === activeIndex);
       const columns = grid.compact_columns;
-      const nextRow = grid.cells[Math.floor(position / columns) * columns + columns];
       const currentRect = activeGridCell.getBoundingClientRect();
-      const nextRect = nextRow ? gridCells.get(nextRow.index).getBoundingClientRect() : currentRect;
       const containerRect = callbackContainer.getBoundingClientRect();
       const padding = getComputedStyle(callbackContainer);
       const upper = containerRect.top + callbackContainer.clientTop + parseFloat(padding.paddingTop);
       const lower = containerRect.top + callbackContainer.clientTop
         + callbackContainer.clientHeight - parseFloat(padding.paddingBottom);
       const scrollTop = callbackContainer.scrollTop;
+      const rows = grid.cells.filter((_, index) => index % columns === 0);
+      if (preferredRowFromTop !== null) {
+        const currentRow = Math.floor(position / columns);
+        const firstRow = rows[Math.max(0, currentRow - preferredRowFromTop)];
+        let target = scrollTop
+          + gridCells.get(firstRow.index).getBoundingClientRect().top - upper;
+        // Preserve the active row in unusually short viewports.
+        target = Math.max(target, scrollTop + currentRect.bottom - lower);
+        target = Math.min(target, scrollTop + currentRect.top - upper);
+        target = Math.max(0, Math.min(
+          target, callbackContainer.scrollHeight - callbackContainer.clientHeight
+        ));
+        if (target !== scrollTop) callbackContainer.scrollTop = target;
+        return;
+      }
+      const nextRow = grid.cells[Math.floor(position / columns) * columns + columns];
+      const nextRect = nextRow ? gridCells.get(nextRow.index).getBoundingClientRect() : currentRect;
       // If two rows cannot fit, prioritize the current row. At song end there
       // is no look-ahead row, so never manufacture empty scrolling space.
       const bottom = nextRect.height + currentRect.height <= lower - upper
         ? nextRect.bottom : currentRect.bottom;
       if (currentRect.top >= upper && bottom <= lower) return;
-      const rows = grid.cells.filter((_, index) => index % columns === 0);
       let target = scrollTop;
-      if (preferredRowFromTop !== null) {
-        const currentRow = Math.floor(position / columns);
-        const firstRow = rows[Math.max(0, currentRow - preferredRowFromTop)];
-        const preferred = scrollTop
-          + gridCells.get(firstRow.index).getBoundingClientRect().top - upper;
-        target = Math.max(preferred, scrollTop + bottom - lower);
-        // Preserve the active row even in unusually short viewports.
-        target = Math.min(target, scrollTop + currentRect.top - upper);
-      } else if (currentRect.top < upper) {
+      if (currentRect.top < upper) {
         target = scrollTop + currentRect.top - upper;
       } else {
         const required = scrollTop + bottom - lower;
