@@ -451,3 +451,56 @@ def test_chord_load_failure_keeps_traceback(tmp_path, monkeypatch, caplog):
     )
     assert record.exc_info is not None
     assert record.exc_info[0] is RuntimeError
+
+
+def test_structured_grid_retains_long_labels_empty_and_unknown_semantics():
+    labels = ['F', 'Bbmaj7', 'Ebmaj7', 'Gm7', 'Db6', '-', 'N', 'X']
+    data = ChordData()
+    data.set_base_chords([
+        {'timestamp': float(i), 'chord': label} for i, label in enumerate(labels)
+    ], beat_times=list(map(float, range(len(labels)))))
+    view = PlaybackView(data, repeat_mode='chords')
+    grid = view.render(0)['grid']
+    assert grid['columns'] == 8
+    assert grid['compact_columns'] == 4
+    assert [cell['chord'] for cell in grid['cells']] == labels
+    assert [cell['index'] for cell in grid['cells']] == list(range(8))
+    assert not any(cell['downbeat'] for cell in grid['cells'])
+    assert view.render(1)['grid'] == grid  # current state cannot change geometry
+
+
+def test_structured_grid_uses_actual_three_beat_downbeats_and_pickup():
+    data = ChordData()
+    data.set_base_chords([{'timestamp': 0.0, 'chord': 'F'}],
+                         beat_times=list(map(float, range(19))))
+    data.meter_signature = 3
+    data.set_beat_numbers([3] + [1, 2, 3] * 6)
+    grid = PlaybackView(data).render(13)['grid']
+    assert grid['columns'] == 6
+    assert grid['compact_columns'] == 3
+    assert [cell['index'] for cell in grid['cells'] if cell['downbeat']] == [1, 4, 7, 10, 13, 16]
+    assert grid['cells'][0]['index'] == 1
+    assert grid['cells'][0]['repeat'] is False
+    assert grid['cells'][3]['repeat'] is True
+    assert grid['cells'][3]['compact_row_start'] is True
+
+
+def test_structured_grid_missing_phase_does_not_invent_bars():
+    data = ChordData()
+    data.set_base_chords([{'timestamp': 0.0, 'chord': 'F'}],
+                         beat_times=list(map(float, range(24))))
+    data.meter_signature = 3
+    grid = PlaybackView(data).render(12)['grid']
+    assert grid['columns'] == 6
+    assert not any(cell['downbeat'] for cell in grid['cells'])
+    data.set_beat_numbers([0] * 24)
+    assert PlaybackView(data).render(12)['grid'] == grid
+
+
+def test_structured_grid_callback_and_delayed_lookahead_share_rendering(tmp_path):
+    player = _diagnostic_player(tmp_path)
+    player.update_position(0)
+    payload = player.get_callback_output()
+    assert payload['display_grid'] == player.playback_view.render_index(0)['grid']
+    for beat in payload['beat_lookahead']:
+        assert beat['display_grid'] == player.playback_view.render_index(beat['index'])['grid']

@@ -12,6 +12,7 @@ User workflows belong in the feature guides rather than this developer map:
 
 - [analysis, tracks, editing, and export](ANALYSIS.md);
 - [lyrics generation and synchronized sheets](LYRICS.md);
+- [per-song Journal](JOURNAL.md);
 - [optional Demucs stems](DEMUCS.md);
 - [maintenance and storage operations](MAINTENANCE.md); and
 - [source/standalone installation differences](STANDALONE.md).
@@ -127,7 +128,13 @@ user-owned lyric ChordPro. It returns metadata and ordered text/chord runs; it
 does not use analyzer chord types. The browser renders those records with DOM
 creation and `textContent` inside the existing chord panel. This input path is
 separate from `chord_chordpro.py`, which formats analyzed beat grids as
-lyric-free ChordPro exports.
+ChordPro exports. `chord_export_sheet.py` combines a display snapshot with
+existing local Lyrics for browser exports; command-line exports remain chord-only.
+
+`journal.py` validates and atomically stores per-song Journal entries, with paths
+owned by `FileRepr`. The web process handles Journal requests independently of
+the analysis worker. The desktop panel uses playback seconds for timestamp
+seeking and highlighting; Agent entries are stored observations and invoke no AI.
 
 The package also owns the browser template, PDF fonts, Markdown/PDF export
 code, and supported CLI helper modules. Resources are resolved relative to the
@@ -225,6 +232,10 @@ installed Vamp plugins.
 - Generated data for a media directory live in its `.chordflask` subdirectory.
   This includes Schema-v3 analysis JSON, derived caches and exports, and
   optional Demucs generations.
+- User-owned Journal sidecars live separately under
+  `.chordflask/journals/<full media filename>.journal.json`. They are independent
+  of analysis JSON and `.cho` Lyrics sheets; reanalysis and generic maintenance
+  preserve them.
 - Queue state, worker locking, and application logs under `~/.chordflask` are
   separate from media-local analysis data. `CHORDFLASK_QUEUE_DIR` can override
   this state location.
@@ -273,6 +284,7 @@ state coordination, not authentication or hardened multi-user isolation.
 | Chordino/QM analysis pipeline | `chordflask/chordanalyzer.py`, `chordflask/analysis_service.py`, `chordflask/audio_analyzer.py` |
 | Chord display and post-processing | `chordflask/chorddata.py`, `chordflask/chordutils.py`, `chordflask/metric_chords.py`, `chordflask/chord_postprocess.py` |
 | External ChordPro Song parsing/display | `chordflask/chordpro_song.py`, `chordflask/app.py`, `chordflask/templates/home.html` |
+| Per-song Journal storage and display | `chordflask/journal.py`, `chordflask/filerepr.py`, `chordflask/app.py`, `chordflask/templates/home.html` |
 | Storage model and schema | `chordflask_base/`, `chordflask/filerepr.py` |
 | Markdown/PDF and other exports | `chordflask/chord_markdown.py`, `chordflask/chord_sheet_pdf.py`, `chordflask/chord_exporter.py`, `chordflask/helpers/` |
 | BTC analyzer | `chordflask_btc/` |

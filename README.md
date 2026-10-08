@@ -18,6 +18,8 @@ ChordFlask is an independent project and is not affiliated with Chordify.
 
 ![ChordFlask example screenshot](docs/example-screenshot.png)
 
+Desktop playback with the chord Grid and optional stems.
+
 ## Design principles
 
 The standalone stays deliberately lean while providing the complete core
@@ -38,6 +40,20 @@ ChordFlask is designed for exploring a music collection and playing along with w
 
 During playback, the detected chords and beats follow the song in the browser. This makes it easy to pick up an instrument, improvise, or work out a part without first searching for a separate chord sheet. Transpose the displayed chords, set an A/B loop around a difficult passage, or correct individual chords while keeping the original analyzer result available.
 
+The Grid uses equal-width beat cells, larger chord labels, subtle beat lines,
+and stronger boundaries at supplied downbeats. Empty and repeated beats stay
+quiet, while a dedicated playhead marks the current beat. Desktop and smartphone
+layouts use the same beat structure; smartphone follow keeps the next row
+visible when space permits. Bar boundaries reflect the rhythm data and
+configured meter, not automatic meter recognition.
+
+On desktop, a per-song **Journal** keeps Note, Info, and Agent entries for the
+whole song or a playback position. Timestamps seek playback and briefly
+highlight as the song passes them. Agent entries record questions, resolutions,
+and resolved state; Journal itself does not invoke AI. These user-owned
+sidecars live in `.chordflask/journals`, independently of analysis and `.cho`
+Lyrics sheets. See [the Journal guide](docs/JOURNAL.md) for details.
+
 Automatic chord recognition is not a perfect transcription, especially with dense arrangements or unusual harmony. It is intended as a practical starting point for playing, orientation, and improvisation. When the analysis is close but not quite right, you can correct it beat by beat instead of starting over.
 
 Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro.
@@ -55,6 +71,7 @@ At a glance, ChordFlask lets you:
 - follow detected chords and beats during playback;
 - transpose chords, repeat difficult passages with A/B loops, and correct detected chords;
 - add synchronized lyrics from LRC, embedded metadata, or LRCLIB;
+- keep per-song notes and observations in the Journal;
 - prepare Demucs stems for karaoke and instrument practice; and
 - export analyses as Markdown, PDF, or ChordPro.
 
@@ -64,7 +81,7 @@ At a glance, ChordFlask lets you:
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.20.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.20/chordflask-mint22-x86_64-py3.12-v0.9.20.tar.gz)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.21.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.21/chordflask-mint22-x86_64-py3.12-v0.9.21.tar.gz)**
 
 The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is based on Ubuntu 24.04.
 
@@ -73,9 +90,9 @@ Vamp plugin binaries are not bundled; see the portable bundle guide for
 requirements.
 
 Recommended Debian-family package for this build platform:
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.20.deb](https://github.com/bkl2000/chordflask/releases/download/v0.9.20/chordflask-mint22-x86_64-py3.12-v0.9.20.deb)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.21.deb](https://github.com/bkl2000/chordflask/releases/download/v0.9.21/chordflask-mint22-x86_64-py3.12-v0.9.21.deb)**
 
-Install: `sudo apt install ./chordflask-mint22-x86_64-py3.12-v0.9.20.deb`. Remove: `sudo apt remove chordflask`.
+Install: `sudo apt install ./chordflask-mint22-x86_64-py3.12-v0.9.21.deb`. Remove: `sudo apt remove chordflask`.
 The archive remains a portable fallback needing no root or system installation.
 <!-- standalone-download:end -->
 
@@ -174,7 +191,17 @@ Previously analyzed songs are loaded from the collection's `.chordflask`
 directory. The original analyzer tracks remain intact when an Edited version
 is created.
 
-![ChordFlask file browser and analysis view](docs/example-screenshot-2.png)
+![ChordFlask Lyrics and file browser](docs/example-screenshot-2.png)
+
+Lyrics view beside the player, with the file browser open.
+
+![ChordFlask desktop Lyrics view](docs/example-screenshot-3.png)
+
+Desktop Lyrics with chords above the text and optional stem controls.
+
+![ChordFlask updated beat Grid](docs/example-screenshot-4.png)
+
+The updated Grid with quiet held beats, bar boundaries, and the current-beat playhead.
 
 See [Analysis, tracks, editing and export](docs/ANALYSIS.md) for the complete
 playback, queue, track, and persistence behavior.
@@ -300,7 +327,8 @@ chordflask-export --format chordpro song.mp3
 
 The browser **Export** menu offers Markdown, PDF, ChordPro, or **All formats
 (.zip)**. Individual formats download directly; only **All formats** produces a
-ZIP. Existing local Lyrics and romanization are included when available. Export
+ZIP. Browser exports may include existing local Lyrics and romanization;
+`chordflask-export` remains chord-only. Journal entries are not exported. Export
 options, track selection, naming, and storage locations are documented in
 [docs/ANALYSIS.md](docs/ANALYSIS.md#command-line-export).
 
@@ -486,6 +514,7 @@ are documented in [docs/STANDALONE.md](docs/STANDALONE.md).
 ## More documentation
 
 - [Analysis, tracks, editing, beat-grid correction, and export](docs/ANALYSIS.md)
+- [Per-song Journal: notes, information, and Agent observations](docs/JOURNAL.md)
 - [Lyrics, LRC, embedded lyrics, LRCLIB, and romanization](docs/LYRICS.md)
 - [Demucs stems and practice workflows](docs/DEMUCS.md)
 - [Maintenance and storage](docs/MAINTENANCE.md)

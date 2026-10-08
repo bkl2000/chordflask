@@ -124,6 +124,34 @@ class PlaybackView:
         return {
             "index": current_index,
             "output": output,
+            "grid": self.__beat_grid(full_chords, current_index),
             "bpm": self.chord_data.bpm,
             "position": beat_time if position is None else position,
         }
+
+    def __beat_grid(self, chords, active_index):
+        """Presentation only: retain analyzed indexes, labels and bar phase."""
+        meter = self.chord_data.meter_signature or 4
+        columns = meter * self.__GRID_MEASURES_PER_ROW
+        rows, before = _GRID_SETTINGS[self.grid_mode]
+        row_start = self.chord_data.get_grid_row_start(active_index)
+        if row_start is None:
+            row_start = active_index - active_index % columns
+        start = max(0, row_start - before * columns)
+        end = min(len(chords), start + rows * columns)
+        numbers = self.chord_data.beat_numbers
+        cells = []
+        for index in range(start, end):
+            chord = chords[index][1]
+            column = (index - start) % columns
+            cells.append({
+                "index": index,
+                "chord": chord,
+                "repeat": bool(
+                    self.repeat_mode == "changes" and column != 0
+                    and index > 0 and chords[index - 1][1] == chord
+                ),
+                "compact_row_start": column == meter,
+                "downbeat": index < len(numbers) and numbers[index] == 1,
+            })
+        return {"columns": columns, "compact_columns": meter, "cells": cells}

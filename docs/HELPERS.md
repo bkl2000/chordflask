@@ -17,12 +17,13 @@ These are kept as usable command-line tools and have smoke-test coverage.
   ```
 
 - `export_cli.py` - the `chordflask-export` command. It exports one media file
-  or a whole directory as playable Markdown and print-ready A4 PDF leadsheets.
+  or a whole directory as playable Markdown, print-ready A4 PDF, or lyric-free
+  ChordPro leadsheets.
   It reuses valid analysis JSON, analyzes only missing files serially, and
-  writes matching `.chordflask/<name>-chords-<track>.md` and `.pdf` files. One
-  failing file does not stop later files. Exit code 0 means all exports
+  writes matching `.chordflask/<name>-chords-<track>.md`, `.pdf`, and/or `.cho`
+  files. One failing file does not stop later files. Exit code 0 means all exports
   succeeded, 1 means partial or per-file errors, and 2 means invalid invocation
-  or a missing directory. Options: `--format markdown|pdf|both` (default
+  or a missing directory. Options: `--format markdown|pdf|both|chordpro|all` (default
   `both`), `--chord-track auto|original|edited|TRACK_ID` (default `auto` =
   Edited when present, otherwise Chordino), `--rhythm-track TRACK_ID` (default
   `qm_barbeattracker`), `--transpose N`, `--sharps`, `--unicode`,
@@ -30,7 +31,8 @@ These are kept as usable command-line tools and have smoke-test coverage.
   to disable the enabled-by-default rhythm-aware smoothing. The leadsheet uses
   aligned monospace beat fields, two complete measures per row, and extra space
   after every eight measures. The helper never imports Flask or starts the
-  server. Wrapper: `scripts/chordflask-export`.
+  server. Unlike browser exports, this command does not include local Lyrics
+  or romanization. Wrapper: `scripts/chordflask-export`.
 
   ```bash
   scripts/chordflask-export /path/to/collection

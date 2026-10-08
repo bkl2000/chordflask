@@ -2812,52 +2812,22 @@ def test_chord_grid_uses_compact_responsive_desktop_layout():
     assert "min-height: 420px" in workspace_rule
     assert "padding: 6px 12px" in chord_header_rule
     assert "padding: 8px 12px" in callback_rule
-    assert "clamp(14px, min(1.35vw, 3vh), 21px)" in callback_rule
+    assert "overflow: auto" in callback_rule
     assert "grid-template-rows: minmax(0, 1fr) auto" in desktop_rule
-    desktop_grid_sizes = [
-        int(size) for size in re.findall(
-            r"#callbackOutput\s*\{[^}]*font-size:\s*clamp\([^;]*,\s*(\d+)px\);",
-            desktop_rule,
-        )
-    ]
-    assert desktop_grid_sizes
-    assert all(24 <= size <= 26 for size in desktop_grid_sizes)
-    assert "cqw" in desktop_rule
-    assert "cqh" in desktop_rule
+    assert "repeat(var(--grid-columns, 8), minmax(0, 1fr))" in body
+    assert '#callbackOutput[role="list"]' in body
     assert "@media (max-width: 800px)" in body
 
 
-def test_playback_grid_typography_grows_without_changing_phone_scale():
+def test_playback_grid_typography_sizes_to_cells_at_every_viewport():
     _, client = make_client()
     body = client.get("/").get_data(as_text=True)
-
-    def callback_font_max(block):
-        match = re.search(
-            r"#callbackOutput\s*\{[^}]*font-size:\s*clamp\([^;]*,\s*(\d+)px\);",
-            block,
-        )
-        assert match is not None
-        return int(match.group(1))
-
-    desktop = body.split(
-        "@media (min-width: 801px) and (min-height: 600px) {", 1
-    )[1].split("@media", 1)[0]
-    wide_tablet = body.split(
-        "@media (min-width: 801px) and (max-width: 1023px) {", 1
-    )[1].split("@media", 1)[0]
-    narrow_tablet = body.split(
-        "@media (min-width: 641px) and (max-width: 800px) {", 1
-    )[1].split("@media", 1)[0]
-    phone = body.rsplit("@media (max-width: 640px) {", 1)[1]
-
-    desktop_max = callback_font_max(desktop)
-    wide_tablet_max = callback_font_max(wide_tablet)
-    narrow_tablet_max = callback_font_max(narrow_tablet)
-    phone_max = callback_font_max(phone)
-
-    assert 24 <= desktop_max <= 26
-    assert wide_tablet_max > phone_max
-    assert narrow_tablet_max > phone_max
+    grid_css = body.split("/* Grid presentation:", 1)[1].split("</style>", 1)[0]
+    assert "font-size: min(32px, 40cqw, calc(150cqw / var(--label-length, 1)))" in grid_css
+    assert "container-type: inline-size" in grid_css
+    assert "repeat(var(--compact-columns, 4), minmax(0, 1fr))" in grid_css
+    assert "overflow-wrap: anywhere" in grid_css
+    assert "label.textContent = empty ? '' : beat.chord" in body
 
 
 def test_responsive_layout_reserves_space_for_controls_and_stacks_cleanly():
@@ -2890,12 +2860,12 @@ def test_responsive_layout_reserves_space_for_controls_and_stacks_cleanly():
     assert "min-height: 320px" in narrow_rule
 
 
-def test_chord_grid_stays_plain_text_with_one_container_reference():
+def test_chord_grid_is_structured_with_one_container_reference():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
 
-    assert '<pre id="callbackOutput"></pre>' in body
+    assert '<div id="callbackOutput" role="list" aria-label="Chord beats"></div>' in body
     declarations = [
         line for line in body.splitlines()
         if "callbackContainer" in line and "getElementById" in line
@@ -3155,9 +3125,10 @@ def test_position_updates_preserve_song_dom_and_scroll():
     body = client.get("/").get_data(as_text=True)
     renderer = javascript_function(body, "renderCallbackData")
 
-    assert "callbackOutput.innerText = displayOutput" in renderer
-    assert "if (songViewMode !== 'song')" in renderer
-    assert "callbackContainer.scrollTop = 0" in renderer
+    assert "renderBeatGrid(dataDict.display_grid, dataDict.active_index)" in renderer
+    grid_renderer = javascript_function(body, "renderBeatGrid")
+    assert "if (songViewMode !== 'song')" in grid_renderer
+    assert "callbackContainer.scrollTop = 0" in grid_renderer
     assert "songSheet" not in renderer
 
 
@@ -3327,7 +3298,7 @@ def test_lyrics_active_chord_uses_strong_inverse_for_both_themes():
     assert "background: #1b1f24;" not in dark_rule
 
 
-def test_chord_grid_mode_is_viewport_selected_without_changing_mobile_reflow():
+def test_chord_grid_mode_is_viewport_selected_with_css_mobile_reflow():
     _, client = make_client()
 
     body = client.get("/").get_data(as_text=True)
@@ -3344,7 +3315,7 @@ def test_chord_grid_mode_is_viewport_selected_without_changing_mobile_reflow():
     request_mode = sync.index("grid_mode: gridMode", cache_check)
     assert selection < cache_check < request_mode
     assert sync.count("isDesktopChordGrid()") == 1
-    assert "function reflowGridForMobile" in body
+    assert "repeat(var(--compact-columns, 4), minmax(0, 1fr))" in body
     assert "window.matchMedia('(max-width: 640px)')" in body
 
 
@@ -3603,13 +3574,13 @@ def test_mobile_chord_reflow_is_guarded_and_safe():
 
     body = client.get("/").get_data(as_text=True)
 
-    assert "function reflowGridForMobile" in body
-    assert "function splitGridLine" in body
+    assert "repeat(var(--compact-columns, 4), minmax(0, 1fr))" in body
+    assert "function splitGridLine" not in body
     assert "window.matchMedia('(max-width: 640px)')" in body
-    # The safe-split guard only splits on exact field boundaries and otherwise
-    # leaves a line unchanged, so a chord label is never cut.
-    assert "% 7 === 0" in body
-    assert "line.length % 14 === 0" in body
+    # The same cells reflow without slicing or abbreviating chord content.
+    assert "label.textContent = empty ? '' : beat.chord" in body
+    assert "min-width: 0" in body
+    assert "overflow-wrap: anywhere" in body
 
 
 def test_mobile_control_bar_stays_in_normal_flow_with_video_space():

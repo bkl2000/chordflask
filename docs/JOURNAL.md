@@ -1,5 +1,9 @@
 # Per-song Journal
 
+Journal keeps notes, song information, and observations for each song. Entries
+can apply to the whole song or mark a playback position; they do not change
+chords, rhythm, or Lyrics.
+
 On desktop, **Journal** beside **Files** opens a compact expandable panel for
 the loaded song. Click again to close it. Files and Journal share the area:
 opening either closes the other. Playback continues. Tablet and smartphone
@@ -35,8 +39,10 @@ implementation details, or investigation history here.
 
 ## Storage and developer contract
 
-Journal is optional, user-authored data separate from analysis JSON. `FileRepr`
-owns its path: `<media directory>/.chordflask/journals/<full media filename>.journal.json`,
+Journal is optional, user-owned data separate from analysis JSON and same-stem
+`.cho` Lyrics sheets. It does not require either file and has an independent
+lifecycle. `FileRepr` owns its path:
+`<media directory>/.chordflask/journals/<full media filename>.journal.json`,
 for example `.chordflask/journals/song.mp3.journal.json`. Including the media
 extension avoids same-stem recording collisions; the separate directory avoids
 collisions with analysis for media named `song.mp3.journal.mp4`.

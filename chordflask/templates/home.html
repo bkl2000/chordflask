@@ -452,11 +452,7 @@
     #callbackOutput {
       margin: 0;
       color: var(--chord-text);
-      font-family: Consolas, "Courier New", monospace;
-      font-size: clamp(14px, min(1.35vw, 3vh), 21px);
       line-height: 1.28;
-      white-space: pre;
-      tab-size: 4;
     }
 
     .chord-title-group {
@@ -1766,9 +1762,6 @@
         container-type: size;
       }
 
-      #callbackOutput {
-        font-size: clamp(14px, min(3.2cqw, 6cqh), 26px);
-      }
     }
 
     @media (min-width: 1024px) and (min-height: 600px) {
@@ -1816,9 +1809,6 @@
         container-type: inline-size;
       }
 
-      #callbackOutput {
-        font-size: clamp(14px, 3.2cqw, 26px);
-      }
     }
 
     @media (min-width: 641px) and (max-width: 1023px) {
@@ -1915,9 +1905,6 @@
         min-height: 320px;
       }
 
-      #callbackOutput {
-        font-size: clamp(10px, 2.2vw, 14px);
-      }
 
       .controls {
         grid-template-columns: 1fr 1fr;
@@ -1981,9 +1968,6 @@
         grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
       }
 
-      #callbackOutput {
-        font-size: clamp(14px, 1.65vw, 18px);
-      }
     }
 
     @media (min-width: 641px) and (max-width: 800px) {
@@ -1996,9 +1980,6 @@
         min-height: 420px;
       }
 
-      #callbackOutput {
-        font-size: clamp(16px, 2.6vw, 20px);
-      }
     }
 
     @media (max-width: 640px) {
@@ -2148,9 +2129,6 @@
         overflow: auto;
       }
 
-      #callbackOutput {
-        font-size: clamp(12px, 4.6vw, 16px);
-      }
 
       .chord-panel.chord-light:not(.song-view-active) #callbackOutput {
         font-weight: 700;
@@ -2247,6 +2225,81 @@
       }
     }
 
+    /* Grid presentation: equal tracks independent of chord-label length. */
+    #callbackOutput[role="list"] {
+      display: grid;
+      grid-template-columns: repeat(var(--grid-columns, 8), minmax(0, 1fr));
+      width: 100%;
+      min-width: 0;
+      white-space: normal;
+      font-family: Arial, sans-serif;
+      gap: 0;
+    }
+
+    #callbackOutput[hidden] { display: none; }
+
+    .beat-cell {
+      position: relative;
+      container-type: inline-size;
+      min-width: 0;
+      min-height: clamp(48px, 8cqw, 64px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 1px solid color-mix(in srgb, var(--chord-text) 9%, transparent);
+    }
+
+    .beat-cell::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 1px;
+      background: color-mix(in srgb, var(--chord-text) 9%, transparent);
+    }
+
+    .beat-cell.bar-start::before {
+      width: 2px;
+      background: color-mix(in srgb, var(--chord-text) 35%, transparent);
+    }
+
+    .beat-chord {
+      padding: 6px 2px;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      font-size: min(32px, 40cqw, calc(150cqw / var(--label-length, 1)));
+      font-weight: 600;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+      text-align: center;
+    }
+
+    .held-chord .beat-chord { visibility: hidden; }
+    .unknown-chord .beat-chord { opacity: 0.45; }
+
+    .beat-cell.current-beat {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .beat-cell.current-beat::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      background: var(--accent);
+    }
+
+    @media screen and (max-width: 640px) {
+      #callbackOutput[role="list"] {
+        grid-template-columns: repeat(var(--compact-columns, 4), minmax(0, 1fr));
+      }
+      .chord-panel:not(.song-view-active) #callbackContainer {
+        padding-block: 4px;
+      }
+      .beat-cell { min-height: 48px; }
+      .beat-chord { padding-block: 4px; }
+      .held-chord.compact-row-start .beat-chord { visibility: visible; }
+    }
   </style>
 </head>
 <body>
@@ -2444,7 +2497,7 @@
           </div>
         </div>
         <div id="callbackContainer">
-          <pre id="callbackOutput"></pre>
+          <div id="callbackOutput" role="list" aria-label="Chord beats"></div>
           <div id="songSheet" hidden></div>
           <div id="editGridContainer" hidden>
             <div id="editGrid"></div>
@@ -5511,67 +5564,110 @@
       return window.matchMedia('(min-width: 1024px) and (min-height: 650px)').matches;
     }
 
-    function splitGridLine(line) {
-      // The server renders each grid field as a fixed-width (7 char) cell;
-      // only the active beat uses a bracketed, variable-width cell. Split a
-      // row into two halves only when the boundary falls on a field edge so
-      // a chord label is never cut; otherwise leave the line unchanged.
-      if (!line) return [line];
-      const open = line.indexOf('[');
-      const close = open >= 0 ? line.indexOf(']', open + 1) : -1;
-      let splitIndex = -1;
-      if (open >= 0 && close >= 0) {
-        const prefixLen = open;
-        const suffixLen = line.length - close - 1;
-        if (prefixLen % 7 === 0 && suffixLen % 7 === 0) {
-          const prefixFields = prefixLen / 7;
-          const suffixFields = suffixLen / 7;
-          const totalFields = prefixFields + 1 + suffixFields;
-          if (totalFields % 2 === 0) {
-            const half = totalFields / 2;
-            if (half <= prefixFields) {
-              splitIndex = half * 7;
-            } else if (half === prefixFields + 1) {
-              splitIndex = close + 1;
-            } else {
-              splitIndex = close + 1 + (half - prefixFields - 1) * 7;
-            }
-          }
+    let displayedGridKey = null;
+    let activeGridCell = null;
+    let gridCells = new Map();
+
+    function renderBeatGrid(grid, activeIndex) {
+      // Active state is intentionally excluded: beats within a musical row
+      // keep their DOM identity. CSS alone reflows those same cells on phones.
+      const key = JSON.stringify(grid);
+      if (displayedGridKey !== key || !callbackOutput.firstChild) {
+        const fragment = document.createDocumentFragment();
+        gridCells = new Map();
+        activeGridCell = null;
+        callbackOutput.style.setProperty('--grid-columns', grid.columns);
+        callbackOutput.style.setProperty('--compact-columns', grid.compact_columns);
+        for (const beat of grid.cells) {
+          const cell = document.createElement('div');
+          cell.className = 'beat-cell';
+          cell.setAttribute('role', 'listitem');
+          cell.dataset.beatIndex = beat.index;
+          cell.dataset.chord = beat.chord;
+          if (beat.downbeat) cell.classList.add('bar-start');
+          const empty = ['', '-', 'N'].includes(beat.chord);
+          const meaning = empty ? `No chord (${beat.chord || 'empty'})`
+            : beat.chord === 'X' ? 'Unknown chord (X)'
+            : beat.repeat ? `Held chord ${beat.chord}` : beat.chord;
+          cell.setAttribute('aria-label', `Beat ${beat.index + 1}: ${meaning}`);
+          cell.title = meaning;
+          const label = document.createElement('span');
+          label.className = 'beat-chord';
+          label.setAttribute('aria-hidden', 'true');
+          label.textContent = empty ? '' : beat.chord;
+          label.style.setProperty('--label-length', Math.max(beat.chord.length, 1));
+          if (beat.repeat) cell.classList.add('held-chord');
+          if (beat.compact_row_start) cell.classList.add('compact-row-start');
+          if (beat.chord === 'X') cell.classList.add('unknown-chord');
+          cell.appendChild(label);
+          fragment.appendChild(cell);
+          gridCells.set(beat.index, cell);
         }
-      } else if (line.length % 14 === 0) {
-        splitIndex = line.length / 2;
+        callbackOutput.replaceChildren(fragment);
+        displayedGridKey = key;
+        if (songViewMode !== 'song') callbackContainer.scrollTop = 0;
       }
-      if (splitIndex > 0 && splitIndex < line.length) {
-        return [line.slice(0, splitIndex), line.slice(splitIndex)];
+      const next = gridCells.get(activeIndex) || null;
+      if (next === activeGridCell) return;
+      if (activeGridCell) {
+        activeGridCell.classList.remove('current-beat');
+        activeGridCell.removeAttribute('aria-current');
       }
-      return [line];
+      if (next) {
+        next.classList.add('current-beat');
+        next.setAttribute('aria-current', 'true');
+      }
+      activeGridCell = next;
+      followPhoneBeatGrid(grid, activeIndex);
     }
 
-    function reflowGridForMobile(text) {
-      const lines = text.split('\n');
-      if (lines.length < 2) {
-        return text;
+    function followPhoneBeatGrid(grid, activeIndex) {
+      if (!isNarrowViewport() || songViewMode === 'song' || editMode || !activeGridCell) return;
+      const position = grid.cells.findIndex(beat => beat.index === activeIndex);
+      const columns = grid.compact_columns;
+      const nextRow = grid.cells[Math.floor(position / columns) * columns + columns];
+      const currentRect = activeGridCell.getBoundingClientRect();
+      const nextRect = nextRow ? gridCells.get(nextRow.index).getBoundingClientRect() : currentRect;
+      const containerRect = callbackContainer.getBoundingClientRect();
+      const padding = getComputedStyle(callbackContainer);
+      const upper = containerRect.top + callbackContainer.clientTop + parseFloat(padding.paddingTop);
+      const lower = containerRect.top + callbackContainer.clientTop
+        + callbackContainer.clientHeight - parseFloat(padding.paddingBottom);
+      const scrollTop = callbackContainer.scrollTop;
+      // If two rows cannot fit, prioritize the current row. At song end there
+      // is no look-ahead row, so never manufacture empty scrolling space.
+      const bottom = nextRect.height + currentRect.height <= lower - upper
+        ? nextRect.bottom : currentRect.bottom;
+      if (currentRect.top >= upper && bottom <= lower) return;
+      const rows = grid.cells.filter((_, index) => index % columns === 0);
+      let target = scrollTop;
+      if (currentRect.top < upper) {
+        target = scrollTop + currentRect.top - upper;
+      } else {
+        const required = scrollTop + bottom - lower;
+        for (const row of rows) {
+          target = scrollTop + gridCells.get(row.index).getBoundingClientRect().top - upper;
+          if (target >= required) break;
+        }
+        // Preserve the active row even in unusually short viewports.
+        target = Math.min(target, scrollTop + currentRect.top - upper);
       }
-      const output = [lines[0]];
-      for (const line of lines.slice(1)) {
-        output.push(...splitGridLine(line));
-      }
-      return output.join('\n');
+      callbackContainer.scrollTop = Math.max(0, Math.min(
+        target, callbackContainer.scrollHeight - callbackContainer.clientHeight
+      ));
     }
 
     function renderCallbackData(dataDict) {
       const data = dataDict["callback_output"] || [];
       const bpm = dataDict["bpm"];
       bpmStatus.innerText = bpm ? `BPM: ${bpm}` : 'BPM: --';
-      const fullOutput = data.join('\n');
-      const displayOutput = isNarrowViewport()
-        ? reflowGridForMobile(fullOutput)
-        : fullOutput;
-      if (callbackOutput.innerText !== displayOutput) {
-        callbackOutput.innerText = displayOutput;
-        if (songViewMode !== 'song') {
-          callbackContainer.scrollTop = 0;
-        }
+      if (dataDict.display_grid) {
+        renderBeatGrid(dataDict.display_grid, dataDict.active_index);
+      } else {
+        displayedGridKey = null;
+        activeGridCell = null;
+        gridCells.clear();
+        callbackOutput.textContent = data.join('\n');
       }
       if (editMode && dataDict.edit_grid) {
         renderEditGrid(dataDict.edit_grid);
@@ -5633,6 +5729,7 @@
       }
       renderCallbackData({
         callback_output: beat.callback_output,
+        display_grid: beat.display_grid,
         bpm: playbackFallbackData.bpm,
         active_index: beat.index
       });

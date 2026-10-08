@@ -18,7 +18,9 @@ sync while the music plays.
 - Browse your local MP3, MP4 and WebM collection
 - Analyze only the tracks you are interested in
 - Display chords and beats synchronized with playback
+- Follow a structured beat Grid with a current-beat playhead
 - Correct chords manually and keep those edits across reanalysis
+- Keep per-song notes and observations in the desktop [Journal](JOURNAL.md)
 - Transpose and export chord sheets
 - Optionally generate and play synchronized stems
 - Keep media and analysis completely local

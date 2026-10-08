@@ -59,6 +59,7 @@ class MP4PlayerFlask:
         self.callback_output = deque(maxlen=self.max_lines)
         self.last_chord = None
         self.last_rendered_position = None
+        self.display_grid = None
         self.__empty_output_warning_active = False
         self.__beat_lookahead_cache = None
 
@@ -504,6 +505,7 @@ class MP4PlayerFlask:
         if not rendered:
             return
         self.last_rendered_position = rendered["position"]
+        self.display_grid = rendered.get("grid")
 
         if hasattr(self, "last_index") and self.last_index == rendered["index"]:
             self.__diagnose_empty_output()
@@ -579,6 +581,7 @@ class MP4PlayerFlask:
             "bpm": self.chord_data.bpm,
             "position": self.last_rendered_position,
             "active_index": active_index,
+            "display_grid": self.display_grid,
         }
         if active_index is None:
             return payload
@@ -599,6 +602,7 @@ class MP4PlayerFlask:
                     "index": index,
                     "time": self.chord_data.beat_times[index],
                     "callback_output": [rendered["output"]],
+                    "display_grid": rendered.get("grid"),
                 })
             self.__beat_lookahead_cache = (cache_key, lookahead)
         missing = [
