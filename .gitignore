@@ -95,3 +95,6 @@ session.json
 # Local ChordPro song sidecars
 videos/**/*.cho
 videos/*.cho
+
+# Claude Code
+CLAUDE.local.md
