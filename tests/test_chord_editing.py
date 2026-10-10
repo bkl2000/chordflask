@@ -1375,3 +1375,120 @@ def test_reset_requires_existing_edited_version_and_session_change():
         "editSessionHadEdited = false;\n"
         "      editSessionDirty = false;" in body
     )
+
+
+# ── stem chord tracks: status labels and stem-seeded editing ──────────
+
+def _stem_player(tmp_path, *, with_audio=True, extra_tracks=()):
+    from chordflask_base import build_stem_chord_metadata
+    from tests.test_stem_chords_model import MEDIA_SHA, SET_ID, _audio_set
+
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"media")
+    file_repr = FileRepr(str(media), datapath=str(tmp_path / ".chordflask"), create=True)
+    data = _editable_data()
+    audio = _audio_set()
+    if with_audio:
+        data.set_audio_track(SET_ID, audio)
+    for stem in ("other", "bass"):
+        data.set_chord_track(
+            f"chordino_stem_{stem}",
+            [{"timestamp": 0.0, "chord": "Dm"}, {"timestamp": 2.0, "chord": "E7"}],
+            metadata=build_stem_chord_metadata(
+                stem=stem, set_id=SET_ID, stem_entry=audio["tracks"][stem],
+                set_source_sha256=MEDIA_SHA if stem == "other" else "e" * 64, source_media=None,
+            ),
+        )
+    for track_id in extra_tracks:
+        data.set_chord_track(track_id, [{"timestamp": 0.0, "chord": "F"}])
+    data.save_to_file(file_repr.get("json"))
+    player = MP4PlayerFlask(file_repr)
+    player.set_prefer_flats(True)
+    player.set_repeat_mode("changes")
+    return player
+
+
+def _labels(player, track_id):
+    data = player.chord_data
+    return chordlabel_expand(data.chord_track_chords(track_id), data.rhythm_track_data("qm_barbeattracker")["beat_times"])
+
+
+def chordlabel_expand(chords, beat_times):
+    from chordflask_base import expand_chord_labels
+    return expand_chord_labels(chords, beat_times)
+
+
+def test_stem_tracks_listed_with_status_and_suffix(tmp_path):
+    tracks = {t["id"]: t for t in _stem_player(tmp_path).analysis_track_state()["available_chord_tracks"]}
+    assert tracks["chordino_stem_other"]["display_name"] == "Chordino · Other stem"
+    assert tracks["chordino_stem_other"]["status"] == "current"
+    assert tracks["chordino_stem_bass"]["display_name"] == "Chordino · Bass stem (stale)"
+    assert tracks["chordino_stem_bass"]["status"] == "stale"
+    assert "status" not in tracks["chordino"]
+
+
+def test_stem_tracks_report_missing_stems(tmp_path):
+    tracks = {t["id"]: t for t in _stem_player(tmp_path, with_audio=False)
+              .analysis_track_state()["available_chord_tracks"]}
+    assert tracks["chordino_stem_other"]["status"] == "stems_missing"
+    assert tracks["chordino_stem_other"]["display_name"] == "Chordino · Other stem (stems missing)"
+
+
+def test_edit_seeds_from_active_stem_track(tmp_path):
+    player = _stem_player(tmp_path)
+    player.select_chord_track("chordino_stem_other")
+
+    player.start_chord_editing()
+
+    assert player.chord_data.active_chord_track_id == "user_edited"
+    assert _labels(player, "user_edited") == _labels(player, "chordino_stem_other")
+    assert _labels(player, "user_edited") != _labels(player, "chordino")
+    assert player.chord_data.chord_track_metadata("user_edited")["sources"] == {
+        "chord": "chordino_stem_other", "rhythm": "qm_barbeattracker",
+    }
+
+
+def test_edit_seeds_from_chordino_when_btc_active(tmp_path):
+    player = _stem_player(tmp_path, extra_tracks=("btc",))
+    player.select_chord_track("btc")
+    player.start_chord_editing()
+    assert player.chord_data.chord_track_metadata("user_edited")["sources"]["chord"] == "chordino"
+    assert _labels(player, "user_edited") == _labels(player, "chordino")
+
+
+def test_existing_edited_track_is_not_reseeded(tmp_path):
+    player = _stem_player(tmp_path)
+    player.start_chord_editing()
+    player.select_chord_track("chordino_stem_other")
+    player.start_chord_editing()
+    assert player.chord_data.chord_track_metadata("user_edited")["sources"]["chord"] == "chordino"
+
+
+def test_original_toggle_returns_to_seed_track(tmp_path):
+    player = _stem_player(tmp_path)
+    player.select_chord_track("chordino_stem_other")
+    player.start_chord_editing()
+    player.set_chord_version("original")
+    assert player.chord_data.active_chord_track_id == "chordino_stem_other"
+    assert player.active_chord_version() == "original"
+
+
+def test_reset_returns_to_seed_track(tmp_path):
+    player = _stem_player(tmp_path)
+    player.select_chord_track("chordino_stem_other")
+    player.start_chord_editing()
+    player.reset_edited_chords()
+    assert not player.has_edited_chords()
+    assert player.chord_data.active_chord_track_id == "chordino_stem_other"
+
+
+def test_reset_falls_back_to_chordino_when_seed_missing(tmp_path):
+    player = _stem_player(tmp_path)
+    player.select_chord_track("chordino_stem_other")
+    player.start_chord_editing()
+    player.chord_data.remove_chord_track("chordino_stem_other")
+
+    player.set_chord_version("original")
+    assert player.chord_data.active_chord_track_id == "chordino"
+    player.reset_edited_chords()
+    assert player.chord_data.active_chord_track_id == "chordino"

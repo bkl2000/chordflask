@@ -17,6 +17,8 @@ from chordflask_base import (
     MADMOM_TRACK_ID,
     USER_EDITED_RHYTHM_TRACK_ID,
     USER_EDITED_TRACK_ID,
+    stem_chord_track_status,
+    stem_from_track_id,
 )
 from .playbackview import GRID_MODES
 
@@ -31,6 +33,7 @@ _EDITED_SOURCE_CHORD = DEFAULT_CHORD_TRACK
 _EDIT_GRID_ROWS = 16
 _EDIT_GRID_MEASURES_PER_ROW = 2
 _PLAYBACK_LOOKAHEAD_BEATS = 8
+_STEM_STATUS_SUFFIXES = {"stale": " (stale)", "stems_missing": " (stems missing)"}
 
 # Consumer-side identifier for the grouped Demucs stem set. It intentionally
 # matches the producer's AUDIO_SET_ID ("demucs:htdemucs") but is defined here
@@ -90,7 +93,12 @@ class MP4PlayerFlask:
                 if tid == _EDITED_TRACK_ID
                 else self.__track_display_name(tid, cd.chord_track_metadata(tid))
             )
-            chord_tracks.append({"id": tid, "display_name": display_name})
+            track = {"id": tid, "display_name": display_name}
+            status = stem_chord_track_status(cd, tid)
+            if status is not None:
+                track["status"] = status
+                track["display_name"] += _STEM_STATUS_SUFFIXES.get(status, "")
+            chord_tracks.append(track)
         rhythm_tracks = []
         for tid in cd.available_rhythm_track_ids:
             rhythm_tracks.append({
@@ -257,7 +265,7 @@ class MP4PlayerFlask:
         if not cd.has_chord_track(_EDITED_TRACK_ID):
             cd.create_beat_aligned_track(
                 _EDITED_TRACK_ID,
-                source_chord_track_id=_EDITED_SOURCE_CHORD,
+                source_chord_track_id=self._edit_source_chord_track_id(),
                 source_rhythm_track_id=DEFAULT_RHYTHM_TRACK,
                 metadata={"display_name": "Edited"},
             )
@@ -270,7 +278,7 @@ class MP4PlayerFlask:
                 raise ValueError("No edited chord version exists")
             self.select_analysis_tracks(chord_track_id=_EDITED_TRACK_ID)
         elif version == "original":
-            self.select_analysis_tracks(chord_track_id=_EDITED_SOURCE_CHORD)
+            self.select_analysis_tracks(chord_track_id=self.__original_chord_track_id())
         else:
             raise ValueError("version must be 'original' or 'edited'")
 
@@ -320,16 +328,31 @@ class MP4PlayerFlask:
         metadata = self.chord_data.chord_track_metadata(_EDITED_TRACK_ID)
         sources = metadata.get("sources", {})
         edited_rhythm_id = sources.get("rhythm")
+        original_id = self.__original_chord_track_id()
         self.chord_data.remove_chord_track(_EDITED_TRACK_ID)
         if (
             edited_rhythm_id == USER_EDITED_RHYTHM_TRACK_ID
             and self.chord_data.has_rhythm_track(edited_rhythm_id)
         ):
             self.chord_data.remove_rhythm_track(edited_rhythm_id)
-        self.chord_data.select_chord_track(_EDITED_SOURCE_CHORD)
+        self.chord_data.select_chord_track(original_id)
         self.chord_data.select_rhythm_track(DEFAULT_RHYTHM_TRACK)
         self.__build_playback_view()
         self.reset_render_cache()
+
+    def _edit_source_chord_track_id(self):
+        """Seed Edited chords from an active stem track; otherwise from Chordino."""
+        active = self.chord_data.active_chord_track_id
+        return active if stem_from_track_id(active) is not None else _EDITED_SOURCE_CHORD
+
+    def __original_chord_track_id(self):
+        """The track an Edited version was seeded from, when it is still available."""
+        if self.chord_data.has_chord_track(_EDITED_TRACK_ID):
+            sources = self.chord_data.chord_track_metadata(_EDITED_TRACK_ID).get("sources")
+            seed = sources.get("chord") if isinstance(sources, dict) else None
+            if isinstance(seed, str) and self.chord_data.has_chord_track(seed):
+                return seed
+        return _EDITED_SOURCE_CHORD
 
     def __edited_rhythm_track_id(self):
         metadata = self.chord_data.chord_track_metadata(_EDITED_TRACK_ID)
