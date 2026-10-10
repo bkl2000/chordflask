@@ -197,6 +197,20 @@ def test_stem_track_write_triggers_edit_conflict(tmp_path):
     assert saved.has_chord_track("chordino_stem_other")
 
 
+def test_prepare_menu_offers_stem_chords_only_with_stems():
+    _, client = _client()
+    body = client.get("/").get_data(as_text=True)
+    for marker in ('id="prepareStemChordsButton" class="prepare-action"', 'id="prepareStemChordsState"',
+                   'id="stemChordsSourceSelect"', "'/prepare_stem_chords'",
+                   "'/stem_chords_preparation_status'", "'/refresh_stem_chords'"):
+        assert marker in body
+    menu = body[body.index('id="prepareMenu"'):body.index('id="prepareStemsButton"')]
+    assert 'id="prepareStemChordsButton"' in menu
+    assert 'id="stemChordsSourceSelect"' in menu
+    assert "requires: () => stemsAvailable" in body
+    assert "body: () => ({ stem: stemChordsSourceSelect.value })" in body
+
+
 def _edited_on_snapshot_grid(tmp_path):
     media, json_path = _song(tmp_path)
     data = ChordTrackRepository().load(json_path)
@@ -242,3 +256,9 @@ def test_refresh_with_missing_stem_track_keeps_selection(tmp_path):
     _load(client, tmp_path)
     payload = client.post("/refresh_stem_chords", json=_body(media, "bass")).get_json()
     assert payload["active_chord_track_id"] == "user_edited"
+
+
+def test_finish_preparation_does_not_select_stem_during_edit_mode():
+    _, client = _client()
+    body = client.get("/").get_data(as_text=True)
+    assert "name === 'stemChords' && editMode ? {} : (action.lastBody || {})" in body

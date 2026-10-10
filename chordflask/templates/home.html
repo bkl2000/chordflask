@@ -1319,6 +1319,17 @@
       color: #e08b82;
     }
 
+    .prepare-source-select {
+      display: block;
+      width: calc(100% - 26px);
+      margin: 0 6px 4px 26px;
+      font-size: 11px;
+    }
+
+    .prepare-source-select[hidden] {
+      display: none;
+    }
+
     .desktop-action-label {
       display: none;
     }
@@ -2438,6 +2449,16 @@
                       <span class="prepare-name">BTC</span>
                       <span id="prepareBtcState" class="prepare-state">Prepare</span>
                     </button>
+                    <button id="prepareStemChordsButton" class="prepare-action" role="menuitem"
+                            type="button" hidden title="Analyze chords from one stem of the current song"
+                            aria-label="Stem chords: Prepare" onclick="prepareStemChords()">
+                      <span class="prepare-check" aria-hidden="true" hidden>✓</span>
+                      <span class="prepare-name">Stem chords</span>
+                      <span id="prepareStemChordsState" class="prepare-state">Prepare</span>
+                    </button>
+                    <select id="stemChordsSourceSelect" class="prepare-source-select" hidden
+                            aria-label="Stem analyzed for chords" title="Stem analyzed for chords"
+                            onchange="updateStemChordsState()"></select>
                     <button id="prepareStemsButton" class="prepare-action" role="menuitem"
                             type="button" hidden title="Prepare vocal and instrument stems for the current song"
                             aria-label="Stems: Prepare" onclick="prepareStems()">
@@ -2820,6 +2841,8 @@
     let prepareLyricsButton = document.getElementById('prepareLyricsButton');
     let prepareBtcButton = document.getElementById('prepareBtcButton');
     let prepareStemsButton = document.getElementById('prepareStemsButton');
+    let prepareStemChordsButton = document.getElementById('prepareStemChordsButton');
+    let stemChordsSourceSelect = document.getElementById('stemChordsSourceSelect');
 
     let isRepeating = false;
     let isContinuing = false;
@@ -2947,6 +2970,18 @@
         startUrl: '/prepare_btc', statusUrl: '/btc_preparation_status',
         refreshUrl: '/refresh_btc', available: false, state: 'idle',
         pollTimer: null, requestInFlight: false,
+      },
+      stemChords: {
+        label: 'Stem chords', button: prepareStemChordsButton,
+        check: prepareStemChordsButton.querySelector('.prepare-check'),
+        status: document.getElementById('prepareStemChordsState'),
+        startUrl: '/prepare_stem_chords', statusUrl: '/stem_chords_preparation_status',
+        refreshUrl: '/refresh_stem_chords', available: false, state: 'idle',
+        pollTimer: null, requestInFlight: false,
+        extra: stemChordsSourceSelect,
+        requires: () => stemsAvailable,
+        body: () => ({ stem: stemChordsSourceSelect.value }),
+        lastBody: null,
       },
       stems: {
         label: 'Stems', button: prepareStemsButton,
@@ -4394,7 +4429,38 @@
           prepareActions.stems.pollTimer = null;
         }
       }
+      populateStemChordsSources(stemsAvailable ? payload.stems : []);
       updateStemsUI();
+      updatePrepareButtons();
+    }
+
+    function populateStemChordsSources(stems) {
+      const previous = stemChordsSourceSelect.value;
+      stemChordsSourceSelect.replaceChildren(...stems.map(stem => {
+        const option = document.createElement('option');
+        option.value = stem;
+        option.textContent = stem.charAt(0).toUpperCase() + stem.slice(1);
+        return option;
+      }));
+      if (stems.includes(previous)) {
+        stemChordsSourceSelect.value = previous;
+      } else if (stems.includes('other')) {
+        stemChordsSourceSelect.value = 'other';
+      }
+      updateStemChordsState();
+    }
+
+    function stemChordsLocalState() {
+      const trackId = `chordino_stem_${stemChordsSourceSelect.value}`;
+      const track = chordTrackSelectOptions.find(option => option.id === trackId);
+      return track && track.status === 'current' ? 'ready' : 'idle';
+    }
+
+    function updateStemChordsState() {
+      const action = prepareActions.stemChords;
+      if (action.state !== 'running' && !action.requestInFlight) {
+        action.state = stemChordsLocalState();
+      }
       updatePrepareButtons();
     }
 
@@ -4452,8 +4518,13 @@
       let anyVisible = false;
       for (const action of Object.values(prepareActions)) {
         const visible = desktopPrepare.matches
-          && Boolean(loadedMediaPath) && loadedAnalysisValid && action.available;
+          && Boolean(loadedMediaPath) && loadedAnalysisValid && action.available
+          && (!action.requires || action.requires());
         action.button.hidden = !visible;
+        if (action.extra) {
+          action.extra.hidden = !visible;
+          action.extra.disabled = action.state === 'running' || action.requestInFlight;
+        }
         anyVisible = anyVisible || visible;
         const status = action.state === 'running' ? 'Preparing…'
           : action.state === 'ready' ? 'Ready'
@@ -4528,6 +4599,8 @@
         if (action.state === 'error') {
           console.error(`${action.label} preparation failed:`, data.message || 'unknown error');
           showPrepareToolbarStatus(`${action.label} preparation failed`);
+        } else if (name === 'stemChords') {
+          action.state = stemChordsLocalState();
         }
         updatePrepareButtons();
       })
@@ -4550,11 +4623,14 @@
       if (!desktopPrepare.matches) return;
       if (!loadedMediaPath || action.requestInFlight || action.state === 'ready') return;
       action.requestInFlight = true;
+      action.lastBody = action.body ? action.body() : null;
       updatePrepareButtons();
       fetch(action.startUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+        body: JSON.stringify({
+          dirname: loadedFileDirectory, filename: loadedFileName, ...(action.lastBody || {}),
+        })
       })
       .then(response => response.json().then(data => ({ ok: response.ok, data })))
       .then(({ ok, data }) => {
@@ -4591,6 +4667,7 @@
     function prepareLyrics() { prepareCurrent('lyrics'); }
     function prepareBtc() { prepareCurrent('btc'); }
     function prepareStems() { prepareCurrent('stems'); }
+    function prepareStemChords() { prepareCurrent('stemChords'); }
 
     function finishPreparation(name) {
       const action = prepareActions[name];
@@ -4599,7 +4676,11 @@
       fetch(action.refreshUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-        body: JSON.stringify({ dirname: loadedFileDirectory, filename: loadedFileName })
+        body: JSON.stringify({
+          dirname: loadedFileDirectory, filename: loadedFileName,
+          // Never pull an open edit session onto the new stem track.
+          ...(name === 'stemChords' && editMode ? {} : (action.lastBody || {})),
+        })
       })
       .then(response => {
         if (!response.ok) {
@@ -4610,7 +4691,7 @@
       .then(data => {
         if (name === 'lyrics') {
           resetSongView(data.song_view_available);
-        } else if (name === 'btc') {
+        } else if (name === 'btc' || name === 'stemChords') {
           updateTrackSelectors(data);
         } else {
           updateStemsAvailability(data.stems);
@@ -4618,7 +4699,13 @@
         const usable = name === 'lyrics' ? data.song_view_available === true
           : name === 'btc'
             ? (data.available_chord_tracks || []).some(track => track.id === 'btc')
-            : stemsAvailable;
+            : name === 'stemChords'
+              ? (data.available_chord_tracks || []).some(track => (
+                action.lastBody && action.lastBody.stem
+                  ? track.id === `chordino_stem_${action.lastBody.stem}`
+                  : track.id.startsWith('chordino_stem_')
+              ))
+              : stemsAvailable;
         action.state = usable ? 'ready' : 'error';
         showPrepareToolbarStatus(usable
           ? `${action.label} ready`
