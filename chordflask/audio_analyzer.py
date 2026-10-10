@@ -83,8 +83,6 @@ class AudioAnalyzer:
         y, sr = librosa.load(mp3_path, sr=self.sample_rate, mono=True)
         print("Beat grid...", flush=True)
         bpm, beat_times, beat_numbers = self._detect_beat_grid(y, sr)
-        print("Preemphasis...", flush=True)
-        y = librosa.effects.preemphasis(y)
         print("BPM", bpm)
         original_rhythm = None
         if self.quantize_beats:
@@ -109,11 +107,10 @@ class AudioAnalyzer:
         print("Chords...", flush=True)
         if use_madmom:
             chord_source = "madmom"
-            chords = self._extract_chords_madmom(mp3_path)
+            chords = self.postprocessor.process(self._extract_chords_madmom(mp3_path))
         else:
             chord_source = "chordino"
-            chords = self._extract_chords_vamp(y, sr)
-        chords = self.postprocessor.process(chords)
+            chords = self._chords_from_signal(y, sr)
 
         chord_data.set_chord_track(chord_source, chords)
         if original_rhythm is not None:
@@ -134,6 +131,21 @@ class AudioAnalyzer:
             ),
         )
         return chord_data
+
+    def analyze_chords(self, audio_path):
+        """Return post-processed Chordino chords for one audio file, without beats.
+
+        Used for sample-aligned stem files, whose timestamps already match the
+        original playback timeline; the original rhythm grid is reused.
+        """
+        from .vamp_runtime import require_vamp_plugins
+        require_vamp_plugins()
+        y, sr = librosa.load(audio_path, sr=self.sample_rate, mono=True)
+        return self._chords_from_signal(y, sr)
+
+    def _chords_from_signal(self, y, sr):
+        y = librosa.effects.preemphasis(y)
+        return self.postprocessor.process(self._extract_chords_vamp(y, sr))
 
     @staticmethod
     def _auto_correct_beat_grid_from_environment():

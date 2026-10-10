@@ -514,3 +514,80 @@ def test_madmom_conversion_checks_ffmpeg_and_removes_temporary_file(tmp_path, mo
         raise AssertionError("ffmpeg failure must be propagated")
 
     assert not wav_path.exists()
+
+
+class _RecordingPostprocessor:
+    def __init__(self):
+        self.calls = []
+
+    def process(self, chords):
+        self.calls.append(list(chords))
+        return [dict(chord, chord=chord["chord"] + "!") for chord in chords]
+
+
+def test_analyze_chords_runs_chordino_on_preemphasized_signal_without_beats(monkeypatch):
+    emphasized = ["emphasized"]
+    loads = []
+    plugins = []
+
+    def load(path, sr, mono):
+        loads.append((path, sr, mono))
+        return [1.0, 0.0], sr
+
+    def collect(y, sr, plugin, **kwargs):
+        plugins.append(plugin)
+        assert y is emphasized
+        return {"list": [{"timestamp": 0.0, "label": "C"}]}
+
+    def no_ffmpeg():
+        raise AssertionError("stem analysis must not require ffmpeg")
+
+    monkeypatch.setattr(audio_analyzer_mod, "require_system_ffmpeg", no_ffmpeg)
+    monkeypatch.setattr(vamp_runtime_mod, "require_vamp_plugins", lambda: None)
+    monkeypatch.setattr(
+        audio_analyzer_mod,
+        "librosa",
+        types.SimpleNamespace(
+            load=load, effects=types.SimpleNamespace(preemphasis=lambda samples: emphasized),
+        ),
+    )
+    monkeypatch.setattr(audio_analyzer_mod.vamp, "collect", collect)
+    postprocessor = _RecordingPostprocessor()
+
+    chords = AudioAnalyzer(postprocessor=postprocessor).analyze_chords("stem.flac")
+
+    assert chords == [{"timestamp": 0.0, "chord": "C!"}]
+    assert loads == [("stem.flac", ANALYSIS_SAMPLE_RATE, True)]
+    assert plugins == ["nnls-chroma:chordino"]
+    assert postprocessor.calls == [[{"timestamp": 0.0, "chord": "C"}]]
+
+
+def test_analyze_output_unchanged_by_refactor(monkeypatch):
+    _stub_analysis_dependencies(monkeypatch)
+    emphasis_calls = []
+
+    def preemphasis(samples):
+        emphasis_calls.append(samples)
+        return ["emphasized"]
+
+    audio_analyzer_mod.librosa.effects.preemphasis = preemphasis
+    beat_inputs = []
+    postprocessor = _RecordingPostprocessor()
+    analyzer = AudioAnalyzer(postprocessor=postprocessor)
+
+    def detect(samples, sample_rate):
+        beat_inputs.append(samples)
+        return 120, [0.0, 0.5], [1, 2]
+
+    monkeypatch.setattr(analyzer, "_detect_beat_grid", detect)
+    monkeypatch.setattr(
+        analyzer, "_extract_chords_vamp",
+        lambda samples, sample_rate: [{"timestamp": 0.0, "chord": "C"}] if samples == ["emphasized"] else [],
+    )
+
+    data = analyzer.analyze("song.mp3")
+
+    assert beat_inputs == [[0.0]]
+    assert len(emphasis_calls) == 1
+    assert data.chord_track_chords("chordino") == [{"timestamp": 0.0, "chord": "C!"}]
+    assert postprocessor.calls == [[{"timestamp": 0.0, "chord": "C"}]]
