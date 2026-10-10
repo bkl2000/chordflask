@@ -244,14 +244,14 @@ mobile playback interruptions.
 
 ## Known limitations
 
-Verified 2026-08-20: STEM playback works on localhost with Firefox and works
-very well over a remote LAN with desktop Chromium. Repeated individual stem
-OFF/ON toggles no longer accumulate drift in the tested local and desktop
-Chromium cases. Remote-LAN Firefox remains unreliable and may leave **Stem
-playback unavailable** visible. This currently appears to be a
-Firefox/remote-origin media playback compatibility issue; the exact
-browser-side cause has not been isolated. Chromium/Chrome is the recommended
-browser for STEM playback.
+Desktop Chromium works reliably with STEMS playback, including over a remote
+LAN. Vivaldi appears reliable in local testing. Firefox occasionally produces
+audible dropouts even on localhost, including with `--stem-cache` enabled.
+Repeated individual stem OFF/ON toggles no longer accumulate drift in the
+tested local and desktop Chromium cases. Remote-LAN Firefox remains unreliable
+and may leave **Stem playback unavailable** visible. The exact browser-side
+cause has not been isolated. Chromium-based desktop browsers are recommended
+for STEMS playback.
 
 Remote-LAN Android Chromium still exhibits the earlier timeout/dropout
 behavior, including with `--stem-cache`. Current evidence points to a separate

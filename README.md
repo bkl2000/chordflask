@@ -419,8 +419,10 @@ chordflask --listen 0.0.0.0 --roots "/home/user/Music"
 Then open `http://<host-ip>:5000` on the other device. Responsive layouts for
 desktop, tablet and smartphone are included. Mobile support is functional but
 still undergoing broader real-device testing. Narrow layouts remain Grid-only
-and do not show Lyrics, romanization, or Prepare controls. Multi-stream stem playback is most
-reliable in desktop Chromium; see
+and do not show Lyrics, romanization, or Prepare controls. Desktop Chromium-based
+browsers are recommended for multi-stream STEMS playback: Chromium works reliably
+and Vivaldi appears reliable in local testing, while Firefox can experience audible
+dropouts even on localhost with `--stem-cache` enabled; see
 [docs/DEMUCS.md](docs/DEMUCS.md#known-limitations).
 
 ChordFlask has no authentication or TLS. Use LAN listening only on a trusted
