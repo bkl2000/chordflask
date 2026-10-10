@@ -47,13 +47,18 @@ from .media_preparation import (
     lyrics_capability,
     run_btc_preparation,
     run_lyrics_preparation,
+    run_stem_chord_preparation,
+    stem_chords_capability,
 )
 
 from .mp4playerflask import MP4PlayerFlask, STEMS_AUDIO_SET_ID  # Import the MP4PlayerFlask class
 from .playbackview import GRID_MODES
 from .stem_preparation import BackgroundPreparationManager, StemPreparationManager
 
-from chordflask_base import DEMUCS_STEM_NAMES, transpose_chord_pitches, ChordData, canonical_source_status
+from chordflask_base import (
+    DEMUCS_STEM_NAMES, transpose_chord_pitches, ChordData, canonical_source_status,
+    stem_chord_track_id, stem_chord_track_status, DEFAULT_RHYTHM_TRACK,
+)
 
 # Opaque cookie that identifies one browser cookie jar. The cookie carries only
 # a random client id; the actual playback state stays server-side in memory.
@@ -207,6 +212,11 @@ class FlaskMP4App:
             capability_probe=btc_capability,
             runner=run_btc_preparation,
             label="BTC",
+        )
+        self.stem_chords_preparation = BackgroundPreparationManager(
+            capability_probe=stem_chords_capability,
+            runner=run_stem_chord_preparation,
+            label="Stem chords",
         )
         self.allowed_roots = self._parse_allowed_roots(roots)
         self._resolve_ffmpeg()
@@ -536,6 +546,10 @@ class FlaskMP4App:
         self.app.add_url_rule('/prepare_btc', 'prepare_btc', self.prepare_btc, methods=['POST'])
         self.app.add_url_rule('/btc_preparation_status', 'btc_preparation_status', self.btc_preparation_status, methods=['GET'])
         self.app.add_url_rule('/refresh_btc', 'refresh_btc', self.refresh_btc, methods=['POST'])
+        self.app.add_url_rule('/prepare_stem_chords', 'prepare_stem_chords', self.prepare_stem_chords, methods=['POST'])
+        self.app.add_url_rule('/stem_chords_preparation_status', 'stem_chords_preparation_status',
+                              self.stem_chords_preparation_status, methods=['GET'])
+        self.app.add_url_rule('/refresh_stem_chords', 'refresh_stem_chords', self.refresh_stem_chords, methods=['POST'])
         self.app.add_url_rule('/get_song_sheet', 'get_song_sheet', self.get_song_sheet)
         self.app.add_url_rule('/get_callback_output', 'get_callback_output', self.get_callback_output, methods=['GET'])
         self.app.add_url_rule('/set_position', 'set_position', self.set_position, methods=['POST'])
@@ -1496,6 +1510,99 @@ class FlaskMP4App:
             refreshed = state.player.analysis_track_state()
         return jsonify({"success": True, **refreshed})
 
+    @staticmethod
+    def _stem_chords_ready(state, stem):
+        try:
+            track_id = stem_chord_track_id(stem)
+        except ValueError:
+            return False
+        return stem_chord_track_status(state.player.chord_data, track_id) == "current"
+
+    def prepare_stem_chords(self):
+        """Start Chordino on one registered stem of this client's active media."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        stem = data.get("stem")
+        state = self._client()
+        with state.lock:
+            media_or_error = self._active_editing_media(state, data)
+            if not isinstance(media_or_error, Path):
+                return media_or_error
+            media = media_or_error
+            if not self.__analysis_is_valid(state.file_repr.get("json")):
+                return jsonify(error="The active file has no valid analysis."), 409
+            stems = state.player.audio_stems_state()
+            if not stems:
+                return jsonify(error="The active file has no complete stem set."), 409
+            if not isinstance(stem, str) or stem not in stems["stems"]:
+                return jsonify(error="Unknown stem for the active file."), 400
+            if self._stem_chords_ready(state, stem):
+                return jsonify(status="ready")
+        if self._media_is_queued(media):
+            return jsonify(error="The active file has queued analysis work."), 409
+
+        result = self.stem_chords_preparation.start(media, stem)
+        if result["status"] == "accepted":
+            return jsonify(result), 202
+        if result["status"] == "unavailable":
+            return jsonify(status="unavailable", error=result.get("error", "")), 409
+        return jsonify(result)
+
+    def stem_chords_preparation_status(self):
+        """Return stem-chord preparation state for this client's active media."""
+        state = self._client()
+        with state.lock:
+            if state.player is None or state.file_repr is None:
+                return jsonify(state="idle", available=False, message="")
+            media = Path(state.file_repr.get())
+        status = self.stem_chords_preparation.status(media)
+        args = status.pop("args", None)
+        if args:
+            status["stem"] = args[0]
+        return jsonify(status)
+
+    def refresh_stem_chords(self):
+        """Reload tracks and select the requested stem chord track when present."""
+        data, error_response = self._json_body()
+        if error_response:
+            return error_response
+        state = self._client()
+        with state.lock:
+            media_or_error = self._active_editing_media(state, data)
+            if not isinstance(media_or_error, Path):
+                return media_or_error
+            track_state = state.player.analysis_track_state()
+            stem = data.get("stem")
+            stem_track_id = None
+            if isinstance(stem, str):
+                try:
+                    stem_track_id = stem_chord_track_id(stem)
+                except ValueError:
+                    return jsonify(error="Invalid stem name."), 400
+            try:
+                state.player.reload_chord_data(
+                    chord_track_id=track_state["active_chord_track_id"],
+                    rhythm_track_id=track_state["active_rhythm_track_id"],
+                    soft_fallback=True,
+                )
+                # The client omits ``stem`` while an edit session is open. Stem
+                # chords are shown on the original QM grid, not an Edited snapshot.
+                chord_data = state.player.chord_data
+                if stem_track_id is not None and chord_data.has_chord_track(stem_track_id):
+                    state.player.select_analysis_tracks(
+                        chord_track_id=stem_track_id,
+                        rhythm_track_id=(
+                            DEFAULT_RHYTHM_TRACK if chord_data.has_rhythm_track(DEFAULT_RHYTHM_TRACK) else None
+                        ),
+                    )
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                return jsonify(error=f"Could not reload stem chord data: {error}"), 500
+            state.json_mtime_ns = self._json_mtime_ns(state.file_repr.get("json"))
+            state.old_current_position = None
+            state.old_grid_mode = None
+            refreshed = state.player.analysis_track_state()
+        return jsonify({"success": True, **refreshed})
 
     def get_callback_output(self):
         """

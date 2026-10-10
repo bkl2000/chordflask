@@ -127,7 +127,8 @@ class BackgroundPreparationManager:
     def capability(self) -> dict:
         return self._capability_probe()
 
-    def start(self, media_path: Path) -> dict:
+    def start(self, media_path: Path, *runner_args) -> dict:
+        """Start one job; ``runner_args`` follow the media path in the runner call."""
         capability = self.capability()
         if not capability["available"]:
             return {
@@ -149,19 +150,20 @@ class BackgroundPreparationManager:
                 "message": "",
                 "cuda": capability["cuda"],
                 "started_at": time.monotonic(),
+                "args": runner_args,
             }
         thread = threading.Thread(
             target=self._run,
-            args=(media_path,),
+            args=(media_path, *runner_args),
             daemon=True,
             name=f"{self._label.lower()}-preparation",
         )
         thread.start()
         return {"status": "accepted"}
 
-    def _run(self, media_path: Path) -> None:
+    def _run(self, media_path: Path, *runner_args) -> None:
         try:
-            returncode = self._runner(Path(media_path))
+            returncode = self._runner(Path(media_path), *runner_args)
             if returncode != 0:
                 raise RuntimeError(
                     f"{self._label} preparation failed (exit code {returncode})"
@@ -186,12 +188,15 @@ class BackgroundPreparationManager:
         if job is not None and job["key"] == key and job["state"] in {"running", "ready", "error"}:
             # Do not re-probe while a job is active; report the facts that were
             # validated when the job started.
-            return {
+            status = {
                 "state": job["state"],
                 "available": True,
                 "cuda": job["cuda"],
                 "message": job["message"],
             }
+            if job["args"]:
+                status["args"] = list(job["args"])
+            return status
         capability = self.capability()
         if not capability["available"]:
             return {

@@ -84,6 +84,20 @@ def btc_capability() -> dict:
     return _cached_capability("btc", probe)
 
 
+def stem_chords_capability() -> dict:
+    """Stem Chordino runs in the core runtime; it only needs the Vamp plugins."""
+    def probe():
+        from .vamp_runtime import require_vamp_plugins
+
+        try:
+            require_vamp_plugins()
+        except (RuntimeError, ImportError, OSError) as error:
+            return _unavailable(str(error))
+        return {"available": True, "cuda": False, "reason": ""}
+
+    return _cached_capability("stem_chords", probe)
+
+
 def clear_capability_cache() -> None:
     """Clear cached capability results for focused tests."""
     with _capability_lock:
@@ -141,6 +155,17 @@ def run_btc_preparation(media_path: Path) -> int:
     return 0
 
 
+def stem_chords_command(media_path: Path, stem: str) -> list[str]:
+    """Child-process argv; librosa/Vamp work stays out of the web process."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--analyze-stem", stem, str(media_path)]
+    return [sys.executable, "-m", "chordflask", "--analyze-stem", stem, str(media_path)]
+
+
+def run_stem_chord_preparation(media_path: Path, stem: str) -> int:
+    return _run_helper("Stem chords", stem_chords_command(Path(media_path), stem))
+
+
 __all__ = [
     "CAPABILITY_TTL_SECONDS",
     "DEFAULT_LYRICS_VENV",
@@ -150,4 +175,7 @@ __all__ = [
     "lyrics_command",
     "run_btc_preparation",
     "run_lyrics_preparation",
+    "run_stem_chord_preparation",
+    "stem_chords_capability",
+    "stem_chords_command",
 ]
