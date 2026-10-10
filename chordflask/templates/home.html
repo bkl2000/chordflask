@@ -2913,6 +2913,11 @@
     const STEM_MAX_RATE_DELTA = 0.03;
     const STEM_RATE_FACTOR = 0.25;
     const STEM_DRIFT_INTERVAL_MS = 500;
+    // Firefox listening tests found dropouts with periodic correction enabled.
+    // Keep ?stem-drift=on/off for comparisons; alignment and explicit seeks still run.
+    const STEM_DESKTOP_FIREFOX = /Firefox\//.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+    const STEM_DRIFT_OVERRIDE = new URLSearchParams(window.location.search).get('stem-drift');
+    const STEM_AUTO_DRIFT = STEM_DRIFT_OVERRIDE === 'on' || (STEM_DRIFT_OVERRIDE !== 'off' && !STEM_DESKTOP_FIREFOX);
     // Chromium timing tests showed fully muted or exact-zero-gain media using
     // a different clock path: stems stayed playing at readyState 4 but drifted
     // roughly 50–70 ms after toggles. Number.EPSILON (~-313 dB) is inaudible
@@ -4879,7 +4884,7 @@
     }
 
     function stemDriftCheck() {
-      if (!stemsActive) return;
+      if (!stemsActive || !STEM_AUTO_DRIFT) return;
       const master = video;
       if (master.paused || isNaN(master.currentTime)) return;
       const target = master.currentTime;

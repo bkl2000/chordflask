@@ -974,6 +974,75 @@ def test_index_stem_drift_correction_is_stall_aware_and_two_level():
     assert "function stemSeekSettled(el, target, setCurrentTime = false)" in body
 
 
+@pytest.mark.parametrize("search", ["", "?stem-drift=off", "?stem-drift=on", "?stem-drift=auto"])
+@pytest.mark.parametrize("user_agent,desktop_firefox", [
+    ("Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0", True),
+    ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/141.0.0.0 Safari/537.36", False),
+    ("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15", False),
+    ("Mozilla/5.0 (Android 15; Mobile; rv:144.0) Gecko/144.0 Firefox/144.0", False),
+    ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 FxiOS/144.0 Mobile/15E148", False),
+])
+def test_stem_drift_diagnostic_preserves_default_correction_and_explicit_seeks(
+    search, user_agent, desktop_firefox,
+):
+    import shutil
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required to execute the stem synchronization diagnostic")
+    _, client = make_client()
+    body = client.get("/").get_data(as_text=True)
+    constants = "\n".join(re.findall(r"    const STEM_\w+ = [^\n]+;", body))
+    script = constants + "\n" + javascript_function(body, "stemDriftCheck")
+    script += "\n" + javascript_function(body, "stemMasterSeeked")
+    script += """
+const assert = require('node:assert/strict');
+let stemsActive = true;
+const video = { currentTime: 10, paused: false };
+const stemStarved = {};
+const stemPlayers = {};
+const disabled = process.argv[3] === 'true';
+for (const drift of [0.02, 0.08, 0.2, -0.08, -0.2]) {
+  for (const state of ['ready', 'seeking', 'starved', 'paused', 'no-data']) {
+    let rate = 1;
+    let time = video.currentTime - drift;
+    let writes = 0;
+    stemPlayers.vocals = {
+      paused: state === 'paused', seeking: state === 'seeking',
+      readyState: state === 'no-data' ? 1 : 4,
+      get playbackRate() { return rate; },
+      set playbackRate(value) { writes++; rate = value; },
+      get currentTime() { return time; },
+      set currentTime(value) { writes++; time = value; },
+    };
+    stemStarved.vocals = state === 'starved';
+    stemDriftCheck();
+    if (disabled || state !== 'ready' || Math.abs(drift) < 0.03) {
+      assert.equal(writes, 0);
+    } else if (Math.abs(drift) < 0.12) {
+      assert.ok(Math.abs(rate - (1 + drift * 0.25)) < 1e-10);
+      assert.equal(time, video.currentTime - drift);
+    } else {
+      assert.equal(rate, 1);
+      assert.equal(time, video.currentTime);
+    }
+    // The diagnostic must still follow intentional master seeks.
+    stemMasterSeeked();
+    assert.equal(rate, 1);
+    assert.equal(time, video.currentTime);
+  }
+}
+"""
+    disabled = search == "?stem-drift=off" or (desktop_firefox and search != "?stem-drift=on")
+    result = subprocess.run(
+        [node, "-e", "const window = { location: { search: process.argv[1] } };\n"
+         "const navigator = { userAgent: process.argv[2] };\n" + script,
+         search, user_agent, str(disabled).lower()],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_index_stem_mute_keeps_the_existing_media_clock():
     _, client = make_client()
 
