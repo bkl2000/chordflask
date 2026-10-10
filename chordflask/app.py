@@ -139,6 +139,9 @@ def _build_argument_parser():
                         help="Verify Vamp plugins and exit")
     parser.add_argument("--stem-cache", action="store_true",
                         help="Serve stem audio with cache-friendly headers and versioned URLs")
+    # Internal: the web UI runs stem Chordino analysis in this child process.
+    parser.add_argument("--analyze-stem", nargs=2, metavar=("STEM", "MEDIA"),
+                        default=None, help=argparse.SUPPRESS)
     metric_group = parser.add_mutually_exclusive_group()
     metric_group.add_argument(
         "--metric-chords", dest="metric_chords", action="store_true", default=None,
@@ -1796,6 +1799,10 @@ def main(argv=None):
             if plugin in REQUIRED_PLUGINS:
                 print(f"  {plugin}")
         raise SystemExit(0)
+
+    if args.analyze_stem:
+        from . import stem_chord_analysis
+        raise SystemExit(stem_chord_analysis.cli_analyze_stem(*args.analyze_stem))
 
     quiet = args.worker
     try:
