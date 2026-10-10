@@ -30,6 +30,12 @@ def _analyzer_choices() -> tuple[str, ...]:
     return ("chordino", "btc", "chordflask-v3")
 
 
+def _source_choices() -> tuple[str, ...]:
+    from chordflask_base import DEMUCS_STEM_NAMES
+
+    return ("original", *DEMUCS_STEM_NAMES)
+
+
 def _epilog() -> str:
     lines = [
         "Examples:",
@@ -64,6 +70,15 @@ def build_parser() -> argparse.ArgumentParser:
         choices=_analyzer_choices(),
         default="chordino",
         help="Analyzer to use (default: chordino, the built-in analyzer)",
+    )
+    parser.add_argument(
+        "--source",
+        choices=_source_choices(),
+        default="original",
+        help=(
+            "Audio analyzed by Chordino: the original recording (default) or one "
+            "Demucs stem, stored as a separate chord track"
+        ),
     )
     parser.add_argument(
         "--replace",
@@ -216,6 +231,71 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
     return 1 if counts["failed"] else 0
 
 
+def _stem_chord_status(media: Path, stem: str) -> str:
+    """Return todo/current/stale/stems_missing/no_analysis/invalid for one stem chord track."""
+    from chordflask_base import (
+        ChordTrackRepository,
+        analysis_json_path,
+        stem_chord_track_id,
+        stem_chord_track_status,
+    )
+    from ..mp4playerflask import STEMS_AUDIO_SET_ID
+
+    json_path = analysis_json_path(media)
+    if not json_path.exists():
+        return "no_analysis"
+    try:
+        data = ChordTrackRepository().load(json_path)
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+        return "invalid"
+    if not data.has_audio_track(STEMS_AUDIO_SET_ID):
+        return "stems_missing"
+    return stem_chord_track_status(data, stem_chord_track_id(stem)) or "todo"
+
+
+def _run_stem_chordino(target: Path, stem: str, *, replace: bool, dry_run: bool) -> int:
+    from .. import stem_chord_analysis
+
+    media_files = _resolve_media_files(target)
+    if media_files is None:
+        return 2
+
+    labels = {"stems_missing": "NO STEMS", "no_analysis": "NO ANALYSIS", "invalid": "INVALID"}
+    skip_reasons = {"stems_missing": "no stems", "no_analysis": "no analysis"}
+    counts = {"ok": 0, "skipped": 0, "failed": 0}
+    total = len(media_files)
+    for index, media in enumerate(media_files, 1):
+        print(f"[{index}/{total}] {media.name}")
+        status = _stem_chord_status(media, stem)
+        if dry_run:
+            label = "REANALYZE" if replace and status in ("current", "stale") else (
+                labels.get(status, status.upper())
+            )
+            print(f"       {label}")
+            continue
+        if status in skip_reasons or (status == "current" and not replace):
+            print(f"       SKIP: {skip_reasons.get(status, 'stem chords already exist')}")
+            counts["skipped"] += 1
+            continue
+        try:
+            stem_chord_analysis.analyze_stem_chords(media, stem)
+        except Exception as exc:
+            print(f"       ERROR: {exc}", file=sys.stderr)
+            counts["failed"] += 1
+            continue
+        counts["ok"] += 1
+        print("       OK")
+
+    print("")
+    print(f"Chordino {stem}-stem " + ("dry-run complete" if dry_run else "analysis complete"))
+    print("")
+    print(f"files:      {total}")
+    print(f"analyzed:   {counts['ok']}")
+    print(f"skipped:    {counts['skipped']}")
+    print(f"failed:     {counts['failed']}")
+    return 1 if counts["failed"] else 0
+
+
 def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
     from chordflask_base import ChordData, analysis_json_path, chord_input_sha256, write_atomic
     from chordflask_base import analysis_json_lock, load_analysis, validate_analysis
@@ -302,8 +382,13 @@ def main(argv=None) -> None:
     if not argv:
         build_parser().print_help()
         raise SystemExit(0)
-    args = build_parser().parse_args(argv)
-    if args.analyzer == "btc":
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.source != "original":
+        if args.analyzer != "chordino":
+            parser.error("--source requires --analyzer chordino")
+        code = _run_stem_chordino(args.target, args.source, replace=args.replace, dry_run=args.dry_run)
+    elif args.analyzer == "btc":
         code = _run_btc_backend(args.target, replace=args.replace, dry_run=args.dry_run)
     elif args.analyzer == "chordflask-v3":
         code = _run_v3(args.target, replace=args.replace, dry_run=args.dry_run)

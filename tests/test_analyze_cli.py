@@ -919,3 +919,106 @@ def test_v3_canonical_change_during_prediction_is_not_overwritten(tmp_path, v3_r
     v3_runtime[3].predict_media = change
     assert _invoke_v3(media) == 1
     assert path.read_text() == changed
+
+
+# ── --source: Chordino on one Demucs stem ─────────────────────────────
+
+from tests.test_stem_chord_analysis import REL_DIR, _song as _stem_song  # noqa: E402
+
+
+def test_source_defaults_to_original_and_keeps_chordino_path(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(analyze_cli, "_run_chordino", lambda *a, **k: calls.append("chordino") or 0)
+    monkeypatch.setattr(analyze_cli, "_run_stem_chordino", lambda *a, **k: calls.append("stem") or 0)
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main([str(tmp_path)])
+    assert exc.value.code == 0
+    assert calls == ["chordino"]
+    assert analyze_cli.build_parser().parse_args(["song.mp4"]).source == "original"
+
+
+def test_source_rejected_with_non_chordino_analyzer(capsys):
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.main(["--analyzer", "btc", "--source", "other", "song.mp4"])
+    assert exc.value.code == 2
+    assert "--source" in capsys.readouterr().err
+
+
+def test_source_rejects_unknown_stem():
+    with pytest.raises(SystemExit) as exc:
+        analyze_cli.build_parser().parse_args(["--source", "guitar", "song.mp4"])
+    assert exc.value.code == 2
+
+
+def _stem_status_dirs(tmp_path):
+    from chordflask.stem_chord_analysis import analyze_stem_chords
+    from tests.test_stem_chord_analysis import FakeAnalyzer
+
+    dirs = {}
+    for label in ("todo", "current", "stale", "nostems"):
+        directory = tmp_path / label
+        directory.mkdir()
+        media, _ = _stem_song(directory, with_audio=label != "nostems")
+        if label in ("current", "stale"):
+            analyze_stem_chords(media, "other", analyzer=FakeAnalyzer())
+        if label == "stale":
+            from chordflask_base import ChordTrackRepository
+
+            json_path = directory / ".chordflask" / "song.json"
+            data = ChordTrackRepository().load(json_path)
+            audio = data.audio_track_data("demucs:htdemucs")
+            audio["tracks"]["other"]["sha256"] = "f" * 64
+            data.set_audio_track("demucs:htdemucs", audio)
+            data.save_to_file(json_path)
+        dirs[label] = media
+    return dirs
+
+
+def test_stem_dry_run_labels(tmp_path, capsys):
+    dirs = _stem_status_dirs(tmp_path)
+    before = {label: (m.parent / ".chordflask" / "song.json").read_bytes() for label, m in dirs.items()}
+    expected = {"todo": "TODO", "current": "CURRENT", "stale": "STALE", "nostems": "NO STEMS"}
+    for label, media in dirs.items():
+        assert analyze_cli._run_stem_chordino(media, "other", replace=False, dry_run=True) == 0
+        assert expected[label] in capsys.readouterr().out
+    after = {label: (m.parent / ".chordflask" / "song.json").read_bytes() for label, m in dirs.items()}
+    assert after == before
+
+
+def test_stem_run_skips_current_unless_replace(monkeypatch, tmp_path):
+    dirs = _stem_status_dirs(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "chordflask.stem_chord_analysis.analyze_stem_chords",
+        lambda media, stem: calls.append((Path(media).parent.name, stem)) or {"track_id": "x", "chords": 0},
+    )
+    assert analyze_cli._run_stem_chordino(dirs["current"], "other", replace=False, dry_run=False) == 0
+    assert calls == []
+    assert analyze_cli._run_stem_chordino(dirs["current"], "other", replace=True, dry_run=False) == 0
+    assert analyze_cli._run_stem_chordino(dirs["stale"], "other", replace=False, dry_run=False) == 0
+    assert analyze_cli._run_stem_chordino(dirs["todo"], "other", replace=False, dry_run=False) == 0
+    assert calls == [("current", "other"), ("stale", "other"), ("todo", "other")]
+
+
+def test_stem_run_counts_failures_and_returns_1(tmp_path, capsys):
+    dirs = _stem_status_dirs(tmp_path)
+    (dirs["todo"].parent / REL_DIR / "other.flac").unlink()
+    assert analyze_cli._run_stem_chordino(dirs["todo"], "other", replace=False, dry_run=False) == 1
+    captured = capsys.readouterr()
+    assert "ERROR:" in captured.err
+    assert "failed:     1" in captured.out
+
+
+def test_stem_run_skips_songs_without_stems_or_analysis(tmp_path, capsys):
+    dirs = _stem_status_dirs(tmp_path)
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    (bare / "song.mp3").write_bytes(b"media")
+
+    assert analyze_cli._run_stem_chordino(dirs["nostems"], "other", replace=False, dry_run=False) == 0
+    out = capsys.readouterr().out
+    assert "SKIP: no stems" in out and "skipped:    1" in out
+    assert analyze_cli._run_stem_chordino(bare / "song.mp3", "other", replace=False, dry_run=True) == 0
+    assert "NO ANALYSIS" in capsys.readouterr().out
+    assert analyze_cli._run_stem_chordino(bare / "song.mp3", "other", replace=False, dry_run=False) == 0
+    assert "SKIP: no analysis" in capsys.readouterr().out
