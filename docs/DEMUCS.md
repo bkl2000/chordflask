@@ -215,6 +215,11 @@ re-tested before changing it.
 Stem loading failure safely returns to the original audio and restores the
 original master mute state.
 
+Chordino can also analyze a single stem, for example **Other**, and store the
+result as a separate chord track that follows the original timeline. Use
+**Prepare → Stem chords** on desktop or `chordflask-analyze --source other`.
+See [Chords from a Demucs stem](ANALYSIS.md#chords-from-a-demucs-stem).
+
 ### Karaoke workflow
 
 1. Prepare the song and load it in ChordFlask.

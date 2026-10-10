@@ -117,6 +117,42 @@ timeline; per-stem mute and a single shared volume slider are provided. See
 [docs/DEMUCS.md](DEMUCS.md) for the full workflow and the
 `chordflask-maintain stems` maintenance commands.
 
+### Chords from a Demucs stem
+
+When a song has a complete stem set, Chordino can analyze one stem instead of
+the original recording. This helps when one part disturbs recognition, for
+example vocals over a guitar accompaniment: analyzing **Other** often follows
+the guitar more closely.
+
+```bash
+scripts/chordflask-analyze --source other song.mp4
+scripts/chordflask-analyze --source other --dry-run /music/videos
+scripts/chordflask-analyze --source other --replace song.mp4
+```
+
+`--source` accepts `original` (the default, the normal Chordino analysis) or a
+stem name: `bass`, `drums`, `other`, or `vocals`. On desktop, **Prepare → Stem
+chords** runs the same analysis for the loaded song with the stem chosen below
+it; when it finishes the new track is selected.
+
+Each result is stored as a separate chord track, `chordino_stem_<stem>` (shown
+as for example "Chordino · Other stem"), next to Chordino in the same analysis
+file. Nothing is recomputed when switching tracks, and the original Chordino
+track, Edited chords, BTC, and the stems themselves are never changed. The
+stem file is read directly; no extra audio copy is written.
+
+Stems are sample-aligned with the original recording, so stem chords use the
+original timeline without an offset and are displayed on the original QM
+rhythm grid; no separate beat tracking runs on the stem. The STEMS mixer is
+independent: any chord track can be displayed while playing the original audio
+or any stem mix.
+
+A stem chord track records the stem and source hashes it was computed from. If
+the stems are regenerated or the original is reanalyzed with different media,
+the track stays available but is labeled **(stale)**; if the stem set is
+removed, it is labeled **(stems missing)**. Run the analysis again to replace
+only that track. A dry run reports `TODO`, `CURRENT`, `STALE`, or `NO STEMS`.
+
 ## Batch queue
 
 **Analyze** adds up to N new analyses from the current visible file list.
@@ -177,6 +213,8 @@ To correct chords in the browser:
 1. Load a ready song and pause playback.
 2. Select **Edit**. Editing requires the Chordino chord track and the QM rhythm
    track and is unavailable while analysis is queued or running.
+   If a stem chord track (for example "Chordino · Other stem") is selected,
+   the Edited copy starts from that track; otherwise it starts from Chordino.
 3. Select a beat cell, enter or choose the chord, and accept it.
 4. Use **Undo** for changes made in the current edit session, or **Done** to
    return to normal playback.
@@ -186,7 +224,9 @@ To correct chords in the browser:
 Entering Edit creates and selects an Edited copy aligned to the QM rhythm grid;
 accepting a correction changes that copy, never the analyzer track. The Edited
 track records its rhythm source so export and lyrics generation continue to use
-the grid against which the corrections were made. Fresh Chordino/QM analysis
+the grid against which the corrections were made, and the chord track it
+started from: **Original** and **Reset** return to that track while it exists,
+otherwise to Chordino. Fresh Chordino/QM analysis
 preserves Edited chords and their recorded rhythm snapshot; **Reset** is the
 explicit operation that removes them.
 

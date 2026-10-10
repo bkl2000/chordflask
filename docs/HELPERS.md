@@ -11,6 +11,8 @@ These are kept as usable command-line tools and have smoke-test coverage.
 - `analyze_cli.py` - the `chordflask-analyze` command. Chordino is the default
   built-in analyzer and runs in-process through the canonical
   `AnalysisWorker`/`ChordAnalyzer` path. Wrapper: `scripts/chordflask-analyze`.
+  `--source bass|drums|other|vocals` analyzes one registered Demucs stem
+  instead and stores a separate `chordino_stem_<stem>` chord track.
 
   ```bash
   scripts/chordflask-analyze /path/to/collection

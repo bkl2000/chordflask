@@ -258,7 +258,10 @@ owns Flask requests, client playback/display state, and queue submission. The
 single worker owns queued analysis, with recovery returning interrupted
 `processing` jobs to `pending` and a lock preventing multiple worker owners.
 
-Chordino and QM Vamp analysis run in the core worker. BTC inference and Demucs
+Chordino and QM Vamp analysis run in the core worker. Chordino on a single
+Demucs stem is started on demand by the web process as a child process of the
+core runtime (`chordflask --analyze-stem`), outside the queue, and writes only
+its own `chordino_stem_<stem>` track under the analysis lock. BTC inference and Demucs
 separation run only as subprocesses using their dedicated environments. This
 keeps large optional model dependencies out of normal imports, web startup,
 maintenance commands, and the standalone bundle.
@@ -288,6 +291,7 @@ state coordination, not authentication or hardened multi-user isolation.
 | Storage model and schema | `chordflask_base/`, `chordflask/filerepr.py` |
 | Markdown/PDF and other exports | `chordflask/chord_markdown.py`, `chordflask/chord_sheet_pdf.py`, `chordflask/chord_exporter.py`, `chordflask/helpers/` |
 | BTC analyzer | `chordflask_btc/` |
+| Stem chord analysis | `chordflask/stem_chord_analysis.py`, `chordflask_base/stem_chords.py` |
 | Demucs producer and stem storage | `chordflask_demucs/` |
 | Maintenance commands | `chordflask_maintain/` |
 | Setup and portable launchers | `scripts/setup_venv.sh`, `scripts/chordflask*` |
