@@ -50,6 +50,13 @@ from .schema import (
     write_atomic,
 )
 
+from .stem_chords import (
+    STEM_CHORD_TRACK_PREFIX,
+    build_stem_chord_metadata,
+    stem_chord_track_id,
+    stem_chord_track_status,
+    stem_from_track_id,
+)
 from .storage import analysis_json_lock
 
 __all__ = [
@@ -95,4 +102,9 @@ __all__ = [
     "transpose_chord_pitches",
     "transpose_pitch",
     "validate_chord_label",
+    "STEM_CHORD_TRACK_PREFIX",
+    "build_stem_chord_metadata",
+    "stem_chord_track_id",
+    "stem_chord_track_status",
+    "stem_from_track_id",
 ]
