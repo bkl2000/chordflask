@@ -16,6 +16,7 @@ from datetime import datetime
 from importlib import metadata
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import unquote
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from chordflask_base import analysis_json_lock, ChordTrackRepository
@@ -26,6 +27,7 @@ from .analysis_queue import AnalysisQueue, MAX_BATCH_SIZE
 from .client_state import ClientRegistry, PathLockRegistry
 from .chord_chordpro import format_export_chordpro
 from .chord_export_sheet import build_export_sheet
+from .lyrics_paths import lyrics_path
 from .chordpro_song import ChordProSongError, read_chordpro, sheet_rhythm_status
 from .chord_markdown import download_track_slug, format_export_markdown
 from .chord_sheet_pdf import ChordSheetPdfRenderer
@@ -843,7 +845,8 @@ class FlaskMP4App:
             json_file = state.file_repr.get("json")
             stems = state.player.audio_stems_state(include_versions=self.__stem_cache)
 
-        song_view_available = self._song_sidecar(mp4_file) is not None
+        lyrics_versions = self._lyrics_versions(mp4_file)
+        song_view_available = bool(lyrics_versions)
 
         return jsonify({
             'status': 'ready',
@@ -856,6 +859,7 @@ class FlaskMP4App:
             'title': f"ChordFlask - {filename}",
             'stems': stems,
             'song_view_available': song_view_available,
+            'lyrics_versions': lyrics_versions,
             **player_state,
         })
 
@@ -1124,7 +1128,11 @@ class FlaskMP4App:
             f"{download_track_slug(snapshot['chord_track_id'])}"
         )
         song = None
-        sidecar = self._song_sidecar(media_or_error)
+        requested = data.get("lyrics_version", "v1")
+        if requested not in ("v1", "v2"):
+            return jsonify(error="Unknown Lyrics version."), 400
+        selected = self._selected_lyrics_version(media_or_error, requested)
+        sidecar = self._song_sidecar(media_or_error, selected)
         if sidecar is not None:
             try:
                 song = read_chordpro(sidecar)
@@ -1200,17 +1208,26 @@ class FlaskMP4App:
             return "Media file not found.", 404
 
     @staticmethod
-    def _song_sidecar(media_path):
+    def _song_sidecar(media_path, version="v1"):
         """Return a safe same-directory Song sidecar, or None when unavailable."""
         try:
             media = Path(media_path).resolve(strict=True)
-            candidate = media.with_suffix(".cho")
+            candidate = lyrics_path(media, version)
+            if candidate.is_symlink():
+                return None
             resolved = candidate.resolve(strict=True)
             if resolved.parent != media.parent or not resolved.is_file():
                 return None
         except (OSError, RuntimeError):
             return None
         return resolved
+
+    def _lyrics_versions(self, media):
+        return [v for v in ("v1", "v2") if self._song_sidecar(media, v) is not None]
+
+    def _selected_lyrics_version(self, media, requested):
+        versions = self._lyrics_versions(media)
+        return requested if requested in versions else (versions[0] if versions else "v1")
 
     def get_song_sheet(self):
         """Return the active browser client's external Song sheet as safe JSON."""
@@ -1226,7 +1243,14 @@ class FlaskMP4App:
         if media_path is None:
             return jsonify(error="No active media file."), 409
 
-        sidecar = self._song_sidecar(media_path)
+        requested = request.headers.get("X-Lyrics-Version", "v1")
+        if requested not in ("v1", "v2"):
+            return jsonify(error="Unknown Lyrics version."), 400
+        expected_media = request.headers.get("X-Lyrics-Media")
+        if expected_media is not None and unquote(expected_media) != str(media_path):
+            return jsonify(error="Active song changed."), 409
+        selected = self._selected_lyrics_version(media_path, requested)
+        sidecar = self._song_sidecar(media_path, selected)
         if sidecar is None:
             return jsonify(error="Song sheet is unavailable."), 404
         try:
@@ -1234,6 +1258,8 @@ class FlaskMP4App:
         except ChordProSongError as error:
             return jsonify(error=str(error)), error.status_code
         with state.lock:
+            if state.file_repr is None or state.file_repr.get() != media_path:
+                return jsonify(error="Active song changed."), 409
             song["rhythm_status"] = sheet_rhythm_status(
                 song, state.player.chord_data if state.player is not None else None
             )
@@ -1244,7 +1270,11 @@ class FlaskMP4App:
                     run["chord"] = transpose_chord_pitches(
                         chord, semitones, prefer_flats
                     )
-        return jsonify(song)
+        song["lyrics_versions"] = self._lyrics_versions(media_path)
+        song["lyrics_version"] = selected
+        response = jsonify(song)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     def serve_stem(self, stem_name):
         """Serve one FLAC stem of the currently loaded song's grouped set.
@@ -1361,8 +1391,8 @@ class FlaskMP4App:
             for track in state.player.analysis_track_state()["available_chord_tracks"]
         )
 
-    def _lyrics_ready(self, _state, media):
-        sidecar = self._song_sidecar(media)
+    def _lyrics_ready(self, _state, media, version="v1"):
+        sidecar = self._song_sidecar(media, version)
         if sidecar is None:
             return False
         try:
@@ -1465,8 +1495,9 @@ class FlaskMP4App:
             media_or_error = self._active_editing_media(state, data)
             if not isinstance(media_or_error, Path):
                 return media_or_error
-            available = self._lyrics_ready(state, media_or_error)
-        return jsonify(success=True, song_view_available=available)
+        versions = self._lyrics_versions(media_or_error)
+        available = any(self._lyrics_ready(state, media_or_error, v) for v in versions)
+        return jsonify(success=True, song_view_available=available, lyrics_versions=versions)
 
     def refresh_btc(self):
         """Reload analysis tracks so a newly generated BTC track is selectable."""

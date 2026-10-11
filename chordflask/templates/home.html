@@ -470,6 +470,14 @@
       text-transform: none;
     }
 
+    #lyricsVersionSelect {
+      width: auto;
+      height: 22px;
+      padding: 0 4px;
+      font-size: 11px;
+    }
+
+    #lyricsVersionSelect[hidden],
     #songViewSwitch[hidden],
     #songSheet[hidden] {
       display: none;
@@ -2346,6 +2354,7 @@
                 <button id="gridViewButton" type="button" aria-pressed="true">Grid</button>
                 <button id="songViewButton" type="button" aria-pressed="false">Lyrics</button>
               </span>
+              <select id="lyricsVersionSelect" aria-label="Lyrics version" hidden></select>
             </span>
             <span id="fileStatus">No file loaded</span>
           </div>
@@ -2885,6 +2894,33 @@
     let reanalysisQueuedPath = null;
     let saveRequestInFlight = false;
     let trackRequestInFlight = false;
+    let lyricsVersionSelect = document.getElementById('lyricsVersionSelect');
+    let lyricsVersion = 'v1';
+    let lyricsVersions = [];
+    let lyricsMedia = '';
+    lyricsVersionSelect.addEventListener('change', () => {
+      lyricsVersion = lyricsVersionSelect.value;
+      refreshSongSheetLabels();
+    });
+
+    window.addEventListener('focus', () => {
+      if (lyricsMedia && desktopSongView.matches) refreshSongSheetLabels();
+    });
+
+    function updateLyricsVersions(versions) {
+      lyricsVersions = Array.isArray(versions) ? versions : [];
+      if (!lyricsVersions.includes(lyricsVersion)) lyricsVersion = lyricsVersions[0] || 'v1';
+      lyricsVersionSelect.replaceChildren();
+      for (const version of lyricsVersions) {
+        const option = document.createElement('option');
+        option.value = version;
+        option.textContent = version === 'v2' ? 'Lyrics V2' : 'Lyrics V1';
+        lyricsVersionSelect.appendChild(option);
+      }
+      lyricsVersionSelect.value = lyricsVersion;
+      lyricsVersionSelect.hidden = !desktopSongView.matches || songViewMode !== 'song' || lyricsVersions.length < 2;
+    }
+
     let songViewAvailable = false;
     let songViewMode = 'grid';
     let preferredSongViewMode = (
@@ -3217,6 +3253,7 @@
     function updateSongViewControl() {
       const usable = songViewAvailable && desktopSongView.matches;
       songViewSwitch.hidden = !usable;
+      lyricsVersionSelect.hidden = !desktopSongView.matches || songViewMode !== 'song' || lyricsVersions.length < 2;
       gridViewButton.setAttribute('aria-pressed', String(songViewMode === 'grid'));
       songViewButton.setAttribute('aria-pressed', String(songViewMode === 'song'));
       gridViewButton.disabled = editMode || editRequestInFlight;
@@ -3375,13 +3412,17 @@
       updateSongViewControl();
       songSheet.replaceChildren();
       appendSongText(songSheet, 'song-sheet-message', 'Loading Lyrics sheet…');
-      fetch('/get_song_sheet', { headers: { 'Cache-Control': 'no-store' } })
+      fetch('/get_song_sheet', { headers: { 'Cache-Control': 'no-store',
+        'X-Lyrics-Version': lyricsVersion, 'X-Lyrics-Media': encodeURIComponent(lyricsMedia) } })
       .then(response => response.json().then(data => {
         if (!response.ok) throw data;
         return data;
       }))
       .then(data => {
         if (generation !== songViewGeneration) return;
+        updateLyricsVersions(data.lyrics_versions);
+        lyricsVersion = data.lyrics_version;
+        lyricsVersionSelect.value = lyricsVersion;
         songSheetCache = data;
         renderSongSheet(data);
       })
@@ -4598,6 +4639,7 @@
     function prepareStems() { prepareCurrent('stems'); }
 
     function finishPreparation(name) {
+      const preparationMedia = lyricsMedia;
       const action = prepareActions[name];
       if (action.pollTimer) clearTimeout(action.pollTimer);
       action.pollTimer = null;
@@ -4614,7 +4656,10 @@
       })
       .then(data => {
         if (name === 'lyrics') {
-          resetSongView(data.song_view_available);
+          if (preparationMedia !== lyricsMedia) return;
+          lyricsMedia = data.mp4_file || lyricsMedia;
+        updateLyricsVersions(data.lyrics_versions);
+        resetSongView(data.song_view_available);
         } else if (name === 'btc') {
           updateTrackSelectors(data);
         } else {
@@ -4930,6 +4975,10 @@
       const { autoplay, analysisWaitReason, dirname, filename, requestedPath } = intent;
       const requestedSemitones = rememberedSemitones(requestedPath);
       activeLoadIntent = intent;
+      // Supersede sheet responses immediately when the server is asked to
+      // switch songs, before its load response can arrive.
+      songViewGeneration += 1;
+      songSheetRequestInFlight = false;
 
       localStorage.setItem(storageKeys.dirname, dirname);
       localStorage.setItem(storageKeys.filter, document.getElementById('matchstring').value.trim());
@@ -4988,6 +5037,8 @@
         }
         exitEditMode();
         clearEditUndo();
+        lyricsMedia = data.mp4_file || lyricsMedia;
+        updateLyricsVersions(data.lyrics_versions);
         resetSongView(data.song_view_available);
         semitonesInput.value = data.semitones;
         localStorage.setItem(storageKeys.file, filename);
@@ -5162,6 +5213,8 @@
         }
         exitEditMode();
         clearEditUndo();
+        lyricsMedia = data.mp4_file || lyricsMedia;
+        updateLyricsVersions(data.lyrics_versions);
         resetSongView(data.song_view_available);
         loadedAnalysisValid = data.analysis_valid === true;
         semitonesInput.value = data.semitones;
@@ -5256,7 +5309,8 @@
         body: JSON.stringify({
           dirname: loadedFileDirectory,
           filename: loadedFileName,
-          format: format
+          format: format,
+          lyrics_version: desktopSongView.matches ? lyricsVersion : 'v1'
         })
       })
       .then(response => {

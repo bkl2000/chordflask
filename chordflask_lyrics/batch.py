@@ -42,10 +42,14 @@ def recursive_media(root):
 
 
 def generation_options(args):
-    return {
+    options = {
         "force": args.force, "lyrics": list(args.lyrics), "track": args.track,
         "romanize": args.romanize, "romanize_engine": args.romanize_engine,
     }
+
+    if getattr(args, "analyzer", "v1") != "v1":
+        options["analyzer"] = args.analyzer
+    return options
 
 
 def load_failures(root):
@@ -57,8 +61,9 @@ def load_failures(root):
             or data["format"] != 1 or data.get("root") != str(root)):
         raise ValueError("Invalid Lyrics failure state or root mismatch")
     options = data.get("options")
-    if (not isinstance(options, dict) or set(options) != {
+    if (not isinstance(options, dict) or set(options) - {"analyzer"} != {
             "force", "lyrics", "track", "romanize", "romanize_engine"}
+            or options.get("analyzer", "v1") not in ("v1", "qwen3")
             or type(options["force"]) is not bool or type(options["romanize"]) is not bool
             or not isinstance(options["track"], str) or not options["track"].strip()
             or options["romanize_engine"] not in SUPPORTED_ENGINES

@@ -143,7 +143,7 @@ before exposing it beyond localhost.
 | Python runtime | External project venv | Bundled in executable |
 | FFmpeg | System installation | System installation |
 | Vamp plugins | Installed separately with `make plugins` | Installed separately with `install_vamp.sh` |
-| Display existing same-stem `.cho` Lyrics | Included | Included |
+| Display existing `.cho` / `.v2.cho` Lyrics | Included | Included |
 | Generate/fetch Lyrics and Thai romanization | Installed helper or optional external Lyrics venv | Optional external Lyrics venv |
 | Display romanization already stored in `.cho` | Included | Included |
 | BTC model runtime and generation | Optional external BTC venv | Lightweight connector bundled; model runtime remains external |
@@ -155,6 +155,28 @@ travel with the media collection. It can also prepare Lyrics or BTC when their
 external runtimes have been installed from a source checkout. See
 [LYRICS.md](LYRICS.md#standalone-behavior) and the
 [BTC runtime guide](../chordflask_btc/model/README.md).
+
+## Optional Qwen3 Lyrics V2
+
+Standalone and DEB display `song.cho` and `song.v2.cho`, with the desktop
+version selector and export of the selected version. Qwen generation is
+CLI-only; Prepare remains V1. Install the current external Lyrics CLI and the
+separate inference venv from a source checkout:
+
+```bash
+make setup-lyrics
+make setup-qwen3-asr
+make qwen3-asr-check
+~/.venvs/chordflask-lyrics/bin/chordflask-genlyrics --analyzer qwen3 song.mp3
+```
+
+The inference venv defaults to `~/.venvs/chordflask-qwen3-asr` and honors
+`CHORDFLASK_QWEN3_VENV`. Model downloads happen during setup, then inference is
+offline, with compatible CUDA or CPU. The generator, PyTorch and Qwen weights
+remain external to both the portable payload and its Debian wrapper. Existing
+V1 is unchanged; delete `song.v2.cho` to remove V2. Language restrictions,
+experimental singing quality, vocal-stem reuse and separate text/alignment
+steps are documented in [LYRICS.md](LYRICS.md#local-lyrics-v2-qwen3).
 
 ## Optional desktop preparation runtimes
 

@@ -107,6 +107,28 @@ The standalone excludes the generator, LRCLIB client, PyThaiNLP, and ONNX
 Runtime. It can still parse and display `.cho` files and romanization generated
 elsewhere because that reader has no model dependency.
 
+## Qwen3 Lyrics V2 runtime
+
+Qwen inference runs in a separate venv; the core Python range and all existing
+Lyrics/BTC/Demucs runtimes stay unchanged. Setup defaults to Python 3.12 and
+accepts 3.10–3.13 (the upstream package declares Python >=3.9; the ChordFlask
+integration requires >=3.10). The reviewed package is `qwen-asr==0.0.6` with
+Transformers 4.57.6, using the original official Qwen3-ASR-1.7B and
+Qwen3-ForcedAligner-0.6B checkpoints, not the newer `-hf` API variants.
+
+CPU uses FP32. CUDA is selected only when available, supported by the installed
+wheel and successfully initialized; it uses FP16. No vLLM/FlashAttention is
+installed. `make qwen3-asr-check` diagnoses local packages, weights and devices
+without downloads or inference. Runtime/model absence or unsupported alignment
+languages fail closed. The official aligner's timestamp correction is used
+unchanged, followed by validation of corrected spans. Individual collapsed
+word spans are retained as point timestamps; unusable lyric rows are rejected.
+No model quality claim for singing follows from speech benchmarks. See [LYRICS.md](LYRICS.md#local-lyrics-v2-qwen3) for language support,
+wheel-index options, offline operation and manual V2 deletion.
+
+Core, DEB and standalone receive no additional Torch dependencies or model
+weights. `.cho` and `.v2.cho` use the same existing ChordPro reader and renderer.
+
 ## System FFmpeg
 
 ChordFlask requires a system `ffmpeg` on `PATH`. At startup, `ffmpeg_runtime.py`

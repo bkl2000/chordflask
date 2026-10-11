@@ -46,9 +46,13 @@ LYRICS_PROVENANCE_DIRECTIVES = (
     "x_chordflask_generator", "x_chordflask_version", "x_chordflask_fingerprint",
     "x_chordflask_rhythm_fingerprint",
 )
+QWEN_PROVENANCE_DIRECTIVES = (
+    "x_chordflask_analyzer", "x_chordflask_model", "x_chordflask_alignment",
+    "x_chordflask_audio", "x_chordflask_device", "x_chordflask_language",
+)
 _METADATA_DIRECTIVES = frozenset(
     ("title", "artist", "subtitle", "key", "capo", "x_chordflask_track")
-    + LYRICS_PROVENANCE_DIRECTIVES
+    + LYRICS_PROVENANCE_DIRECTIVES + QWEN_PROVENANCE_DIRECTIVES
 )
 _SECTION_STARTS = {
     "start_of_verse": ("verse", "Verse"),

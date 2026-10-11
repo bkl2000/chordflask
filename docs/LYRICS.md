@@ -64,6 +64,225 @@ Lyrics is available at browser widths of 801 px or greater. Narrow/mobile
 layouts remain Grid-only. Hand-written ChordPro sheets display normally, but
 precise follow highlighting requires ChordFlask's generated mapping metadata.
 
+## Local Lyrics V2 (Qwen3)
+
+V1 uses the existing LRC / embedded / LRCLIB workflow and writes `song.cho`.
+V2 recognizes audio locally with official **Qwen3-ASR-1.7B**, then synchronizes
+that recognized text using **Qwen3-ForcedAligner-0.6B**, and writes
+`song.v2.cho`. Both remain independently editable, normal ChordPro files beside
+the original media. The shared `chordflask.lyrics_paths.lyrics_path` function
+owns these paths. No original media or analysis JSON is changed.
+
+```bash
+make setup-qwen3-asr
+make qwen3-asr-check
+chordflask-genlyrics --analyzer qwen3 song.mp3
+chordflask-genlyrics --analyzer qwen3 --force song.mp3
+chordflask-genlyrics --analyzer qwen3 --dry-run --track chordino song.mp3
+chordflask-genlyrics --analyzer qwen3 --recursive ~/Music
+chordflask-genlyrics --retry-failed ~/Music
+```
+
+The generator must be installed from the current source (`make setup`, or
+`make setup-lyrics` for the external Lyrics helper). Qwen setup installs only
+the isolated inference runtime; it does not modify the other runtimes. An
+external Lyrics helper can invoke its installed V2 CLI directly with
+`~/.venvs/chordflask-lyrics/bin/chordflask-genlyrics --analyzer qwen3 song.mp3`.
+
+The default venv is `~/.venvs/chordflask-qwen3-asr`, configurable with
+`CHORDFLASK_QWEN3_VENV`. Setup defaults to Python 3.12; select another supported
+Python 3.10–3.13 using `CHORDFLASK_QWEN3_PYTHON`. It installs `qwen-asr==0.0.6`
+(the reviewed API, requiring Transformers 4.57.6), PyTorch and two model
+snapshots under that venv's `models/`. Repeat setup reuses the venv and
+Hugging Face downloads. Installation needs internet access and sufficient
+free disk space. Inference uses local model paths and forces Hugging Face /
+Transformers offline mode. No API service, URL audio input or upload is used.
+
+On a compatible CUDA GPU/wheel, inference uses FP16 CUDA. Otherwise it uses
+FP32 CPU. No FlashAttention or vLLM is required. To force a CPU test:
+
+```bash
+CUDA_VISIBLE_DEVICES='' chordflask-genlyrics --analyzer qwen3 song.mp3
+```
+
+For CPU-only PyTorch wheels, set
+`CHORDFLASK_QWEN3_TORCH_INDEX=https://download.pytorch.org/whl/cpu` during setup.
+The same override can select an appropriate official CUDA wheel index for the
+installed driver. Existing runtime wheels are reused; choose a fresh venv if
+changing the wheel family. CPU inference can be slow and memory intensive.
+ASR and aligner models are loaded sequentially to avoid retaining both models
+at once. Check reports Python/package versions, model weights and CPU/CUDA
+selection; it performs no downloads, installations or model inference.
+Missing runtime/weights, incompatible APIs, decoding errors, memory failures,
+empty results and invalid synchronization fail without publishing a sidecar.
+
+ASR detects language independently for each 30-second audio chunk and prints
+it in diagnostics. A separate alignment-language check requires both official
+support and the installed model's advertised support. Current supported
+alignment languages are Chinese, English, Cantonese, French, German, Italian,
+Japanese, Korean, Portuguese, Russian and Spanish. ASR supports more languages;
+**Thai cannot currently produce V2**. Unsupported or unrecognized languages
+abort the whole song without a fallback or partial V2 file.
+
+Text recognition (`recognize_text`) and synchronization (`align_text`) are
+separate, small processing steps. Audio is decoded temporarily to mono 16 kHz
+PCM; both steps use identical sample ranges. Chunk offsets derive from sample
+positions in the source, not beats. The aligner supplies word/character starts
+and ends. The official Qwen3 timestamp correction is used unchanged as part
+of forced alignment: it restores a nondecreasing sequence, using neighbouring
+anchors or interpolation for outliers. This model post-processing is not an
+invented beat-timing fallback. V2 validates the corrected output and rejects
+missing words, incomplete coverage, non-finite/negative times, reversed or
+overlapping spans and out-of-audio boundaries. An individual word may have
+`start == end` after model quantization/correction; its text and point timestamp
+are retained without adding duration. Entirely collapsed alignment or a lyric
+row without a positive time span is rejected. Model-aligned token starts form
+readable rows; ends delimit gaps through existing blank timed-line support. The
+existing beat mapping, chord markers, romanization, ChordPro rendering and
+parser validation are reused. ChordPro provenance records analyzer, model,
+alignment method, recognized languages, CPU/CUDA and audio input.
+
+When the existing Demucs producer validates a complete current stem set,
+V2 uses its vocals. Otherwise V2 uses original audio. It never triggers
+separation or creates persistent stem copies; diagnostics and provenance name
+the selected input. Temporary decoded audio is removed on success/failure.
+
+The official ASR lists singing voice and songs with background music as input;
+the aligner documents **speech**, not reliable singing alignment. Recognition
+can hallucinate or miss words, especially with music; timestamp validation
+cannot prove a transcript is correct. Instrumental chunks with empty ASR text
+are skipped and an entirely empty song fails. Strong accompaniment, held
+notes, repetition and chunk boundaries can reduce accuracy or make strict
+alignment fail. No quality guarantee or automatic quality scoring is provided.
+The 30-second chunking limits attention memory and stays below the aligner's
+300-second input limit; it can cut sung words at boundaries. Results need
+listening and manual review. There are no speculative tuning or fallback models.
+
+Desktop displays V1 or V2 directly when only one exists, and a compact
+**Lyrics V1 / Lyrics V2** selector when both exist. Switching preserves player
+position and playback, transposition and beat following. Export reads the
+selected sidecar. Version selection stays in browser memory, with no persisted
+per-song state. Deleted V2 falls back to V1 on the next sheet request/song
+reload; returning focus to the desktop Lyrics view refreshes the sheet.
+Late replies for another song/version are discarded. Smartphone UI is unchanged;
+desktop Prepare still creates V1 only.
+
+`--force` replaces only the selected version. Without it, an existing target
+(including one created while ASR runs) is preserved. `--dry-run` performs ASR,
+alignment and rendering without writing. `--track`, batch, `--recursive` and
+romanization continue through the shared pipeline. Retry uses the existing
+root-scoped failure log and its saved analyzer/options; old logs mean V1.
+An explicitly conflicting retry analyzer is rejected. `--lyrics` and `--tag`
+are V1-only and rejected with Qwen even if the explicit source list equals the
+default. There is no LRCLIB-text-plus-Qwen-alignment option. Keeping text and
+timing separate allows a future independent text source without implementing
+providers, plugins or another storage format today.
+
+Remove V2 completely by deleting its ordinary sidecar:
+
+```bash
+rm -- song.v2.cho
+# All V2 sidecars in the current directory:
+rm -- *.v2.cho
+# Recursively (review the target directory first):
+find ~/Music -type f -name '*.v2.cho' -delete
+```
+
+V1 and runtime models are unaffected. `chordflask-maintain` is unchanged.
+Core, standalone and DEB can read both versions; generation requires the
+external CLI plus Qwen venv. No Torch packages or model weights are bundled.
+
+API, language and license references: [official Qwen3-ASR documentation](https://github.com/QwenLM/Qwen3-ASR),
+[official forced-aligner implementation](https://github.com/QwenLM/Qwen3-ASR/blob/main/qwen_asr/inference/qwen3_forced_aligner.py),
+[ASR model card](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) and
+[aligner model card](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B).
+Both models and the Qwen package use Apache-2.0; setup preserves the official
+model cards, including their license metadata, with the external snapshots.
+
+### CPU integration test (2026-10-11)
+
+One real offline CPU run used the existing `videos/Starsailor - Alcoholic.mp3`
+(195.845 seconds) on an AMD Ryzen 5 5625U, 6 cores / 12 logical CPUs, about
+30 GiB system RAM. `CUDA_VISIBLE_DEVICES=''` forced CPU. Python 3.12.3,
+qwen-asr 0.0.6, PyTorch 2.14.1, Transformers 4.57.6, SoundFile 0.14.0 and
+Accelerate 1.12.0 were installed in the separate Qwen venv; both official models
+were downloaded and checked locally. The model snapshots were downloaded from
+the official model repositories on the test date. Setup/download time is not
+included in the inference measurement.
+
+| Measurement | Result |
+| --- | --- |
+| End-to-end generator wall time | 119.98 seconds |
+| Maximum RSS (`/usr/bin/time -v`, subprocess tree) | 13,646,920 KiB (13.01 GiB) |
+| User / system CPU time | 494.63 / 13.93 seconds |
+| Detected language | English in all seven audio chunks |
+| Actual ASR | Completed on CPU |
+| Actual forced alignment | Own raw-timestamp override rejected a nonmonotone sequence; chunk not identified in the saved log |
+| V2 publication | Rejected; no `.v2.cho` file generated |
+| Audio, existing V1 and analysis JSON | SHA-256 unchanged before/after |
+| CUDA | Not tested; RTX 4070 validation remains deferred |
+
+This historical failure did not demonstrate that singing alignment was
+unusable: the integration had disabled official Qwen3 timestamp correction.
+The saved log also predates the worker's chunk-specific error diagnostics, so
+the claim that the failure occurred in the first chunk was not substantiated.
+Its exact worker revision was not recorded. The raw sequence and transcript
+were not saved, so that run cannot retrospectively identify which values
+required correction. The targeted follow-up below supersedes that diagnosis.
+
+
+### Targeted alignment correction (2026-10-11)
+
+A read-only diagnosis compared the current worker with the actually installed
+qwen-asr 0.0.6 implementation. The integration's replacement of `fix_timestamp`
+was the problem: it rejected raw outliers before the aligner's normal correction.
+The follow-up used only the first 30 seconds of the same song, plus a 4.928-second
+English control generated by the already installed eSpeak (synthetic speech,
+not a natural-speech benchmark). CPU and offline mode were retained; no model,
+chunking or inference settings were changed. Diagnostic observation called the
+original correction and returned its result unchanged.
+
+| Input | Raw timestamp count | Adjacent backward jumps | Largest backward jump | Values changed upstream | Largest correction | Point words (`start == end`) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Singing, 0–30 s | 26 | 2 | 560 ms | 2 | 560 ms | 1 |
+| Synthetic English speech | 32 | 2 | 80 ms | 2 | 80 ms | 1 |
+
+Both corrected sequences are nonnegative, nondecreasing and within their audio
+boundaries. The old validation still rejected a single collapsed word in each.
+The fix removes the integration's timestamp override, preserves the official
+correction unchanged, and accepts individual point words without deleting text
+or inventing duration. Entirely collapsed results or collapsed lyric rows,
+negative/non-finite times, real backward boundaries, overlaps and out-of-audio
+segments remain errors. No arbitrary quality threshold or replacement
+interpolation was introduced.
+
+The corrected real CLI generated two valid lyric lines for a lossless 30-second
+MP4 cut in `/tmp/qwen3-alignment-review/singing.v2.cho`, using a temporary copy of
+the existing song analysis. The original media and V1 were not modified; no
+partial result was published alongside the full original song. A test V1 beside
+the temporary clip was also preserved, including on the V2-only forced rerun.
+The final worker and bridge SHA-256 identities were recorded before the test and
+confirmed unchanged afterwards. That final CPU run took 24.46 seconds with a
+maximum RSS of 13,646,432 KiB (13.01 GiB), excluding setup/download time.
+
+Sample word spans are 20.560–20.880 s for the first word, 23.520–24.240 s for the
+last word of the first phrase, and 24.800–24.800 s for the next phrase's first
+word. The last word ends at 28.160 s. The resulting lyric rows span
+20.560–24.240 s and 24.800–28.160 s before the existing beat-grid mapping. These
+starts, pauses, ordering and end bounds are structurally plausible; recognized
+phrases match the corresponding text in existing V1. V1's beat-assigned timing
+is not treated as timing ground truth. No listening acceptance of individual
+word times was performed. One short successful cut supports technical pipeline
+compatibility, not reliable singing alignment for arbitrary songs. CUDA and
+natural speech remain untested.
+
+Raw sequences, transcripts, time measurements, SHA-256 code identities and the
+validated sidecar are temporary artifacts under `/tmp/qwen3-alignment-review/`.
+The observed raw correction counts above come from the instrumented diagnosis;
+the publication test invokes the unmodified official correction via the actual
+CLI. Normal regression tests mock the ML runtime and use recorded upstream
+correction input/output, including a point word. They require no models or GPU.
+
 ## Lyrics sources and priority
 
 The default source order is:

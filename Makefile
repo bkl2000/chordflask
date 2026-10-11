@@ -26,7 +26,7 @@ EXTRA_PYTHONPATH ?=
 
 .PHONY: help all install setup setup-runtime setup-dev setup-recreate \
 	fix-permissions test check lint run worker standalone deb standalone-run \
-	plugins analyze demucs export maintain setup-lyrics lyrics-check setup-btc \
+	plugins analyze demucs export maintain setup-lyrics lyrics-check setup-qwen3-asr qwen3-asr-check setup-btc \
 	btc-check setup-demucs demucs-check status clean clean-report
 
 help:
@@ -50,6 +50,8 @@ help:
 		'  make export              Export leadsheets (chordflask-export)' \
 		'  make maintain            Maintain data/installation (chordflask-maintain)' \
 		'  make setup-lyrics        Set up the optional Lyrics runtime [installs]' \
+		'  make setup-qwen3-asr     Install isolated local Qwen3 ASR/alignment models' \
+		'  make qwen3-asr-check     Diagnose Qwen3 without downloads or inference' \
 		'  make lyrics-check        Diagnose the optional Lyrics runtime' \
 		'  make setup-btc           Set up the optional BTC analyzer runtime [installs]' \
 		'  make btc-check           Diagnose the optional BTC analyzer runtime' \
@@ -190,3 +192,9 @@ clean:
 
 clean-report:
 	@bash "$(ROOT_DIR)/scripts/clean_report.sh"
+
+setup-qwen3-asr:
+	@bash "$(ROOT_DIR)/scripts/setup-qwen3-asr.sh"
+
+qwen3-asr-check:
+	@bash "$(ROOT_DIR)/scripts/qwen3-asr-check.sh"

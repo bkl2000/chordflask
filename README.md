@@ -294,6 +294,31 @@ embedded-tag limits, LRCLIB matching, all CLI options, alignment, romanization
 engines, and copyright considerations are in
 [docs/LYRICS.md](docs/LYRICS.md).
 
+For experimental, fully local Lyrics V2 from audio:
+
+```bash
+make setup-qwen3-asr
+make qwen3-asr-check
+chordflask-genlyrics --analyzer qwen3 song.mp3
+chordflask-genlyrics --analyzer qwen3 --force song.mp3
+```
+
+V1 remains `song.cho`; V2 is `song.v2.cho`. Existing targets are kept unless
+`--force` is given, and force replaces only the selected version. Desktop shows
+**Lyrics V1 / Lyrics V2** when both exist; export uses the selected version.
+Prepare continues to generate V1; V2 generation is CLI-only. Delete V2 with
+`rm -- song.v2.cho`; no maintenance command or persistent version registry is
+needed. A valid existing Demucs vocal set may be reused, otherwise ASR reads
+original audio, without starting Demucs.
+
+Qwen runs in a separate venv, downloads its models during setup and then works
+offline. Compatible CUDA is selected automatically, with CPU fallback. Core,
+DEB and standalone gain no Torch packages or model weights. ASR detects the
+language automatically; unsupported alignment languages (including Thai) fail
+with no V2 write. Singing alignment remains experimental. See
+[the Lyrics V2 guide](docs/LYRICS.md#local-lyrics-v2-qwen3) for setup, language
+limits, CPU/CUDA options and the separate text/alignment steps.
+
 ### Prepare karaoke or instrument practice
 
 Install the optional Demucs runtime once, check it, and prepare a directory:
@@ -407,6 +432,19 @@ The desktop **Prepare** menu in source and standalone runs can use the bundled
 lightweight connector when the isolated BTC runtime is complete.
 It reloads the track list on completion; Chordino and Edited data remain
 separate.
+
+## Experimental research
+
+These research projects are separate from stable release features. This section
+does not add experimental functionality to the current release download.
+
+- **Lyrics V2:** experimental local vocal transcription and synchronization with
+  Qwen3-ASR and Qwen3-ForcedAligner. Initial practical results are available;
+  reliability and hardware requirements are still being investigated.
+- **Chord Analysis V4:** an experimental ML approach to reranking existing chord
+  candidates. A private research prototype includes offline evaluations and
+  listening tools; musical usefulness is still under investigation. It is not
+  integrated into production analysis, the GUI, or release bundles.
 
 ## LAN, phone, and tablet use
 

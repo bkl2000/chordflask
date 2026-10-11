@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from .chordpro_song import LYRICS_PROVENANCE_DIRECTIVES
+from .chordpro_song import LYRICS_PROVENANCE_DIRECTIVES, QWEN_PROVENANCE_DIRECTIVES
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,7 @@ def build_export_sheet(title, snapshot, song=None):
         lyrics=tuple(lyric_blocks),
         lyrics_provenance=tuple(
             (name, (song or {}).get("metadata", {})[name])
-            for name in LYRICS_PROVENANCE_DIRECTIVES
+            for name in LYRICS_PROVENANCE_DIRECTIVES + QWEN_PROVENANCE_DIRECTIVES
             if name in (song or {}).get("metadata", {})
         ),
     )

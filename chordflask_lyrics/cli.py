@@ -16,6 +16,7 @@ import sys
 import tempfile
 
 from chordflask.filerepr import FileRepr
+from chordflask.lyrics_paths import lyrics_path
 from chordflask.media_library import preferred_media_files
 from chordflask.playbackview import PlaybackView
 from chordflask_base.rhythm import rhythm_grid_fingerprint
@@ -61,20 +62,28 @@ def _parse_lyrics_sources(value: str) -> tuple[str, ...]:
     return sources
 
 
+class ExplicitOptionAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest + "_explicit", True)
+        setattr(namespace, self.dest, values)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chordflask-genlyrics",
         description=(
-            "Use external LRC, embedded, or LRCLIB lyrics and generate a .cho "
-            "sidecar using existing ChordFlask analysis."
+            "Generate Lyrics V1 from LRC/embedded/LRCLIB (.cho), or local Qwen3 "
+            "Lyrics V2 (.v2.cho), using existing ChordFlask analysis."
         ),
         epilog="Batch: --recursive --force ROOT; retry: --retry-failed ROOT (saved options).",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--recursive", action="store_true", help="scan nested media directories")
     mode.add_argument("--retry-failed", action="store_true", help="retry only saved failures using saved options")
+    parser.add_argument("--analyzer", choices=("v1", "qwen3"), default="v1", action=ExplicitOptionAction,
+                        help="Lyrics V1 sources (default) or local Qwen3 Lyrics V2")
     parser.add_argument("--dry-run", action="store_true", help="match and render without writing")
-    parser.add_argument("--force", action="store_true", help="replace an existing same-stem .cho file")
+    parser.add_argument("--force", action="store_true", help="replace only the selected Lyrics sidecar")
     parser.add_argument(
         "--tag",
         metavar="SEARCH_TEXT",
@@ -83,6 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--lyrics",
         type=_parse_lyrics_sources,
+        action=ExplicitOptionAction,
         default=DEFAULT_LYRICS_SOURCES,
         metavar="SOURCES",
         help="ordered colon-separated sources (default: lrc:embedded:lrclib)",
@@ -232,7 +242,7 @@ def _load_analysis(media: Path, requested_track: str) -> ChordData:
     return chord_data
 
 
-def _write_atomic(path: Path, content: str) -> None:
+def _write_atomic(path: Path, content: str, *, replace_existing: bool = True) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as output:
@@ -240,8 +250,12 @@ def _write_atomic(path: Path, content: str) -> None:
             output.write(content)
             output.flush()
             os.fsync(output.fileno())
-        os.replace(temporary, path)
-        temporary = ""
+        if replace_existing:
+            os.replace(temporary, path)
+            temporary = ""
+        else:
+            # Atomic publication without overwriting a target created during inference.
+            os.link(temporary, path)
     finally:
         if descriptor >= 0:
             os.close(descriptor)
@@ -335,17 +349,32 @@ def generate_file(
     romanize: bool = False,
     romanize_engine: str = DEFAULT_ENGINE,
     lyrics_sources: tuple[str, ...] = DEFAULT_LYRICS_SOURCES,
+    analyzer: str = "v1",
 ) -> tuple[str, str]:
     """Generate one sidecar and return ``(status, explanation)``."""
-    output_path = media.with_suffix(".cho")
+    if analyzer not in ("v1", "qwen3"):
+        raise GenerationError("Unknown Lyrics analyzer")
+    if analyzer == "qwen3" and (search_hint is not None or lyrics_sources != DEFAULT_LYRICS_SOURCES):
+        raise GenerationError("Qwen3 cannot use --lyrics or --tag")
+    output_path = lyrics_path(media, "v2" if analyzer == "qwen3" else "v1")
+    if output_path.is_symlink():
+        raise GenerationError("Lyrics output must not be a symlink")
     if output_path.exists() and not force:
         return "skipped", f"{output_path.name} already exists"
 
     chord_data = _load_analysis(media, track)
     selected_track = chord_data.active_chord_track_id
-    record, lyrics_source, media_duration = _select_lyrics(
-        media, chord_data, client, lyrics_sources, search_hint
-    )
+    analyzer_provenance = {}
+    if analyzer == "qwen3":
+        from .qwen3 import timed_lyrics
+        lines, analyzer_provenance = timed_lyrics(media)
+        identity = lookup_identity(media, analysis_duration=_analysis_duration(chord_data))
+        record = _lyrics_record(identity, media, lines)
+        lyrics_source, media_duration = "qwen3", identity.duration
+    else:
+        record, lyrics_source, media_duration = _select_lyrics(
+            media, chord_data, client, lyrics_sources, search_hint
+        )
 
     beat_chords = PlaybackView(
         chord_data,
@@ -369,6 +398,7 @@ def generate_file(
         chord_track_id=selected_track,
         romanize=romanizer,
         provenance={
+            **analyzer_provenance,
             "x_chordflask_generator": "ChordFlask Lyrics",
             "x_chordflask_version": version("chordflask"),
             "x_chordflask_fingerprint": installed_fingerprint(),
@@ -380,7 +410,7 @@ def generate_file(
     from chordflask.chordpro_song import parse_chordpro
 
     parse_chordpro(content)
-    line_count = len(record.lines)
+    line_count = sum(bool(line.text.strip()) for line in record.lines) if analyzer == "qwen3" else len(record.lines)
     line_label = "line" if line_count == 1 else "lines"
     if lyrics_source == "lrclib:synced":
         lyrics_detail = (
@@ -404,11 +434,22 @@ def generate_file(
             f"; duration {record.duration:.1f}s vs media {media_duration:.1f}s)"
         )
     detail = f"{lyrics_detail}; beats={len(chord_data.beat_times)}"
+    if analyzer_provenance:
+        detail += (f"; language={analyzer_provenance['x_chordflask_language']}"
+                   f"; audio={analyzer_provenance['x_chordflask_audio']}"
+                   f"; device={analyzer_provenance['x_chordflask_device']}")
     if romanize:
         detail += f"; romanize={romanize_engine}"
     if dry_run:
         return "dry-run", f"{detail}; would write {output_path.name}"
-    _write_atomic(output_path, content)
+    if output_path.is_symlink():
+        raise GenerationError("Lyrics output must not be a symlink")
+    if output_path.exists() and not force:
+        return "skipped", f"{output_path.name} already exists"
+    try:
+        _write_atomic(output_path, content, replace_existing=force)
+    except FileExistsError:
+        return "skipped", f"{output_path.name} already exists"
     return "written", f"{detail}; wrote {output_path.name}"
 
 
@@ -425,6 +466,11 @@ def _resolve_files(target: Path) -> list[Path] | None:
 def run(args, *, client=None) -> int:
     from .batch import generation_options, load_failures, recursive_media, save_failures, state_path
 
+    analyzer = getattr(args, "analyzer", "v1")
+    if analyzer == "qwen3" and (args.tag is not None or getattr(args, "lyrics_explicit", False)
+                                 or args.lyrics != DEFAULT_LYRICS_SOURCES):
+        print("ERROR: --analyzer qwen3 cannot be combined with --lyrics or --tag", file=sys.stderr)
+        return 2
     batch_mode = getattr(args, "recursive", False) or getattr(args, "retry_failed", False)
     retry = getattr(args, "retry_failed", False)
     if batch_mode and not args.target.is_dir():
@@ -457,6 +503,10 @@ def run(args, *, client=None) -> int:
                     print("OK: 0\nFAILED: 0\nSKIPPED: 0")
                     return 0
                 options = state["options"]
+                if getattr(args, "analyzer_explicit", False) and analyzer != options.get("analyzer", "v1"):
+                    raise ValueError("--retry-failed uses the saved analyzer; explicit --analyzer disagrees")
+                if options.get("analyzer", "v1") == "qwen3" and getattr(args, "lyrics_explicit", False):
+                    raise ValueError("Saved Qwen3 retry cannot be combined with --lyrics")
                 print("Retrying saved failures using original generation options.")
                 files = sorted((Path(entry["path"]) for entry in state["failed"]), key=str)
             else:
@@ -466,8 +516,12 @@ def run(args, *, client=None) -> int:
             print(f"ERROR: {error}", file=sys.stderr)
             return 2
         lyrics_sources = tuple(options["lyrics"])
+        analyzer = options.get("analyzer", "v1")
     client = client or LRCLIBClient()
-    print(f"Lyrics priority: {' > '.join(lyrics_sources)}")
+    if analyzer == "qwen3":
+        print("Lyrics analyzer: Qwen3 (V2)")
+    else:
+        print(f"Lyrics priority: {' > '.join(lyrics_sources)}")
     failures = 0
     skipped = 0
     written = 0
@@ -491,10 +545,16 @@ def run(args, *, client=None) -> int:
                 romanize=options["romanize"] if batch_mode else getattr(args, "romanize", False),
                 romanize_engine=options["romanize_engine"] if batch_mode else getattr(args, "romanize_engine", DEFAULT_ENGINE),
                 lyrics_sources=lyrics_sources,
+                analyzer=analyzer,
             )
         except (GenerationError, LRCLIBError, RomanizationError, ValueError, OSError, RuntimeError) as error:
             failures += 1
-            failed_items.append({"path": str(media), "reason": str(error)})
+            reason = str(error)
+            if analyzer == "qwen3":
+                from .qwen3 import Qwen3AlignmentError
+                if isinstance(error, Qwen3AlignmentError):
+                    reason = error.diagnostic
+            failed_items.append({"path": str(media), "reason": reason})
             print(f"[{index}/{len(files)}] FAILED {media}: {error}", file=sys.stderr)
             continue
         skipped += status != "written" if batch_mode else status == "skipped"

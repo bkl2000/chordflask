@@ -18,7 +18,7 @@ FORMAT_VERSION = 1
 CORE_FILES = (
     "__init__.py", "chordflask_config.py", "filerepr.py", "media_library.py",
     "playbackview.py", "metric_chords.py", "chordutils.py", "chord_markdown.py",
-    "chord_export_sheet.py", "chordpro_song.py",
+    "chord_export_sheet.py", "chordpro_song.py", "lyrics_paths.py",
 )
 UPDATE_GUIDANCE = "Rerun scripts/setup-lyrics.sh (make setup-lyrics) from the current source checkout."
 
