@@ -7,10 +7,13 @@ if [[ -x "${VENV_DIR}/bin/python" ]]; then
     PYTHON_BIN="${VENV_DIR}/bin/python"
 fi
 if ! command -v "$PYTHON_BIN" >/dev/null; then
-    echo "Qwen3 Python missing: $PYTHON_BIN; set CHORDFLASK_QWEN3_PYTHON to Python 3.10–3.13" >&2
+    echo "Qwen3 Python missing: $PYTHON_BIN" >&2
+    echo "ChordFlask Qwen3 Lyrics V2 currently supports Python 3.10–3.13; Python 3.12 is recommended." >&2
+    echo "Python 3.14 is not yet supported by our Qwen3 setup." >&2
+    echo "You must provide a compatible interpreter and set CHORDFLASK_QWEN3_PYTHON to its command or path." >&2
     exit 1
 fi
-"$PYTHON_BIN" -c 'import sys; assert (3,10) <= sys.version_info[:2] <= (3,13), "Qwen requires Python 3.10–3.13; Python 3.12 recommended"'
+"$PYTHON_BIN" -c 'import sys; assert (3,10) <= sys.version_info[:2] <= (3,13), "ChordFlask Qwen3 Lyrics V2 currently supports Python 3.10–3.13; Python 3.12 is recommended. Python 3.14 is not yet supported by our Qwen3 setup. You must provide a compatible interpreter and set CHORDFLASK_QWEN3_PYTHON to its command or path."'
 if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
     "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi

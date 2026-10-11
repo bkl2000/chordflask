@@ -89,9 +89,25 @@ the isolated inference runtime; it does not modify the other runtimes. An
 external Lyrics helper can invoke its installed V2 CLI directly with
 `~/.venvs/chordflask-lyrics/bin/chordflask-genlyrics --analyzer qwen3 song.mp3`.
 
+**Python compatibility**
+
+Lyrics V2 currently supports Python 3.10–3.13 (Python 3.12 recommended).
+Python 3.14, the default on Ubuntu 26.04, is not yet supported by this optional
+setup.
+
+Advanced users can install a compatible Python version independently, for
+example using [uv](https://docs.astral.sh/uv/), and select it with
+`CHORDFLASK_QWEN3_PYTHON`.
+
+```bash
+uv python install 3.12
+CHORDFLASK_QWEN3_PYTHON="$(uv python find 3.12)" make setup-qwen3-asr
+```
+
+ChordFlask does not install or manage additional Python interpreters.
+
 The default venv is `~/.venvs/chordflask-qwen3-asr`, configurable with
-`CHORDFLASK_QWEN3_VENV`. Setup defaults to Python 3.12; select another supported
-Python 3.10–3.13 using `CHORDFLASK_QWEN3_PYTHON`. It installs `qwen-asr==0.0.6`
+`CHORDFLASK_QWEN3_VENV`. Setup defaults to Python 3.12. It installs `qwen-asr==0.0.6`
 (the reviewed API, requiring Transformers 4.57.6), PyTorch and two model
 snapshots under that venv's `models/`. Repeat setup reuses the venv and
 Hugging Face downloads. Installation needs internet access and sufficient
