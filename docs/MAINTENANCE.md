@@ -22,6 +22,7 @@ scripts/chordflask-maintain <subcommand> ...
 | `doctor` | **read-only** — checks the installation, changes nothing |
 | `storage cleanup` | **modifies files** — deletes only explicitly requested leftovers |
 | `stems cleanup` | **modifies files** — deletes only unreferenced stem generations |
+| `stems remove` | **modifies files** — removes one song's owned stem storage, or an explicit `--all DIR` selection |
 | `migrate-schema` | **modifies files** — rewrites analysis JSON to schema v3 |
 
 Start with read-only commands. `doctor`, `validate`, and both report commands
@@ -33,12 +34,19 @@ deletes an analysis merely because it was inspected.
 
 ```bash
 scripts/chordflask-maintain storage report /path/to/music
+scripts/chordflask-maintain storage report /path/to/music/song.mp3
 ```
 
 Prints, for the directory's `.chordflask` storage, how many files and how much
 space each category uses (analysis JSON, cached audio, MusicXML, MIDI,
 leadsheet exports, temporary files, etc.) and its status. It never deletes
 anything and never follows symlinks.
+
+A single-media report is intentionally limited to direct `.chordflask`
+artifacts attributable to that basename and its filename-specific journal. It
+does not inventory Demucs stem directories or `.cho`/`.v2.cho` lyrics sidecars
+stored beside the media. Use `stems report` for stem storage and inspect lyrics
+sidecars beside the media directly.
 
 Per-song `journals/*.journal.json` sidecars are **protected user journals**, separate from
 generated analysis. Generic cleanup preserves them, and analysis validation and
@@ -105,10 +113,24 @@ actual analysis JSON is unreadable/invalid, because orphan status cannot then
 be proven safely. Non-analysis JSON files (for example `*.training.json`) do
 not block cleanup. `--dry-run` shows what would be removed without deleting.
 
+## Stems removal
+
+```bash
+scripts/chordflask-maintain stems remove song.mp3 --dry-run
+scripts/chordflask-maintain stems remove song.mp3
+scripts/chordflask-maintain stems remove --all /path/to/music --dry-run
+```
+
+This removes the registered Demucs set and verified song-owned stem files while
+preserving source media, chord analysis, Edited chords, BTC tracks, lyrics, and
+journals. Repeating it is safe. Directory-wide removal requires the explicit
+`--all DIR` form; a dry run lists the files without changing data.
+
 ## Migrate schema
 
 ```bash
 scripts/chordflask-maintain migrate-schema /path/to/music
+scripts/chordflask-maintain migrate-schema /path/to/music --dry-run
 ```
 
 Rewrites the `.chordflask/*.json` analysis files of one directory from older
@@ -120,6 +142,9 @@ schemas to the current schema v3, without reanalyzing the audio:
 - files already at schema 3 are skipped
 - non-analysis JSON files (for example `*.training.json`) are ignored silently
 
+`--dry-run` lists each file that would be migrated without modifying it or
+creating migration storage.
+
 The migration is idempotent: running it again on an already-migrated directory
 is a no-op. Each file is written atomically (fsync + `os.replace`), so a failed
 or interrupted migration leaves the original file byte-for-byte unchanged. A
@@ -129,12 +154,14 @@ file's error never aborts the batch.
 
 ```bash
 scripts/chordflask-maintain validate /path/to/song.json
+scripts/chordflask-maintain validate /path/to/song.mp3
 scripts/chordflask-maintain validate /music/videos
 ```
 
 Loads each analysis JSON through the `chordflask_base` repository and reports
-whether it is valid. A media directory validates every `.chordflask/*.json`
-inside it. This is a pure check: nothing is changed or rewritten.
+whether it is valid. A media-file target validates its corresponding analysis;
+a media directory validates every `.chordflask/*.json` inside it. This is a
+pure check: nothing is changed or rewritten.
 
 The shared model handles current schema-v3 chord and rhythm tracks, including
 `user_edited`, `qm_barbeattracker_original`, and beat-grid correction metadata,

@@ -58,19 +58,24 @@ def classify_analysis(data: Any) -> str | None:
         raise MigrationFileError(str(exc)) from exc
 
 
-def migrate_analysis_file(json_path: Path) -> tuple[str, str | None]:
+def migrate_analysis_file(
+    json_path: Path, *, dry_run: bool = False
+) -> tuple[str, str | None]:
     """Classify and migrate one analysis file.
 
     Returns ``("ok", label)`` on success, ``("skip", "already schema 3")`` for an
     already-migrated file, or ``("ignore", None)`` for a non-analysis JSON file.
     Raises :class:`MigrationFileError` for unreadable, invalid, or unsupported
-    files; in that case the file is left byte-identical.
+    files; in that case the file is left byte-identical. A dry run performs the
+    same validation without locking, writing, or creating filesystem artifacts.
     """
+    if dry_run:
+        return _migrate_analysis_file(json_path, dry_run=True)
     with analysis_json_lock(json_path):
-        return _migrate_analysis_file_locked(json_path)
+        return _migrate_analysis_file(json_path)
 
 
-def _migrate_analysis_file_locked(json_path):
+def _migrate_analysis_file(json_path, *, dry_run=False):
     data = read_analysis_json(json_path)
     kind = classify_analysis(data)
     if kind is not None:
@@ -83,6 +88,11 @@ def _migrate_analysis_file_locked(json_path):
     if kind is None:
         return ("ignore", None)
 
+    version = data.get("schema_version")
+    label = {1: "schema 1 -> 3", 2: "schema 2 -> 3", None: "legacy -> 3"}[version]
+    if dry_run:
+        return ("ok", label)
+
     repo = ChordTrackRepository()
     try:
         track = repo.load(str(json_path))
@@ -90,12 +100,10 @@ def _migrate_analysis_file_locked(json_path):
     except Exception as exc:
         raise MigrationFileError(f"migration failed: {exc}") from exc
 
-    version = data.get("schema_version")
-    label = {1: "schema 1 -> 3", 2: "schema 2 -> 3", None: "legacy -> 3"}[version]
     return ("ok", label)
 
 
-def migrate_directory(directory: Path) -> dict[str, int]:
+def migrate_directory(directory: Path, *, dry_run: bool = False) -> dict[str, int]:
     """Migrate every analysis JSON in ``directory/.chordflask``.
 
     Returns ``{"files", "migrated", "skipped", "failed"}``. Per-file lines are
@@ -117,7 +125,7 @@ def migrate_directory(directory: Path) -> dict[str, int]:
     )
     for json_path in json_files:
         try:
-            kind, label = migrate_analysis_file(json_path)
+            kind, label = migrate_analysis_file(json_path, dry_run=dry_run)
         except MigrationFileError as exc:
             counts["files"] += 1
             counts["failed"] += 1
@@ -128,8 +136,14 @@ def migrate_directory(directory: Path) -> dict[str, int]:
         counts["files"] += 1
         if kind == "ok":
             counts["migrated"] += 1
-            print(f"OK: {label}")
+            if dry_run:
+                print(f"DRY-RUN: {json_path.name}: would migrate ({label})")
+            else:
+                print(f"OK: {label}: {json_path.name}")
         else:
             counts["skipped"] += 1
-            print("SKIP: already schema 3")
+            if dry_run:
+                print(f"SKIP: {json_path.name}: already schema 3")
+            else:
+                print(f"SKIP: already schema 3: {json_path.name}")
     return counts

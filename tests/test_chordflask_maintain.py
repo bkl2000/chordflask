@@ -49,6 +49,14 @@ def test_storage_report_dispatches(capsys, tmp_path):
     assert "no analysis storage" in captured.out
 
 
+def test_storage_report_help_explains_single_media_limit(capsys):
+    code, captured = _run_cli(capsys, "storage", "report", "--help")
+
+    assert code == 0
+    assert "excludes Demucs stem" in captured.out
+    assert "directories and lyrics sidecars" in captured.out
+
+
 def test_migrate_schema_dispatches(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         "chordflask_maintain.migrate.migrate_directory",
@@ -161,6 +169,81 @@ def test_validate_cli_file_skips_foreign_json(capsys, tmp_path):
     code, captured = _run_cli(capsys, "validate", str(path))
     assert code == 0
     assert "SKIP: not a ChordFlask analysis" in captured.out
+
+
+def test_validate_cli_media_reports_actual_analysis_file(capsys, tmp_path):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    analysis = _write_json(tmp_path / ".chordflask" / "song.json", _v3())
+
+    code, captured = _run_cli(capsys, "validate", str(media))
+
+    assert code == 0
+    assert f"OK: {analysis}" in captured.out
+    assert str(media) not in captured.out
+
+
+def test_validate_cli_media_reports_missing_analysis(capsys, tmp_path):
+    media = tmp_path / "song.webm"
+    media.write_bytes(b"media")
+
+    code, captured = _run_cli(capsys, "validate", str(media))
+
+    assert code == 1
+    assert f"expected {tmp_path / '.chordflask' / 'song.json'}" in captured.err
+
+
+def test_validate_cli_refuses_ambiguous_media_basename(capsys, tmp_path):
+    mp3 = tmp_path / "song.mp3"
+    mp3.write_bytes(b"media")
+    (tmp_path / "song.mp4").write_bytes(b"media")
+    _write_json(tmp_path / ".chordflask" / "song.json", _v3())
+
+    code, captured = _run_cli(capsys, "validate", str(mp3))
+
+    assert code == 2
+    assert "ambiguous media basename 'song'" in captured.err
+    assert "validate the JSON file directly" in captured.err
+
+
+def test_migrate_schema_dry_run_names_files_and_changes_nothing(capsys, tmp_path):
+    store = tmp_path / ".chordflask"
+    legacy = _write_json(
+        store / "legacy.json",
+        {"base_chords": [{"timestamp": 0.0, "chord": "C"}]},
+    )
+    current = _write_json(store / "current.json", _v3())
+    before = {
+        path.relative_to(tmp_path): (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.rglob("*") if path.is_file()
+    }
+
+    code, captured = _run_cli(
+        capsys, "migrate-schema", str(tmp_path), "--dry-run"
+    )
+
+    after = {
+        path.relative_to(tmp_path): (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.rglob("*") if path.is_file()
+    }
+    assert code == 0
+    assert f"DRY-RUN: {legacy.name}: would migrate" in captured.out
+    assert f"SKIP: {current.name}: already schema 3" in captured.out
+    assert "wouldmigrate:1" in captured.out.replace(" ", "")
+    assert after == before
+
+
+def test_migrate_schema_messages_include_filename(capsys, tmp_path):
+    path = _write_json(
+        tmp_path / ".chordflask" / "legacy.json",
+        {"base_chords": [{"timestamp": 0.0, "chord": "C"}]},
+    )
+
+    code, captured = _run_cli(capsys, "migrate-schema", str(tmp_path))
+
+    assert code == 0
+    assert "OK: legacy -> 3" in captured.out
+    assert path.name in captured.out
 
 
 def test_doctor_reports_and_exits(monkeypatch, capsys):

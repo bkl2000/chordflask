@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 
@@ -21,10 +23,25 @@ def test_missing_media_directory_raises(tmp_path):
         inspect_storage(tmp_path / "does-not-exist")
 
 
-def test_media_file_raises(tmp_path):
+def test_media_file_reports_only_that_songs_data(tmp_path):
     media = _write(tmp_path / "song.mp3")
-    with pytest.raises(ValueError):
-        inspect_storage(media)
+    store = tmp_path / ".chordflask"
+    _write(store / "song.json", 40)
+    _write(store / "song.xml", 30)
+    _write(store / "other.json", 90)
+    _write(store / "journals" / "song.mp3.journal.json", 20)
+
+    inspection = inspect_storage(media)
+    by_name = {category.name: category for category in inspection.categories}
+
+    assert inspection.media_file == media
+    assert by_name["analysis JSON"].bytes == 40
+    assert by_name["MusicXML"].bytes == 30
+    assert by_name["user journals"].bytes == 20
+    assert sum(category.bytes for category in inspection.categories) == 90
+    report = format_storage_report(inspection)
+    assert f"Media: {media}" in report
+    assert "excludes Demucs stem directories and lyrics sidecars" in report
 
 
 def test_no_chordflask_directory(tmp_path):
@@ -116,6 +133,7 @@ def test_convert_temp_file_classified_as_temporary(tmp_path):
 
 def test_analysis_json_with_convert_stem_classified_as_analysis(tmp_path):
     media = tmp_path / "album"
+    _write(media / "song.convert-demo.mp3", 5)
     _write(media / ".chordflask" / "song.convert-demo.json", 40)
 
     inspection = inspect_storage(media)
@@ -201,6 +219,8 @@ def test_independent_directories_not_cross_inspected(tmp_path):
     b = tmp_path / "b"
     _write(a / ".chordflask" / "song.json", 40)
     _write(b / ".chordflask" / "song.json", 90)
+    _write(a / "song.mp3", 5)
+    _write(b / "song.mp3", 5)
 
     inspection_a = inspect_storage(a)
     inspection_b = inspect_storage(b)
@@ -219,6 +239,7 @@ def test_nested_chordflask_not_traversed(tmp_path):
     media = tmp_path / "album"
     store = media / ".chordflask"
     _write(store / "song.json", 40)
+    _write(media / "song.mp3", 5)
     # A nested .chordflask inside the storage dir must not be treated separately.
     nested = store / "nested"
     _write(nested / "other.json", 70)
@@ -232,12 +253,51 @@ def test_nested_chordflask_not_traversed(tmp_path):
 
 def test_formatted_report_mentions_status(tmp_path):
     media = tmp_path / "album"
+    _write(media / "song.mp3", 5)
     _write(media / ".chordflask" / "song.json", 40)
 
     text = format_storage_report(inspect_storage(media))
     assert ".chordflask" in text
     assert "analysis JSON" in text
     assert PROTECTED in text
+
+
+def test_directory_report_marks_analysis_with_missing_media_for_review(tmp_path):
+    media = tmp_path / "album"
+    analysis = media / ".chordflask" / "missing.json"
+    analysis.parent.mkdir(parents=True)
+    analysis.write_text(json.dumps({
+        "schema_version": 3,
+        "prefer_flats": True,
+        "transpose": 0,
+        "user_data": {},
+        "chord_tracks": {},
+        "rhythm_tracks": {},
+        "audio_tracks": {},
+    }), encoding="utf-8")
+    before = analysis.read_bytes()
+
+    inspection = inspect_storage(media)
+    text = format_storage_report(inspection)
+
+    category = next(
+        item for item in inspection.categories
+        if item.name == "analysis JSON (missing media)"
+    )
+    assert category.status == REVIEW
+    assert "REVIEW: missing.json has no matching MP3, MP4, or WebM media" in text
+    assert "nothing was deleted" in text
+    assert analysis.read_bytes() == before
+
+
+def test_media_report_warns_when_basename_is_shared(tmp_path):
+    mp3 = _write(tmp_path / "song.mp3", 5)
+    _write(tmp_path / "song.mp4", 5)
+    _write(tmp_path / ".chordflask" / "song.json", 40)
+
+    text = format_storage_report(inspect_storage(mp3))
+
+    assert "REVIEW: basename 'song' is shared by song.mp3, song.mp4" in text
 
 
 def test_formatted_report_no_storage(tmp_path):

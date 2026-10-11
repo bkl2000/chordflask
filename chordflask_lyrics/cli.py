@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -65,7 +66,7 @@ def _parse_lyrics_sources(value: str) -> tuple[str, ...]:
 class ExplicitOptionAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest + "_explicit", True)
-        setattr(namespace, self.dest, values)
+        setattr(namespace, self.dest, self.const if self.nargs == 0 else values)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -75,17 +76,31 @@ def build_parser() -> argparse.ArgumentParser:
             "Generate Lyrics V1 from LRC/embedded/LRCLIB (.cho), or local Qwen3 "
             "Lyrics V2 (.v2.cho), using existing ChordFlask analysis."
         ),
-        epilog="Batch: --recursive --force ROOT; retry: --retry-failed ROOT (saved options).",
+        epilog="Batch: --recursive ROOT; retry: --retry-failed ROOT (saved options).",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--recursive", action="store_true", help="scan nested media directories")
     mode.add_argument("--retry-failed", action="store_true", help="retry only saved failures using saved options")
     parser.add_argument("--analyzer", choices=("v1", "qwen3"), default="v1", action=ExplicitOptionAction,
                         help="Lyrics V1 sources (default) or local Qwen3 Lyrics V2")
-    parser.add_argument("--dry-run", action="store_true", help="match and render without writing")
-    parser.add_argument("--force", action="store_true", help="replace only the selected Lyrics sidecar")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="match and render planned output without writing",
+    )
+    parser.add_argument(
+        "--replace",
+        "--force",
+        dest="force",
+        action=ExplicitOptionAction,
+        nargs=0,
+        const=True,
+        default=False,
+        help="replace only the selected Lyrics sidecar (--force is an alias)",
+    )
     parser.add_argument(
         "--tag",
+        action=ExplicitOptionAction,
         metavar="SEARCH_TEXT",
         help="explicit LRCLIB search hint (single-file mode only)",
     )
@@ -99,17 +114,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--track",
+        action=ExplicitOptionAction,
         default="auto",
         metavar="TRACK_ID",
         help="chord track to embed (default: auto)",
     )
     parser.add_argument(
         "--romanize",
-        action="store_true",
+        action=ExplicitOptionAction,
+        nargs=0,
+        const=True,
+        default=False,
         help="add Thai romanization metadata to generated lyric lines",
     )
     parser.add_argument(
         "--romanize-engine",
+        action=ExplicitOptionAction,
         choices=SUPPORTED_ENGINES,
         default=DEFAULT_ENGINE,
         help=f"Thai romanization engine (default: {DEFAULT_ENGINE})",
@@ -493,6 +513,7 @@ def run(args, *, client=None) -> int:
         return 2
 
     options = None
+    missing_analysis = False
     if batch_mode:
         try:
             state_path(root)
@@ -503,9 +524,32 @@ def run(args, *, client=None) -> int:
                     print("OK: 0\nFAILED: 0\nSKIPPED: 0")
                     return 0
                 options = state["options"]
-                if getattr(args, "analyzer_explicit", False) and analyzer != options.get("analyzer", "v1"):
-                    raise ValueError("--retry-failed uses the saved analyzer; explicit --analyzer disagrees")
-                if options.get("analyzer", "v1") == "qwen3" and getattr(args, "lyrics_explicit", False):
+                retry_values = (
+                    ("--analyzer", "analyzer", analyzer, options.get("analyzer", "v1")),
+                    ("--replace/--force", "force", args.force, options["force"]),
+                    ("--lyrics", "lyrics", list(lyrics_sources), options["lyrics"]),
+                    ("--track", "track", args.track, options["track"]),
+                    ("--romanize", "romanize", args.romanize, options["romanize"]),
+                    (
+                        "--romanize-engine",
+                        "romanize_engine",
+                        args.romanize_engine,
+                        options["romanize_engine"],
+                    ),
+                )
+                for option, name, supplied, saved in retry_values:
+                    if getattr(args, f"{name}_explicit", False) and supplied != saved:
+                        if name == "analyzer":
+                            raise ValueError(
+                                f"--retry-failed uses saved analyzer {saved!r}; "
+                                f"explicit --analyzer {supplied!r} conflicts"
+                            )
+                        raise ValueError(
+                            f"--retry-failed uses saved generation options; {option} conflicts"
+                        )
+                if options.get("analyzer", "v1") == "qwen3" and getattr(
+                    args, "lyrics_explicit", False
+                ):
                     raise ValueError("Saved Qwen3 retry cannot be combined with --lyrics")
                 print("Retrying saved failures using original generation options.")
                 files = sorted((Path(entry["path"]) for entry in state["failed"]), key=str)
@@ -556,13 +600,27 @@ def run(args, *, client=None) -> int:
                     reason = error.diagnostic
             failed_items.append({"path": str(media), "reason": reason})
             print(f"[{index}/{len(files)}] FAILED {media}: {error}", file=sys.stderr)
+            missing_analysis = missing_analysis or reason == "valid ChordFlask analysis is missing"
             continue
-        skipped += status != "written" if batch_mode else status == "skipped"
+        skipped += status == "skipped"
         written += status == "written"
-        label = ("OK" if status == "written" else "SKIPPED") if batch_mode else status.upper()
+        if status == "dry-run":
+            label = "PLANNED"
+        elif batch_mode:
+            label = "OK" if status == "written" else "SKIPPED"
+        else:
+            label = status.upper()
         print(f"[{index}/{len(files)}] {label} {media}: {detail}")
+    if missing_analysis:
+        target = shlex.quote(str(args.target))
+        print("Create the required analysis first with:", file=sys.stderr)
+        print(f"  chordflask-analyze {target}", file=sys.stderr)
+    planned = len(files) - written - skipped - failures
     if batch_mode:
-        print(f"OK: {written}\nFAILED: {failures}\nSKIPPED: {skipped}")
+        if args.dry_run:
+            print(f"PLANNED: {planned}\nFAILED: {failures}\nSKIPPED: {skipped}")
+        else:
+            print(f"OK: {written}\nFAILED: {failures}\nSKIPPED: {skipped}")
         if not args.dry_run:
             try:
                 save_failures(root, options, failed_items)
@@ -572,7 +630,16 @@ def run(args, *, client=None) -> int:
         else:
             print("Dry-run: failure state left unchanged.")
     else:
-        print(f"Done: {len(files)} files, {written} written, {skipped} skipped, {failures} failed")
+        if args.dry_run:
+            print(
+                f"Dry-run: {len(files)} files, {planned} planned, "
+                f"{skipped} skipped, {failures} failed"
+            )
+        else:
+            print(
+                f"Done: {len(files)} files, {written} written, "
+                f"{skipped} skipped, {failures} failed"
+            )
     return 1 if failures else 0
 
 

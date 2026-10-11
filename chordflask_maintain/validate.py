@@ -11,13 +11,46 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from chordflask_base import validate_analysis
+from chordflask_base import analysis_json_path, validate_analysis
 
 from chordflask_maintain.migrate import (
     MigrationFileError,
     classify_analysis,
     read_analysis_json,
 )
+
+_MEDIA_SUFFIXES = frozenset({".mp3", ".mp4", ".webm"})
+
+
+def analysis_for_media(media_path: Path) -> Path:
+    """Return one media file's unambiguous existing analysis JSON path."""
+    media = Path(media_path)
+    if media.suffix.lower() not in _MEDIA_SUFFIXES:
+        raise ValueError(f"not an MP3, MP4, or WebM media file: {media}")
+    try:
+        entries = list(media.parent.iterdir())
+    except OSError as error:
+        raise ValueError(f"cannot inspect media directory {media.parent}: {error}") from error
+    matches = sorted(
+        entry
+        for entry in entries
+        if not entry.is_symlink()
+        and entry.is_file()
+        and entry.stem == media.stem
+        and entry.suffix.lower() in _MEDIA_SUFFIXES
+    )
+    if len(matches) > 1:
+        names = ", ".join(path.name for path in matches)
+        raise ValueError(
+            f"ambiguous media basename {media.stem!r}: {names} share one analysis path; "
+            "validate the JSON file directly"
+        )
+    json_path = analysis_json_path(media)
+    if json_path.is_symlink() or not json_path.is_file():
+        raise FileNotFoundError(
+            f"no analysis JSON for {media}; expected {json_path}"
+        )
+    return json_path
 
 
 def validate_file(json_path: Path) -> tuple[str, str | None]:

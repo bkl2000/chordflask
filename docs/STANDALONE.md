@@ -148,7 +148,7 @@ before exposing it beyond localhost.
 | Display romanization already stored in `.cho` | Included | Included |
 | BTC model runtime and generation | Optional external BTC venv | Lightweight connector bundled; model runtime remains external |
 | Demucs runtime/model | Optional external Demucs venv | Not bundled; an existing compatible external runtime can serve desktop Prepare |
-| Maintenance and separate helper commands | Installed console commands | Supplied scripts use configured external virtual environments |
+| Maintenance and separate helper commands | Installed console commands | Supplied launcher scripts require a source-installed ChordFlask virtual environment |
 
 The standalone can use previously generated analysis and `.cho` data that
 travel with the media collection. It can also prepare Lyrics or BTC when their
@@ -247,9 +247,12 @@ plugin installer and diagnostic procedure are documented in
 - `LICENSE` and `LIBERATION-FONTS-LICENSE.txt` — application and bundled font licenses
 - `chordflask-analyze`, `chordflask-demucs`, `chordflask-export`,
   `chordflask-maintain`, `chordflask-genlyrics` — the existing helper scripts;
-  these select their configured/default external virtual environment, preserve
-  the caller's directory and arguments, and report missing runtimes explicitly.
-  Copying or installing these scripts does not bundle their external runtimes.
+  these are not commands implemented by the standalone executable. They select
+  a configured/default external virtual environment, preserve the caller's
+  directory and arguments, and report a missing installation explicitly.
+  Running them requires a ChordFlask source installation (`make setup`, with
+  the relevant optional runtime setup where needed). Copying or installing the
+  scripts does not install ChordFlask or bundle any external runtime.
 
 The standalone reads and displays same-stem lowercase `.cho` song sheets in
 the Lyrics view, including chord-follow synchronization. It does not include

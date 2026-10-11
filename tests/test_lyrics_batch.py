@@ -221,7 +221,7 @@ def test_dry_run_does_not_acknowledge_or_replace_saved_failures(tmp_path, genera
     generate[1][path.name] = "dry-run"
     assert run(tmp_path, "--retry-failed", "--dry-run") == 0
     assert batch.state_path(tmp_path).read_bytes() == original
-    assert "OK: 0\nFAILED: 0\nSKIPPED: 1" in capsys.readouterr().out
+    assert "PLANNED: 1\nFAILED: 0\nSKIPPED: 0" in capsys.readouterr().out
 
 
 def test_batch_arguments_reject_single_file_tag_and_conflicting_modes(tmp_path, generate):

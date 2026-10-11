@@ -132,7 +132,9 @@ def test_analyze_btc_file_skips_missing_analysis(monkeypatch, capsys, tmp_path):
     code = analyze.analyze_btc_file(media, replace=False)
 
     assert code == 0
-    assert "SKIP: no ChordFlask analysis" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "SKIP: no ChordFlask analysis" in output
+    assert f"chordflask-analyze {media}" in output
 
 
 def test_analyze_btc_file_predicts_existing_analysis(monkeypatch, capsys, tmp_path):

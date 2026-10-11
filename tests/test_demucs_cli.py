@@ -87,6 +87,27 @@ def test_replace_processes_current_and_stale(monkeypatch, tmp_path):
     assert processed == files
 
 
+def test_replace_dry_run_reports_planned_replacements(monkeypatch, tmp_path, capsys):
+    files = [tmp_path / "current.mp3", tmp_path / "stale.mp3"]
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(cli, "discover_target", lambda target: files)
+    monkeypatch.setattr(cli, "require_runtime", lambda: runtime)
+    monkeypatch.setattr(cli, "resolve_device", lambda d, r: "cpu")
+    monkeypatch.setattr(
+        cli,
+        "classify",
+        lambda path, **kwargs: DemucsStatus(
+            "CURRENT" if path.name == "current.mp3" else "STALE"
+        ),
+    )
+
+    assert cli.run(tmp_path, replace=True, dry_run=True, device="cpu") == 0
+
+    output = capsys.readouterr().out
+    assert "would process: 2" in output
+    assert "replace:   2" in output
+
+
 def test_invalid_target_returns_two(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         cli,

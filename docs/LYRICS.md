@@ -77,7 +77,7 @@ owns these paths. No original media or analysis JSON is changed.
 make setup-qwen3-asr
 make qwen3-asr-check
 chordflask-genlyrics --analyzer qwen3 song.mp3
-chordflask-genlyrics --analyzer qwen3 --force song.mp3
+chordflask-genlyrics --analyzer qwen3 --replace song.mp3
 chordflask-genlyrics --analyzer qwen3 --dry-run --track chordino song.mp3
 chordflask-genlyrics --analyzer qwen3 --recursive ~/Music
 chordflask-genlyrics --retry-failed ~/Music
@@ -183,16 +183,17 @@ reload; returning focus to the desktop Lyrics view refreshes the sheet.
 Late replies for another song/version are discarded. Smartphone UI is unchanged;
 desktop Prepare still creates V1 only.
 
-`--force` replaces only the selected version. Without it, an existing target
+`--replace` replaces only the selected version. `--force` remains a compatible
+alias. Without either option, an existing target
 (including one created while ASR runs) is preserved. `--dry-run` performs ASR,
 alignment and rendering without writing. `--track`, batch, `--recursive` and
 romanization continue through the shared pipeline. Retry uses the existing
 root-scoped failure log and its saved analyzer/options; old logs mean V1.
-An explicitly conflicting retry analyzer is rejected. `--lyrics` and `--tag`
-are V1-only and rejected with Qwen even if the explicit source list equals the
-default. There is no LRCLIB-text-plus-Qwen-alignment option. Keeping text and
-timing separate allows a future independent text source without implementing
-providers, plugins or another storage format today.
+Explicit options that conflict with saved retry options are rejected.
+`--lyrics` and `--tag` are V1-only and rejected with Qwen even if the explicit
+source list equals the default. There is no LRCLIB-text-plus-Qwen-alignment
+option. Keeping text and timing separate allows a future independent text
+source without implementing providers, plugins or another storage format today.
 
 Remove V2 completely by deleting its ordinary sidecar:
 
@@ -411,7 +412,7 @@ reported per file; later files in a directory continue.
 ## Command-line reference
 
 ```text
-chordflask-genlyrics [--dry-run] [--force] [--tag SEARCH_TEXT]
+chordflask-genlyrics [--dry-run] [--replace] [--tag SEARCH_TEXT]
                      [--lyrics SOURCES] [--track TRACK_ID]
                      [--romanize]
                      [--romanize-engine thai2rom_onnx|royin]
@@ -426,9 +427,11 @@ then MP3 when several supported files would share one analysis and `.cho`.
 - `--tag SEARCH_TEXT` supplies a manual LRCLIB search hint for one file.
 - `--track TRACK_ID` selects the chord snapshot; default `auto` prefers
   `user_edited`, otherwise the active/default track, then Chordino as needed.
-- `--force` atomically replaces an existing same-stem `.cho`.
+- `--replace` atomically replaces an existing same-stem `.cho`; `--force` is a
+  backwards-compatible alias.
 - `--dry-run` performs analysis loading, source lookup, alignment, rendering,
-  and validation but writes nothing.
+  and validation but writes nothing. It does not guarantee that a later
+  filesystem write will succeed.
 - `--romanize` adds Thai romanization presentation metadata.
 - `--romanize-engine` selects the romanization engine; it has no effect unless
   `--romanize` encounters Thai text.
@@ -442,13 +445,14 @@ chordflask-genlyrics --dry-run ~/Music/Album
 chordflask-genlyrics --lyrics embedded:lrclib song.mp3
 chordflask-genlyrics --track btc song.mp3
 chordflask-genlyrics --track user_edited song.mp3
-chordflask-genlyrics --force song.mp3
+chordflask-genlyrics --replace song.mp3
 ```
 
 An existing `.cho` is skipped before analysis or network lookup unless
-`--force` is present. For directory runs, one missing analysis, unavailable
-track, unusable lyrics source, network error, or romanization error is reported
-as `SKIP`; processing continues and the command exits 1 if any file failed.
+`--replace` (or its `--force` alias) is present. For directory runs, one missing
+analysis, unavailable track, unusable lyrics source, network error, or
+romanization error is reported as `FAILED`; processing continues and the
+command exits 1 if any file failed.
 Invalid invocation or an unsupported target exits 2. A fully successful run,
 including deliberate existing-file skips, exits 0.
 
@@ -555,6 +559,9 @@ does not ship a lyrics database. Displaying existing lyrics performs no network
 request. An explicit LRCLIB generation request sends metadata and duration to
 the external LRCLIB service but never uploads the media itself.
 
+Because these lyrics files live beside the media, a single-media
+`chordflask-maintain storage report` does not include them.
+
 Song lyrics may be copyrighted. Users are responsible for obtaining, storing,
 and using lyric data lawfully and for complying with LRCLIB's service terms and
 the rights applicable to their collection.
@@ -578,15 +585,16 @@ the rights applicable to their collection.
   using LRCLIB only:
 
   ```bash
-  chordflask-genlyrics --force --lyrics lrclib "Artist - Song.mp3"
+  chordflask-genlyrics --replace --lyrics lrclib "Artist - Song.mp3"
   ```
 
   For an existing library of `.cho` files, `scripts/regenerate-lyrics.sh`
   recursively regenerates only sidecars with same-stem media, using the
   deliberate bulk priority `lrclib:lrc:embedded`. The normal
   `chordflask-genlyrics` default remains `.lrc` → embedded → LRCLIB.
-- **The existing `.cho` is not updated:** rerun with `--force` only when replacing
-  that user-owned sidecar is intended.
+- **The existing `.cho` is not updated:** rerun with `--replace` (or the
+  compatible `--force` alias) only when replacing that user-owned sidecar is
+  intended.
 - **Lyrics displays but does not follow playback:** hand-written sheets and
   edited marker counts may lack valid ChordFlask beat-range metadata.
 - **A romanization engine fails:** rerun `make setup-lyrics`, select an engine supported

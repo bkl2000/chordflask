@@ -108,8 +108,9 @@ scripts/chordflask-demucs --device cpu song.mp4
 scripts/chordflask-demucs --device cuda song.mp4
 ```
 
-- `--dry-run` reports `CURRENT`, `TODO`, `STALE`, or `ERROR` without writing
-  anything.
+- `--dry-run` reports `CURRENT`, `TODO`, `STALE`, `REPLACE`, or `ERROR` and a
+  planned-work summary without writing anything. It does not predict whether
+  later Demucs inference will succeed.
 - A normal run processes `TODO` files, skips `CURRENT` files, and leaves
   `STALE` files unchanged unless `--replace` is supplied.
 - `--replace` regenerates the complete four-stem set, never just one stem.
@@ -275,6 +276,8 @@ Inspect or clean up generated stem data without invoking Demucs:
 scripts/chordflask-maintain stems report /music/videos
 scripts/chordflask-maintain stems cleanup /music/videos --orphans
 scripts/chordflask-maintain stems cleanup /music/videos --orphans --dry-run
+scripts/chordflask-maintain stems remove song.mp3 --dry-run
+scripts/chordflask-maintain stems remove song.mp3
 ```
 
 `report` shows which media have complete or incomplete sets, missing
@@ -282,7 +285,9 @@ referenced files, orphan generation directories, and total/orphan disk usage.
 `cleanup --orphans` deletes only unreferenced generation directories; it never
 deletes a generation referenced by a valid analysis JSON, never touches
 chord/rhythm/user data, and refuses when a worker or Demucs process is active
-or an analysis JSON cannot be read safely. See
+or an analysis JSON cannot be read safely. `remove` completes one song's stem
+removal while preserving its media, analysis tracks, lyrics, and journal; its
+`--all DIR` form must be explicit. See
 [docs/MAINTENANCE.md](MAINTENANCE.md).
 
 ## Scope boundary

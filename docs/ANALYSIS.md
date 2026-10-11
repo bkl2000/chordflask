@@ -30,7 +30,8 @@ scripts/chordflask-analyze /music/videos
 
 - **Chordino is the default.** It runs the normal Chordino/QM analysis and is
   the basis of the standalone.
-- **`--dry-run`** previews what would happen without changing anything.
+- **`--dry-run`** classifies planned work without changing anything. It does
+  not predict whether later analysis or model inference will succeed.
 - **`--replace`** renews only the chosen analyzer's analysis. For Chordino it
   re-runs Chordino/QM while preserving other tracks (reference, Edited),
   display preferences, and user data. Edited chords retain the rhythm grid
@@ -428,7 +429,8 @@ ChordPro `.cho` chord grid without lyrics; artist, key, and song-section
 metadata are not invented. `--format all` writes Markdown, PDF, and ChordPro.
 A directory is processed non-recursively; a missing analysis is created
 serially only when needed, and a second run reuses it. One failing file does
-not stop later files.
+not stop later files. The command reports every written output path and says
+when it created a missing analysis.
 
 Options:
 

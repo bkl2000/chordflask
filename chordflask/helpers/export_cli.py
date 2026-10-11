@@ -81,12 +81,22 @@ def main(argv=None) -> None:
     failures = 0
     for path in files:
         try:
-            export_file(path, args)
+            result = export_file(path, args)
         except (LeadsheetExportError, Exception) as error:  # noqa: BLE001
             failures += 1
             print(f"Error: {path}: {error}", file=sys.stderr)
+            if getattr(error, "analysis_action", None) == "created":
+                print(
+                    f"Analysis created before export failed: {error.analysis_path}",
+                    file=sys.stderr,
+                )
+            for output_path in getattr(error, "output_paths", ()):
+                print(f"Exported before failure: {output_path}", file=sys.stderr)
             continue
-        print(f"Exported: {path}")
+        if result["analysis_action"] == "created":
+            print(f"Analysis created: {result['analysis_path']}")
+        for output_path in result["output_paths"]:
+            print(f"Exported: {output_path}")
 
     print("")
     print(f"Done: {len(files)} files, {failures} failed")

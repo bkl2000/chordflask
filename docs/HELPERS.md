@@ -51,11 +51,11 @@ These are kept as usable command-line tools and have smoke-test coverage.
   in `--lyrics`. `--track
   TRACK_ID` selects the chord-track snapshot (`auto` by default: valid
   `user_edited`, then the analysis active/default track, then `chordino`). An
-  explicit missing track fails for that file without fallback. `--force`
+  explicit missing track fails for that file without fallback. `--replace`
   permits replacement of an existing `.cho`; `--dry-run` performs lookup,
   alignment, and rendering without writing. Directory failures do not stop
-  later files. Existing `.cho` files are intentionally skipped unless `--force`
-  is supplied.
+  later files. Existing `.cho` files are intentionally skipped unless
+  `--replace` is supplied. `--force` remains a backwards-compatible alias.
 
   Thai romanization is **experimental**. `--romanize` uses the
   external-runtime PyThaiNLP `thai2rom_onnx` engine by default;
@@ -82,11 +82,11 @@ These are kept as usable command-line tools and have smoke-test coverage.
   scripts/chordflask-genlyrics --tag "Artist Song Title" song.mp3
   scripts/chordflask-genlyrics --track auto song.mp3
   scripts/chordflask-genlyrics --track btc song.mp3
-  scripts/chordflask-genlyrics --force --track user_edited song.mp3
+  scripts/chordflask-genlyrics --replace --track user_edited song.mp3
   scripts/chordflask-genlyrics --romanize song.mp3
   scripts/chordflask-genlyrics --romanize --romanize-engine thai2rom_onnx song.mp3
   scripts/chordflask-genlyrics --romanize --romanize-engine royin song.mp3
-  scripts/chordflask-genlyrics --force --romanize /music/thai-album
+  scripts/chordflask-genlyrics --replace --romanize /music/thai-album
   scripts/chordflask-genlyrics --dry-run /music/album
   ```
 

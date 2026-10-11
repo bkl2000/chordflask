@@ -1,6 +1,7 @@
 """Tests for the ``chordflask-maintain stems`` report and cleanup."""
 
 import fcntl
+import json
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from chordflask_maintain.stems import (  # noqa: E402
     DEMUCS_AUDIO_SET_ID,
     cleanup_orphan_stems,
     inspect_stems,
+    remove_stems,
 )
 
 STEMS_REL = Path(".chordflask") / "stems" / "demucs" / "htdemucs" / "key" / "gen"
@@ -90,6 +92,19 @@ def _write_full_song(media_root: Path, *, name="song.mp3", rel_dir=None):
     for stem in DEMUCS_STEM_NAMES:
         _write_flac(media_root, rel, stem)
     return media_root / name
+
+
+def _write_owned_song(media_root: Path, *, name="song.mp3"):
+    media = media_root / name
+    rel = (
+        Path(".chordflask")
+        / "stems"
+        / "demucs"
+        / "htdemucs"
+        / stems_mod._media_key(media)
+        / "current"
+    )
+    return _write_full_song(media_root, name=name, rel_dir=rel)
 
 
 def _run_maintain_cli(capsys, *args):
@@ -418,6 +433,250 @@ def test_cleanup_requires_orphans_flag(tmp_path):
     with pytest.raises(SystemExit) as exc:
         cli.main(["stems", "cleanup", str(tmp_path)])
     assert exc.value.code == 2
+
+
+# ── explicit removal ──────────────────────────────────────────────────
+
+
+def test_remove_song_completes_task_and_preserves_unrelated_data(tmp_path, capsys):
+    media = _write_owned_song(tmp_path)
+    other_media = _write_owned_song(tmp_path, name="other.mp3")
+    other_key = stems_mod.stems_root(tmp_path) / stems_mod._media_key(other_media)
+    obsolete = (
+        tmp_path
+        / ".chordflask"
+        / "stems"
+        / "demucs"
+        / "htdemucs"
+        / stems_mod._media_key(media)
+        / "obsolete"
+    )
+    _write_flac(tmp_path, obsolete.relative_to(tmp_path), "vocals", b"old")
+    json_path = tmp_path / ".chordflask" / "song.json"
+    document = json.loads(json_path.read_text(encoding="utf-8"))
+    document["user_data"] = {"edited": "keep"}
+    document["chord_tracks"]["btc"] = {
+        "chords": [{"timestamp": 0.0, "chord": "C"}],
+        "metadata": {"keep": True},
+    }
+    document["lyrics_extension"] = {"text": "keep"}
+    json_path.write_text(json.dumps(document), encoding="utf-8")
+    journal = tmp_path / ".chordflask" / "journals" / "song.journal.json"
+    journal.parent.mkdir()
+    journal.write_text("keep", encoding="utf-8")
+    unrelated = tmp_path / ".chordflask" / "unrelated.dat"
+    unrelated.write_text("keep", encoding="utf-8")
+
+    code, captured = _run_maintain_cli(
+        capsys, "stems", "remove", str(media)
+    )
+
+    assert code == 0
+    assert media.exists()
+    assert other_media.exists()
+    assert len(list(other_key.glob("current/*.flac"))) == 4
+    assert not obsolete.parent.exists()
+    after = json.loads(json_path.read_text(encoding="utf-8"))
+    assert DEMUCS_AUDIO_SET_ID not in after["audio_tracks"]
+    for key in ("user_data", "chord_tracks", "lyrics_extension"):
+        assert after[key] == document[key]
+    assert journal.read_text(encoding="utf-8") == "keep"
+    assert unrelated.read_text(encoding="utf-8") == "keep"
+    assert "removed  Demucs stem registration" in captured.out
+    assert "PRESERVED: original media" in captured.out
+
+
+def test_remove_song_is_idempotent(tmp_path, capsys):
+    media = _write_owned_song(tmp_path)
+    assert _run_maintain_cli(capsys, "stems", "remove", str(media))[0] == 0
+
+    code, captured = _run_maintain_cli(capsys, "stems", "remove", str(media))
+
+    assert code == 0
+    assert "UNCHANGED: no registered or stored Demucs stems" in captured.out
+
+
+def test_remove_song_dry_run_reports_every_file_without_changes(tmp_path, capsys):
+    media = _write_owned_song(tmp_path)
+    json_before = (tmp_path / ".chordflask" / "song.json").read_bytes()
+    paths_before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+
+    code, captured = _run_maintain_cli(
+        capsys, "stems", "remove", str(media), "--dry-run"
+    )
+
+    assert code == 0
+    for stem in DEMUCS_STEM_NAMES:
+        assert f"{stem}.flac" in captured.out
+    assert "would remove  Demucs stem registration" in captured.out
+    assert (tmp_path / ".chordflask" / "song.json").read_bytes() == json_before
+    assert sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*")) == paths_before
+    key_dir = stems_mod.stems_root(tmp_path) / stems_mod._media_key(media)
+    assert len(list(key_dir.glob("current/*.flac"))) == 4
+
+
+def test_remove_song_retry_finishes_after_file_deletion_failure(
+    tmp_path, monkeypatch
+):
+    media = _write_owned_song(tmp_path)
+    original_unlink = Path.unlink
+    failed_once = False
+
+    def fail_one_file(path, *args, **kwargs):
+        nonlocal failed_once
+        if path.name == "vocals.flac" and not failed_once:
+            failed_once = True
+            raise PermissionError("simulated denial")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_one_file)
+    first = remove_stems(media)
+
+    assert first.failures
+    assert first.removals[0].registration_removed is True
+    assert not stems_mod.ChordTrackRepository().load(
+        tmp_path / ".chordflask" / "song.json"
+    ).has_audio_track(DEMUCS_AUDIO_SET_ID)
+
+    second = remove_stems(media)
+
+    assert not second.failures
+    assert not (stems_mod.stems_root(tmp_path) / stems_mod._media_key(media)).exists()
+
+
+def test_remove_song_reports_key_directory_failure_and_retry_finishes(
+    tmp_path, monkeypatch
+):
+    media = _write_owned_song(tmp_path)
+    key_dir = stems_mod.stems_root(tmp_path) / stems_mod._media_key(media)
+    original_rmdir = Path.rmdir
+    failed_once = False
+
+    def fail_key_directory(path, *args, **kwargs):
+        nonlocal failed_once
+        if path == key_dir and not failed_once:
+            failed_once = True
+            raise PermissionError("simulated directory denial")
+        return original_rmdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "rmdir", fail_key_directory)
+    first = remove_stems(media)
+
+    assert first.failures == [
+        f"could not remove song stem directory {key_dir}: simulated directory denial"
+    ]
+    assert key_dir.is_dir()
+
+    second = remove_stems(media)
+
+    assert not second.failures
+    assert second.removals[0].key_directory_removed is True
+    assert not key_dir.exists()
+
+
+def test_remove_song_refuses_symlink_inside_owned_storage(tmp_path):
+    media = _write_owned_song(tmp_path)
+    generation = stems_mod.stems_root(tmp_path) / stems_mod._media_key(media) / "current"
+    (generation / "vocals.flac").unlink()
+    outside = tmp_path / "outside.flac"
+    outside.write_bytes(b"keep")
+    (generation / "vocals.flac").symlink_to(outside)
+
+    result = remove_stems(media)
+
+    assert result.refused is True
+    assert outside.read_bytes() == b"keep"
+    assert stems_mod.ChordTrackRepository().load(
+        tmp_path / ".chordflask" / "song.json"
+    ).has_audio_track(DEMUCS_AUDIO_SET_ID)
+
+
+def test_remove_song_refuses_active_demucs_processing(tmp_path):
+    media = _write_owned_song(tmp_path)
+    lock_handle = stems_mod._demucs_lock_path(media).open("a+")
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        result = remove_stems(media)
+    finally:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        lock_handle.close()
+
+    assert result.refused is True
+    assert "Demucs processing is active" in result.removals[0].reason
+    assert len(list((stems_mod.stems_root(tmp_path) / stems_mod._media_key(media)).glob("current/*.flac"))) == 4
+
+
+def test_remove_song_succeeds_while_global_worker_lock_is_held(tmp_path, capsys):
+    media = _write_owned_song(tmp_path)
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    lock_handle = (queue / "analysis_worker.lock").open("a+")
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        code, captured = _run_maintain_cli(
+            capsys, "stems", "remove", str(media)
+        )
+    finally:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        lock_handle.close()
+
+    assert code == 0
+    assert "worker" not in captured.out.lower()
+    assert not (stems_mod.stems_root(tmp_path) / stems_mod._media_key(media)).exists()
+
+
+def test_remove_song_refuses_invalid_analysis_without_deleting_stems(tmp_path):
+    media = _write_owned_song(tmp_path)
+    (tmp_path / ".chordflask" / "song.json").write_text(
+        "{invalid", encoding="utf-8"
+    )
+
+    result = remove_stems(media)
+
+    assert result.refused is True
+    assert "invalid analysis JSON" in result.removals[0].reason
+    assert len(list((stems_mod.stems_root(tmp_path) / stems_mod._media_key(media)).glob("current/*.flac"))) == 4
+
+
+def test_remove_same_stem_media_never_removes_other_filename_owner(tmp_path):
+    requested = tmp_path / "song.mp3"
+    requested.write_bytes(b"mp3")
+    owner = _write_owned_song(tmp_path, name="song.mp4")
+    requested_rel = (
+        Path(".chordflask")
+        / "stems"
+        / "demucs"
+        / "htdemucs"
+        / stems_mod._media_key(requested)
+        / "obsolete"
+    )
+    _write_flac(tmp_path, requested_rel, "vocals", b"old")
+
+    result = remove_stems(requested)
+
+    assert not result.refused
+    assert not (tmp_path / requested_rel).exists()
+    owner_key = stems_mod.stems_root(tmp_path) / stems_mod._media_key(owner)
+    assert len(list(owner_key.glob("current/*.flac"))) == 4
+    assert stems_mod.ChordTrackRepository().load(
+        tmp_path / ".chordflask" / "song.json"
+    ).has_audio_track(DEMUCS_AUDIO_SET_ID)
+
+
+def test_remove_all_requires_explicit_flag_and_removes_each_song(tmp_path, capsys):
+    first = _write_owned_song(tmp_path, name="first.mp3")
+    second = _write_owned_song(tmp_path, name="second.webm")
+
+    error_code, _ = _run_maintain_cli(capsys, "stems", "remove", str(tmp_path))
+    code, captured = _run_maintain_cli(
+        capsys, "stems", "remove", "--all", str(tmp_path)
+    )
+
+    assert error_code == 2
+    assert code == 0
+    assert str(first) in captured.out
+    assert str(second) in captured.out
+    assert "songs 2 changed" in captured.out
 
 
 # ── CLI dispatch ──────────────────────────────────────────────────────

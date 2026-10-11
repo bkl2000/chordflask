@@ -166,40 +166,60 @@ def _cmd_migrate_schema(args) -> int:
     from chordflask_maintain.migrate import migrate_directory
 
     try:
-        counts = migrate_directory(args.directory)
+        counts = (
+            migrate_directory(args.directory, dry_run=True)
+            if args.dry_run
+            else migrate_directory(args.directory)
+        )
     except ValueError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
     print("")
-    print("Schema migration complete")
+    print("Schema migration dry run" if args.dry_run else "Schema migration complete")
     print("")
     print(f"files:      {counts['files']}")
-    print(f"migrated:   {counts['migrated']}")
+    label = "would migrate" if args.dry_run else "migrated"
+    width = 16 if args.dry_run else 12
+    print(f"{label + ':':<{width}}{counts['migrated']}")
     print(f"skipped:    {counts['skipped']}")
     print(f"failed:     {counts['failed']}")
     return 1 if counts["failed"] else 0
 
 
 def _cmd_validate(args) -> int:
-    from chordflask_maintain.validate import validate_directory, validate_file
+    from chordflask_maintain.validate import (
+        analysis_for_media,
+        validate_directory,
+        validate_file,
+    )
 
     target = Path(args.target).expanduser()
     if target.is_file():
-        kind, message = validate_file(target)
+        actual = target
+        if target.suffix.lower() != ".json":
+            try:
+                actual = analysis_for_media(target)
+            except FileNotFoundError as error:
+                print(f"ERROR: {error}", file=sys.stderr)
+                return 1
+            except ValueError as error:
+                print(f"ERROR: {error}", file=sys.stderr)
+                return 2
+        kind, message = validate_file(actual)
         if kind == "ignore":
-            print(f"SKIP: not a ChordFlask analysis: {target}")
+            print(f"SKIP: not a ChordFlask analysis: {actual}")
             return 0
         if kind == "valid":
-            print(f"OK: {target}")
+            print(f"OK: {actual}" + (f" ({message})" if message else ""))
             return 0
-        print(f"ERROR: {target}: {message}", file=sys.stderr)
+        print(f"ERROR: {actual}: {message}", file=sys.stderr)
         return 1
 
     try:
         counts = validate_directory(target)
     except ValueError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     print("")
     print(f"valid:      {counts['valid']}")
@@ -249,6 +269,48 @@ def _cmd_stems_cleanup(args) -> int:
     return 0
 
 
+def _cmd_stems_remove(args) -> int:
+    from chordflask_maintain.stems import format_stems_removal, remove_stems
+
+    if (args.target is None) == (args.all_directory is None):
+        print(
+            "ERROR: specify either one media file or --all DIR (but not both)",
+            file=sys.stderr,
+        )
+        return 2
+    target = args.all_directory if args.all_directory is not None else args.target
+    try:
+        result = remove_stems(
+            target,
+            all_directory=args.all_directory is not None,
+            dry_run=args.dry_run,
+        )
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+
+    print(format_stems_removal(result, dry_run=args.dry_run))
+    refusal_kinds = {
+        item.refusal_kind for item in result.removals if item.refused
+    }
+    if "demucs_active" in refusal_kinds:
+        print("Retry after Demucs processing has finished or stopped.")
+    if "analysis_active" in refusal_kinds:
+        print("Retry after the current analysis update has finished.")
+    if refusal_kinds & {
+        "demucs_lock_error", "analysis_lock_error"
+    }:
+        print("Check permissions and process state, then retry.")
+    if refusal_kinds & {"analysis_json_error", "generation_unresolved"}:
+        print("Inspect the reported analysis and stem paths, then retry.")
+    if result.failures:
+        print(
+            "Some files remain. The stem registration may already be removed; "
+            "fix the reported filesystem problem and repeat this command."
+        )
+    return 1 if result.refused or result.failures else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chordflask-maintain",
@@ -273,9 +335,19 @@ def build_parser() -> argparse.ArgumentParser:
     storage_sub = storage.add_subparsers(dest="storage_command", required=True, metavar="SUBCOMMAND")
 
     report = storage_sub.add_parser(
-        "report", help="Inspect one media directory's .chordflask storage (read-only)"
+        "report",
+        description=(
+            "Inspect .chordflask storage. A single-media report excludes "
+            "Demucs stem directories and lyrics sidecars beside the media."
+        ),
+        help=(
+            "Inspect a media file or directory's .chordflask storage (read-only; "
+            "single-media scope excludes stems and lyrics sidecars)"
+        ),
     )
-    report.add_argument("directory", metavar="DIR", help="Media directory to report")
+    report.add_argument(
+        "directory", metavar="FILE_OR_DIRECTORY", help="Media file or directory to report"
+    )
     report.set_defaults(func=_cmd_storage_report)
 
     cleanup = storage_sub.add_parser(
@@ -297,10 +369,21 @@ def build_parser() -> argparse.ArgumentParser:
         "migrate-schema", help="Migrate legacy Schema 1/2 analysis files to Schema 3 (no reanalysis)"
     )
     migrate.add_argument("directory", metavar="DIR", help="Directory whose .chordflask/*.json files to migrate")
+    migrate.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show files that would be migrated without changing anything",
+    )
     migrate.set_defaults(func=_cmd_migrate_schema)
 
-    validate = subparsers.add_parser("validate", help="Validate analysis JSON files")
-    validate.add_argument("target", metavar="FILE_OR_DIRECTORY", help="Analysis JSON file or media directory to validate")
+    validate = subparsers.add_parser(
+        "validate", help="Validate analysis JSON for a file or media directory"
+    )
+    validate.add_argument(
+        "target",
+        metavar="FILE_OR_DIRECTORY",
+        help="Analysis JSON, media file, or media directory to validate",
+    )
     validate.set_defaults(func=_cmd_validate)
 
     stems = subparsers.add_parser(
@@ -321,6 +404,23 @@ def build_parser() -> argparse.ArgumentParser:
     stems_cleanup.add_argument("--orphans", action="store_true", help="Delete unreferenced stem generations")
     stems_cleanup.add_argument("--dry-run", action="store_true", help="Show what would be removed without deleting")
     stems_cleanup.set_defaults(func=_cmd_stems_cleanup)
+
+    stems_remove = stems_sub.add_parser(
+        "remove", help="Remove one song's complete Demucs stem storage"
+    )
+    stems_remove.add_argument(
+        "target", nargs="?", metavar="MEDIA", help="MP3, MP4, or WebM file"
+    )
+    stems_remove.add_argument(
+        "--all",
+        dest="all_directory",
+        metavar="DIR",
+        help="Explicitly remove stems for all media files in DIR",
+    )
+    stems_remove.add_argument(
+        "--dry-run", action="store_true", help="Show exactly what would be removed"
+    )
+    stems_remove.set_defaults(func=_cmd_stems_remove)
 
     subparsers.add_parser("doctor", help="Check the ChordFlask installation state").set_defaults(func=_cmd_doctor)
 

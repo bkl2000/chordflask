@@ -249,8 +249,10 @@ def run(target: Path, *, replace: bool, dry_run: bool, device: str) -> int:
     print("Demucs dry-run complete" if dry_run else "Demucs processing complete")
     print(f"files:     {len(media_files)}")
     if dry_run:
+        print(f"would process: {counts.get('todo', 0) + counts.get('replace', 0)}")
         print(f"current:   {counts.get('current', 0)}")
         print(f"todo:      {counts.get('todo', 0)}")
+        print(f"replace:   {counts.get('replace', 0)}")
         print(f"stale:     {counts.get('stale', 0)}")
         print(f"errors:    {counts.get('error', 0)}")
         return 0
@@ -284,7 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show CURRENT/TODO/STALE status without changing files",
+        help="Show planned work and CURRENT/TODO/STALE/REPLACE status without changing files",
     )
     parser.add_argument(
         "--device",

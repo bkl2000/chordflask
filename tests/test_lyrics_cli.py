@@ -112,6 +112,13 @@ def test_lyrics_cli_defaults_to_lrc_embedded_lrclib_and_preserves_order():
     )
 
 
+def test_replace_and_force_are_compatible_aliases():
+    parser = cli.build_parser()
+
+    assert parser.parse_args(["--replace", "song.mp3"]).force is True
+    assert parser.parse_args(["--force", "song.mp3"]).force is True
+
+
 @pytest.mark.parametrize("value", ["", "lrc:unknown", "lrc:lrc", "lrc::embedded"])
 def test_invalid_lyrics_source_specifications_fail_cleanly(value):
     with pytest.raises(SystemExit) as error:
@@ -343,6 +350,43 @@ def test_existing_force_and_dry_run(monkeypatch, tmp_path):
     assert cli.generate_file(media, client=client, force=True)[0] == "written"
     assert sidecar.read_text(encoding="utf-8") != "old"
     assert read_chordpro(sidecar)["metadata"]["title"] == "Song"
+
+
+def test_dry_run_reports_planned_not_skipped(monkeypatch, tmp_path, capsys):
+    media = tmp_path / "Artist - Song.mp3"
+    make_analysis(media)
+    media.with_suffix(".lrc").write_text("[00:00.20]line", encoding="utf-8")
+
+    assert cli.run(args(media, dry_run=True), client=FakeClient()) == 0
+
+    output = capsys.readouterr().out
+    assert "PLANNED" in output
+    assert "1 planned, 0 skipped" in output
+
+
+def test_retry_failed_rejects_conflicting_explicit_option(tmp_path, capsys):
+    from chordflask_lyrics.batch import save_failures
+
+    root = tmp_path.resolve()
+    media = root / "song.mp3"
+    media.write_bytes(b"media")
+    save_failures(
+        root,
+        {
+            "force": False,
+            "lyrics": list(cli.DEFAULT_LYRICS_SOURCES),
+            "track": "auto",
+            "romanize": False,
+            "romanize_engine": "thai2rom_onnx",
+        },
+        [{"path": str(media), "reason": "previous failure"}],
+    )
+    parsed = cli.build_parser().parse_args(
+        ["--retry-failed", "--track", "btc", str(root)]
+    )
+
+    assert cli.run(parsed, client=FakeClient()) == 2
+    assert "--track conflicts" in capsys.readouterr().err
 
 
 def test_generation_without_romanize_is_byte_compatible(monkeypatch, tmp_path):

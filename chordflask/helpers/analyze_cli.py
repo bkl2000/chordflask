@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what would be analyzed without changing anything",
+        help="Show planned work without running analysis or changing files",
     )
     parser.add_argument(
         "target",
@@ -163,12 +163,14 @@ def _chordino_status(media: Path) -> str:
 
 def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
     from ..canonical_analysis import analyze_media
+    from chordflask_base import analysis_json_path
 
     media_files = _resolve_media_files(target)
     if media_files is None:
         return 2
 
-    counts = {"ok": 0, "skipped": 0, "failed": 0}
+    counts = {"ok": 0, "skipped": 0, "failed": 0, "planned": 0,
+              "current": 0, "stale": 0, "legacy": 0, "invalid": 0}
     guidance: set[str] = set()
     total = len(media_files)
     for index, media in enumerate(media_files, 1):
@@ -177,13 +179,22 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
         if dry_run:
             if status == "current":
                 label = "REANALYZE" if replace else "CURRENT"
-            elif status in ("stale", "legacy"):
-                label = "REANALYZE" if replace else status.upper()
+            elif status == "stale":
+                label = "STALE -> REANALYZE"
+            elif status == "legacy":
+                label = "REANALYZE" if replace else "LEGACY"
             elif status == "invalid":
                 label = "INVALID"
                 guidance.add("invalid_analysis")
             else:
                 label = "TODO"
+            if status == "stale":
+                counts["stale"] += 1
+                counts["planned"] += 1
+            elif label in ("REANALYZE", "TODO"):
+                counts["planned"] += 1
+            else:
+                counts[label.lower()] += 1
             print(f"       {label}")
             continue
         if status in ("current", "legacy") and not replace:
@@ -200,7 +211,7 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
             counts["failed"] += 1
             continue
         counts["ok"] += 1
-        print("       OK")
+        print(f"       OK: {analysis_json_path(media)}")
 
     if guidance:
         print("", file=sys.stderr)
@@ -210,9 +221,16 @@ def _run_chordino(target: Path, *, replace: bool, dry_run: bool) -> int:
     print("Chordino dry-run complete" if dry_run else "Chordino analysis complete")
     print("")
     print(f"files:      {total}")
-    print(f"analyzed:   {counts['ok']}")
-    print(f"skipped:    {counts['skipped']}")
-    print(f"failed:     {counts['failed']}")
+    if dry_run:
+        print(f"would analyze: {counts['planned']}")
+        print(f"current:       {counts['current']}")
+        print(f"stale:         {counts['stale']}")
+        print(f"legacy:        {counts['legacy']}")
+        print(f"invalid:       {counts['invalid']}")
+    else:
+        print(f"analyzed:   {counts['ok']}")
+        print(f"skipped:    {counts['skipped']}")
+        print(f"failed:     {counts['failed']}")
     return 1 if counts["failed"] else 0
 
 
@@ -233,7 +251,8 @@ def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
             print(f"ERROR: ChordFlask V3 runtime unavailable or invalid: {exc}", file=sys.stderr)
             return 2
 
-    counts = {"ok": 0, "skipped": 0, "failed": 0}
+    counts = {"ok": 0, "skipped": 0, "failed": 0, "planned": 0,
+              "current": 0, "stale": 0}
     for index, media in enumerate(media_files, 1):
         print(f"[{index}/{len(media_files)}] {media.name}")
         try:
@@ -248,12 +267,16 @@ def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
                 and metadata["input_sha256"] == chord_input_sha256(chordino["chords"])
             )
             if dry_run:
-                if replace:
+                if exists and replace:
                     label = "REANALYZE"
                 elif exists:
                     label = "CURRENT" if current else "STALE"
                 else:
                     label = "TODO"
+                if label in ("REANALYZE", "TODO"):
+                    counts["planned"] += 1
+                else:
+                    counts[label.lower()] += 1
                 print(f"       {label}")
                 continue
             if current and not replace:
@@ -284,16 +307,22 @@ def _run_v3(target: Path, *, replace: bool, dry_run: bool) -> int:
                 validate_analysis(data, path)
                 write_atomic(path, data)
             counts["ok"] += 1
-            print("       OK")
+            print(f"       OK: {path}")
         except Exception as exc:
             print(f"       ERROR: {exc}", file=sys.stderr)
             counts["failed"] += 1
 
     print("\nChordFlask V3 dry-run complete" if dry_run else "\nChordFlask V3 analysis complete")
     print(f"\nfiles:      {len(media_files)}")
-    print(f"analyzed:   {counts['ok']}")
-    print(f"skipped:    {counts['skipped']}")
-    print(f"failed:     {counts['failed']}")
+    if dry_run:
+        print(f"would analyze: {counts['planned']}")
+        print(f"current:       {counts['current']}")
+        print(f"stale:         {counts['stale']}")
+        print(f"errors:        {counts['failed']}")
+    else:
+        print(f"analyzed:   {counts['ok']}")
+        print(f"skipped:    {counts['skipped']}")
+        print(f"failed:     {counts['failed']}")
     return 1 if counts["failed"] else 0
 
 

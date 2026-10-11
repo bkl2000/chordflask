@@ -85,7 +85,12 @@ def test_export_file_reuses_analysis_and_writes_leadsheet(tmp_path):
         "media": str(media),
         "ok": True,
         "analysis_action": "reused",
+        "analysis_path": str(analysis_dir / "song.json"),
         "exported": True,
+        "output_paths": [
+            str(analysis_dir / "song-chords-chordino.md"),
+            str(analysis_dir / "song-chords-chordino.pdf"),
+        ],
         "error": None,
     }
     leadsheet = analysis_dir / "song-chords-chordino.md"

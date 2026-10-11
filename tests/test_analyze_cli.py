@@ -237,7 +237,7 @@ def test_chordino_file_analyzes_via_worker(monkeypatch, capsys, tmp_path):
 
     assert exc.value.code == 0
     assert FakeAnalysisWorker.analyzed == [(str(media), False)]
-    assert "OK" in capsys.readouterr().out
+    assert f"OK: {tmp_path / '.chordflask/x.json'}" in capsys.readouterr().out
 
 
 def test_chordino_replace_with_existing_chordino_forces_reanalysis(monkeypatch, capsys, tmp_path):
@@ -303,7 +303,10 @@ def test_chordino_dry_run_classifies_without_side_effects(monkeypatch, capsys, t
     with pytest.raises(SystemExit) as exc:
         analyze_cli.main(["--dry-run", str(media)])
     assert exc.value.code == 0
-    assert "TODO" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "TODO" in output
+    assert "would analyze: 1" in output
+    assert "analyzed:" not in output
     assert FakeAnalysisWorker.analyzed == []
 
     _chordino_qm(media)
@@ -687,6 +690,19 @@ def test_v3_dry_run_no_runtime_inference_or_write(tmp_path, monkeypatch, v3_runt
     monkeypatch.setattr(analyze_cli, "_run_chordino", lambda *a, **kw: pytest.fail("analysis ran"))
     assert _invoke_v3(media, "--dry-run", *(["--replace"] if replace else [])) == 0
     assert (path.read_bytes() if path.exists() else None) == before
+
+
+def test_v3_dry_run_replace_reports_missing_track_as_todo(
+    tmp_path, v3_runtime, capsys
+):
+    media = _v3_media(tmp_path, chordino=True)
+
+    assert _invoke_v3(media, "--dry-run", "--replace") == 0
+
+    output = capsys.readouterr().out
+    assert "TODO" in output
+    assert "REANALYZE" not in output
+    assert "would analyze: 1" in output
 
 
 @pytest.mark.parametrize("failure", [ImportError("private V3 module absent"), RuntimeError("runtime unavailable"),

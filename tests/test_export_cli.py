@@ -55,6 +55,11 @@ def test_export_file_dispatches(monkeypatch, capsys, tmp_path):
 
     def fake_export(media_path, args):
         calls.append((str(media_path), args.format))
+        return {
+            "analysis_action": "created",
+            "analysis_path": str(tmp_path / ".chordflask/song.json"),
+            "output_paths": [str(tmp_path / ".chordflask/song-chords-chordino.pdf")],
+        }
 
     monkeypatch.setattr(export_cli, "export_file", fake_export)
 
@@ -63,7 +68,9 @@ def test_export_file_dispatches(monkeypatch, capsys, tmp_path):
 
     assert exc.value.code == 0
     assert calls == [(str(media), "both")]
-    assert "Exported:" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert f"Analysis created: {tmp_path / '.chordflask/song.json'}" in output
+    assert f"Exported: {tmp_path / '.chordflask/song-chords-chordino.pdf'}" in output
 
 
 def test_export_format_selection(monkeypatch, capsys, tmp_path):
@@ -72,7 +79,12 @@ def test_export_format_selection(monkeypatch, capsys, tmp_path):
     calls = []
 
     monkeypatch.setattr(
-        export_cli, "export_file", lambda p, args: calls.append(args.format)
+        export_cli,
+        "export_file",
+        lambda p, args: (
+            calls.append(args.format)
+            or {"analysis_action": "reused", "output_paths": []}
+        ),
     )
 
     with pytest.raises(SystemExit) as exc:
@@ -95,7 +107,12 @@ def test_export_directory_dispatches(monkeypatch, capsys, tmp_path):
     calls = []
 
     monkeypatch.setattr(
-        export_cli, "export_file", lambda p, args: calls.append(p.name)
+        export_cli,
+        "export_file",
+        lambda p, args: (
+            calls.append(p.name)
+            or {"analysis_action": "reused", "output_paths": []}
+        ),
     )
 
     with pytest.raises(SystemExit) as exc:

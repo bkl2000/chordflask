@@ -119,7 +119,9 @@ chordflask
 ```
 
 Remove with `sudo apt remove chordflask`. The build's Linux/glibc compatibility
-requirements still apply; see the [bundle guide](docs/STANDALONE.md).
+requirements still apply. The package installs the standalone player; its
+separate helper launcher files still require a source-installed ChordFlask
+virtual environment. See the [bundle guide](docs/STANDALONE.md).
 
 ### Portable standalone archive
 
@@ -138,6 +140,10 @@ cd <standalone-dir>
 Open <http://localhost:5000>. Stop the server with `Ctrl+C`. FFmpeg must be
 installed on the host; the complete procedure is in
 [docs/STANDALONE.md](docs/STANDALONE.md).
+
+Like the Debian package, the archive runs the player and its browser workflows.
+The separate `chordflask-*` CLI helpers require a source installation; launcher
+files included with the bundle do not install their Python commands.
 
 ### From source
 
@@ -260,7 +266,12 @@ experimental Thai romanization:
 ```bash
 chordflask-genlyrics ~/Music/Album
 chordflask-genlyrics --romanize song.mp3
+chordflask-genlyrics --replace song.mp3
 ```
+
+`--replace` replaces the selected Lyrics sidecar; the older `--force` spelling
+remains an alias. `--dry-run` performs matching and rendering but writes no
+sidecar, and reports planned work separately from completed writes.
 
 Desktop Lyrics displays the original line with romanization beneath it:
 
@@ -274,8 +285,8 @@ on the same timeline, not a separate transcription. Lyrics and chord markers
 are joined to the existing chord/beat timeline; an instrumental gap can remain
 unhighlighted.
 
-Install the isolated Lyrics runtime for desktop Prepare in either a source or
-standalone run:
+From a source checkout, install the isolated Lyrics runtime for desktop
+Prepare. A standalone or `.deb` player can then use that external runtime:
 
 ```bash
 make setup-lyrics
@@ -300,11 +311,12 @@ For experimental, fully local Lyrics V2 from audio:
 make setup-qwen3-asr
 make qwen3-asr-check
 chordflask-genlyrics --analyzer qwen3 song.mp3
-chordflask-genlyrics --analyzer qwen3 --force song.mp3
+chordflask-genlyrics --analyzer qwen3 --replace song.mp3
 ```
 
 V1 remains `song.cho`; V2 is `song.v2.cho`. Existing targets are kept unless
-`--force` is given, and force replaces only the selected version. Desktop shows
+`--replace` (or its `--force` alias) is given, and replacement affects only the
+selected version. Desktop shows
 **Lyrics V1 / Lyrics V2** when both exist; export uses the selected version.
 Prepare continues to generate V1; V2 generation is CLI-only. Delete V2 with
 `rm -- song.v2.cho`; no maintenance command or persistent version registry is
@@ -326,6 +338,7 @@ Install the optional Demucs runtime once, check it, and prepare a directory:
 ```bash
 make setup-demucs
 make demucs-check
+chordflask-demucs --dry-run ~/Music
 chordflask-demucs ~/Music
 ```
 
@@ -333,6 +346,14 @@ Then start ChordFlask normally and open a prepared song. Use **STEMS** to switch
 to separated playback, mute **Vocals** for karaoke, mute **Bass** for bass
 practice, or set the volume of Drums, Bass, Vocals, and Other individually.
 Already prepared stem sets are reused.
+
+Remove one song's registered stems and owned stem files through maintenance;
+preview the exact removals first:
+
+```bash
+chordflask-maintain stems remove song.mp3 --dry-run
+chordflask-maintain stems remove song.mp3
+```
 
 See [docs/DEMUCS.md](docs/DEMUCS.md) for CPU/CUDA setup, preparation status,
 storage, browser behavior, and limitations.
@@ -353,11 +374,19 @@ chordflask-export --format chordpro song.mp3
 The browser **Export** menu offers Markdown, PDF, ChordPro, or **All formats
 (.zip)**. Individual formats download directly; only **All formats** produces a
 ZIP. Browser exports may include existing local Lyrics and romanization;
-`chordflask-export` remains chord-only. Journal entries are not exported. Export
-options, track selection, naming, and storage locations are documented in
+`chordflask-export` remains chord-only. Journal entries are not exported. The
+CLI prints each output path and reports when it had to create missing analysis.
+Options, track selection, naming, and storage locations are documented in
 [docs/ANALYSIS.md](docs/ANALYSIS.md#command-line-export).
 
 ## Command-line tools
+
+The `chordflask` player is available in each installation (the archive uses
+`./chordflask.sh`). The separate `chordflask-*` helpers are installed by the
+source setup; in a checkout, use the matching `scripts/chordflask-*` launchers.
+The standalone archive and `.deb` provide the player and browser workflows,
+but their helper launcher files cannot run without a separate source-installed
+ChordFlask virtual environment.
 
 | Command | Purpose |
 | --- | --- |
@@ -376,7 +405,16 @@ chordflask-analyze ~/Music
 chordflask-genlyrics song.mp3
 chordflask-export --format pdf song.mp3
 chordflask-maintain doctor
+chordflask-maintain validate song.mp3
+chordflask-maintain storage report song.mp3
+chordflask-maintain storage cleanup ~/Music --orphan-temp --dry-run
 ```
+
+Reports and validation are read-only. Cleanup and stem removal require explicit
+operations; use `--dry-run` to review candidates without changing data. A
+single-media storage report covers direct `.chordflask` artifacts, but not
+Demucs stem directories or lyrics sidecars beside the media. See
+[docs/MAINTENANCE.md](docs/MAINTENANCE.md) for the exact boundaries.
 
 In a source checkout, prefix the command with `scripts/`, for example
 `scripts/chordflask-analyze`. Installed launchers work from any current working

@@ -64,6 +64,11 @@ def _print_runtime_hint() -> None:
     print("  make btc-check", file=sys.stderr)
 
 
+def _print_missing_analysis_hint(target: Path) -> None:
+    print("Create the required ChordFlask analysis first with:")
+    print(f"  chordflask-analyze {shlex.quote(str(target))}")
+
+
 def _needs_analysis_guidance(reason: str) -> bool:
     return any(text in reason.lower() for text in ("invalid chordflask analysis", "requires migration"))
 
@@ -89,6 +94,7 @@ def analyze_btc_file(target: Path, *, replace: bool) -> int:
 
     if not analysis_json_path(media).exists(follow_symlinks=False):
         print("SKIP: no ChordFlask analysis")
+        _print_missing_analysis_hint(media)
         return 0
 
     try:
@@ -150,11 +156,13 @@ def analyze_btc_directory(directory: Path, *, dry_run: bool, replace: bool) -> i
     invalid_analysis = False
     migration_required = False
     runtime_failure = False
+    missing_analysis = False
     for index, media in enumerate(media_files, 1):
         print(f"[{index}/{len(media_files)}] {media.name}")
         if not analysis_json_path(media).exists(follow_symlinks=False):
             print("       SKIP: no ChordFlask analysis")
             counts["no_analysis"] += 1
+            missing_analysis = True
             continue
         try:
             classification, reason = classify_btc_file(media, model_hash)
@@ -209,6 +217,9 @@ def analyze_btc_directory(directory: Path, *, dry_run: bool, replace: bool) -> i
     if runtime_failure:
         print("", file=sys.stderr)
         _print_runtime_hint()
+    if missing_analysis:
+        print("")
+        _print_missing_analysis_hint(directory)
 
     print("")
     print("BTC dry-run complete" if dry_run else "BTC analysis complete")

@@ -5,10 +5,10 @@ ChordFlask stores analysis and derived artifacts in a per-media-directory
 without changing anything (inspection) or removes only explicitly requested,
 reproducible leftover categories (cleanup).
 
-It imports only the Python standard library — no Flask, queue, analysis engine,
-torch, librosa, or music21. The only runtime coupling is the analysis-worker
-lock file under ``~/.chordflask`` (or ``CHORDFLASK_QUEUE_DIR``), checked with a
-plain ``fcntl.flock`` so cleanup refuses to run while a worker is active.
+It imports only the neutral ``chordflask_base`` storage model and the Python
+standard library — no Flask, queue, analysis engine, torch, librosa, or
+music21. Cleanup checks the analysis-worker lock file under ``~/.chordflask``
+(or ``CHORDFLASK_QUEUE_DIR``) with a plain ``fcntl.flock``.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 CHORDFLASK_DIR_NAME = ".chordflask"
+_MEDIA_SUFFIXES = frozenset({".mp3", ".mp4", ".webm"})
 
 # MediaConverter creates a hidden conversion temp file
 # ``.<stem>.convert-<random>.mp3`` in the analysis directory. Match exactly that
@@ -55,6 +56,7 @@ class StorageInspection:
     media_dir: Path
     chordflask_path: Path
     exists: bool
+    media_file: Path | None = None
     categories: list = field(default_factory=list)
     notes: list = field(default_factory=list)
 
@@ -67,6 +69,48 @@ def _video_source_exists(media_dir: Path, stem: str) -> bool:
     matching video source exists beside it.
     """
     return any((media_dir / f"{stem}{suffix}").is_file() for suffix in (".mp4", ".webm"))
+
+
+def _matching_media(media_dir: Path, stem: str) -> list[Path]:
+    """Return real supported media files that share one exact analysis stem."""
+    try:
+        entries = list(media_dir.iterdir())
+    except OSError:
+        return []
+    return sorted(
+        entry
+        for entry in entries
+        if not entry.is_symlink()
+        and entry.is_file()
+        and entry.stem == stem
+        and entry.suffix.lower() in _MEDIA_SUFFIXES
+    )
+
+
+def _is_analysis_json(path: Path) -> bool:
+    """Return whether a JSON file is analysis data, failing conservatively."""
+    from chordflask_maintain.migrate import (
+        MigrationFileError,
+        classify_analysis,
+        read_analysis_json,
+    )
+
+    try:
+        return classify_analysis(read_analysis_json(path)) is not None
+    except MigrationFileError:
+        return True
+
+
+def _entry_matches_media(entry: Path, media_file: Path) -> bool:
+    """Return whether one direct storage entry uses this media's stem."""
+    stem = media_file.stem
+    name = entry.name
+    return (
+        name in {f"{stem}{suffix}" for suffix in (".json", ".mp3", ".xml", ".mid", ".song")}
+        or name.startswith(f"{stem}.corrupt-")
+        or name.startswith(f"{stem}-")
+        or name.startswith(f".{stem}.")
+    )
 
 
 def _classify_entry(entry: Path, media_dir: Path) -> tuple[str, str]:
@@ -140,14 +184,24 @@ def _entry_size(entry: Path) -> tuple[int, int]:
 
 
 def inspect_storage(media_dir) -> StorageInspection:
-    """Inspect the ``.chordflask`` directory of one media directory (read-only).
+    """Inspect one media directory or file's ``.chordflask`` data (read-only).
 
-    Raises ``ValueError`` when ``media_dir`` is not an existing directory.
-    Never modifies anything.
+    A media-file target reports only direct artifacts attributable to its exact
+    stem plus its filename-specific journal. Never modifies anything.
     """
-    media = Path(media_dir).expanduser()
-    if not media.is_dir():
-        raise ValueError(f"media directory does not exist or is not a directory: {media}")
+    target = Path(media_dir).expanduser()
+    media_file = None
+    if target.is_file():
+        if target.is_symlink():
+            raise ValueError(f"storage target is a symbolic link: {target}")
+        if target.suffix.lower() not in _MEDIA_SUFFIXES:
+            raise ValueError(f"not an MP3, MP4, or WebM media file: {target}")
+        media_file = target
+        media = target.parent
+    elif target.is_dir():
+        media = target
+    else:
+        raise ValueError(f"media file or directory does not exist: {target}")
 
     chordflask = media / CHORDFLASK_DIR_NAME
 
@@ -156,6 +210,7 @@ def inspect_storage(media_dir) -> StorageInspection:
             media_dir=media,
             chordflask_path=chordflask,
             exists=False,
+            media_file=media_file,
             notes=["skipped (symbolic link)"],
         )
 
@@ -164,6 +219,7 @@ def inspect_storage(media_dir) -> StorageInspection:
             media_dir=media,
             chordflask_path=chordflask,
             exists=False,
+            media_file=media_file,
         )
 
     categories: dict[str, Category] = {}
@@ -176,14 +232,29 @@ def inspect_storage(media_dir) -> StorageInspection:
             media_dir=media,
             chordflask_path=chordflask,
             exists=True,
+            media_file=media_file,
             notes=[f"unreadable: {error}"],
         )
 
     for entry in entries:
+        if media_file is not None and not _entry_matches_media(entry, media_file):
+            continue
         name, status = _classify_entry(entry, media)
         if name == "symlinks":
             notes.append(f"skipped symlink: {entry.name}")
             continue
+        if (
+            media_file is None
+            and name == "analysis JSON"
+            and _is_analysis_json(entry)
+            and not _matching_media(media, entry.stem)
+        ):
+            name = "analysis JSON (missing media)"
+            status = REVIEW
+            notes.append(
+                f"REVIEW: {entry.name} has no matching MP3, MP4, or WebM media; "
+                "nothing was deleted"
+            )
         count, size = _entry_size(entry)
         if count == 0 and size == 0 and name in ("other directories", "other"):
             continue
@@ -191,10 +262,27 @@ def inspect_storage(media_dir) -> StorageInspection:
         category.count += count
         category.bytes += size
 
+    if media_file is not None:
+        matches = _matching_media(media, media_file.stem)
+        if len(matches) > 1:
+            notes.append(
+                f"REVIEW: basename {media_file.stem!r} is shared by "
+                f"{', '.join(path.name for path in matches)}; stem-based data is shared"
+            )
+        journal = chordflask / "journals" / f"{media_file.name}.journal.json"
+        if journal.is_symlink():
+            notes.append(f"skipped symlink: {journal.relative_to(chordflask)}")
+        elif journal.is_file():
+            count, size = _entry_size(journal)
+            categories["user journals"] = Category(
+                name="user journals", status=PROTECTED, count=count, bytes=size
+            )
+
     ordered = [
         categories[key]
         for key in (
             "analysis JSON",
+            "analysis JSON (missing media)",
             "user journals",
             "cached audio",
             "unverified audio",
@@ -220,6 +308,7 @@ def inspect_storage(media_dir) -> StorageInspection:
         media_dir=media,
         chordflask_path=chordflask,
         exists=True,
+        media_file=media_file,
         categories=ordered,
         notes=notes,
     )
@@ -237,7 +326,15 @@ def _format_bytes(size: int) -> str:
 
 def format_storage_report(inspection: StorageInspection) -> str:
     """Render a human-readable report for one storage inspection."""
-    lines = [str(inspection.chordflask_path)]
+    lines = []
+    if inspection.media_file is not None:
+        lines.append(f"Media: {inspection.media_file}")
+    lines.append(str(inspection.chordflask_path))
+    if inspection.media_file is not None:
+        lines.append(
+            "  note: single-media scope excludes Demucs stem directories and "
+            "lyrics sidecars beside the media"
+        )
     if not inspection.exists:
         if inspection.notes:
             lines.append(f"  ({inspection.notes[0]})")

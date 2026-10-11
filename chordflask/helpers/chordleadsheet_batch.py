@@ -48,9 +48,13 @@ _FORMAT_FILES = {
 class LeadsheetExportError(Exception):
     """A per-file failure with the completed analysis action, if any."""
 
-    def __init__(self, message, analysis_action=None):
+    def __init__(
+        self, message, analysis_action=None, analysis_path=None, output_paths=None
+    ):
         super().__init__(message)
         self.analysis_action = analysis_action
+        self.analysis_path = analysis_path
+        self.output_paths = output_paths or []
 
 
 def add_export_options(parser):
@@ -209,6 +213,7 @@ def export_file(media_path, args):
     file_repr = FileRepr(str(media_path), create=True)
     json_path = file_repr.get("json")
     analysis_action = None
+    output_paths = []
     try:
         if not os.path.isfile(json_path):
             _analyze_media(media_path)
@@ -283,21 +288,31 @@ def export_file(media_path, args):
             )
         pdf = ChordSheetPdfRenderer().render_markdown(markdown) if "pdf" in formats else None
         if "md" in formats:
-            _write_atomic(f"{output_stem}.md", markdown)
+            output_path = f"{output_stem}.md"
+            _write_atomic(output_path, markdown)
+            output_paths.append(output_path)
         if "pdf" in formats:
-            _write_atomic(f"{output_stem}.pdf", pdf)
+            output_path = f"{output_stem}.pdf"
+            _write_atomic(output_path, pdf)
+            output_paths.append(output_path)
         if "cho" in formats:
-            _write_atomic(f"{output_stem}.cho", chordpro)
+            output_path = f"{output_stem}.cho"
+            _write_atomic(output_path, chordpro)
+            output_paths.append(output_path)
     except LeadsheetExportError:
         raise
     except Exception as error:
-        raise LeadsheetExportError(str(error), analysis_action) from error
+        raise LeadsheetExportError(
+            str(error), analysis_action, json_path, output_paths
+        ) from error
 
     return {
         "media": str(media_path),
         "ok": True,
         "analysis_action": analysis_action,
+        "analysis_path": json_path,
         "exported": True,
+        "output_paths": output_paths,
         "error": None,
     }
 
@@ -319,11 +334,18 @@ def run(media_dir, args, output=print):
             created += analysis_action == "created"
             failures.append((path, error))
             output(f"Error: {path}: {error}")
+            if analysis_action == "created":
+                output(f"Analysis created before export failed: {error.analysis_path}")
+            for output_path in getattr(error, "output_paths", ()):
+                output(f"Exported before failure: {output_path}")
             continue
         reused += result["analysis_action"] == "reused"
         created += result["analysis_action"] == "created"
         exported += 1
-        output(f"Exported: {path}")
+        if result["analysis_action"] == "created":
+            output(f"Analysis created: {result['analysis_path']}")
+        for output_path in result["output_paths"]:
+            output(f"Exported: {output_path}")
 
     output("")
     output(
