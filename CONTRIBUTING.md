@@ -2,6 +2,12 @@
 
 Thank you for your interest in contributing to ChordFlask.
 
+The public GitHub repository is a source snapshot, not the primary development
+repository. Issues and pull requests are welcome. Accepted contributions may be
+integrated into private development and included in a later public snapshot
+rather than merged directly on GitHub. Please open an issue before investing
+substantial effort in a pull request.
+
 ## Setup
 
 ```bash

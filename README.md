@@ -529,11 +529,21 @@ are documented in [docs/STANDALONE.md](docs/STANDALONE.md).
 
 ## Development transparency
 
+ChordFlask's primary development takes place in a privately hosted repository.
+The public GitHub repository is a curated, functional source snapshot; private
+experiments, internal documentation, and development tools are excluded from
+publication.
+
 ChordFlask has been and continues to be developed through a maintainer-led,
 AI-assisted "vibe coding" workflow. The maintainer defines, leads, and reviews
-all changes and retains the testing and release decisions. AI coding tools
+all changes, remains responsible for architecture and implementation decisions,
+and retains the testing and release decisions. AI coding tools
 assist with development but are not authors, maintainers, partners, or
 endorsers of the project.
+
+Issues and pull requests are welcome. Accepted contributions may be integrated
+privately and published in subsequent snapshots rather than merged directly on
+GitHub. See [CONTRIBUTING.md](CONTRIBUTING.md) before starting substantial work.
 
 ## License
 
