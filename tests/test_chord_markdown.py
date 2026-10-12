@@ -446,6 +446,7 @@ def test_download_chords_returns_markdown_pdf_and_chordpro_zip(tmp_path):
         "song-chords-chordino.cho",
         "song-chords-chordino.md",
         "song-chords-chordino.pdf",
+        "song-chords-chordino.mid",
     }
     assert files["song-chords-chordino.pdf"].startswith(b"%PDF")
     body = files["song-chords-chordino.md"].decode("utf-8")
@@ -610,6 +611,12 @@ def test_download_chords_snapshot_uses_metric_filtered_full_beat_view(tmp_path):
     assert response.status_code == 200
     body = _download_markdown(response)
     assert "C          -          -          G" in body
+    import mido
+    midi_data = _download_archive(response)["song-chords-chordino.mid"]
+    midi_file = mido.MidiFile(file=BytesIO(midi_data))
+    # The suppressed D at beat 1 is absent from the audible MIDI as well.
+    onsets = [msg.note for msg in midi_file.tracks[1] if msg.type == "note_on"]
+    assert onsets == [48, 60, 64, 67, 55, 67, 71, 74]
 
 
 def test_download_chords_uses_chords_repeat_mode(tmp_path):
@@ -687,6 +694,7 @@ def test_download_chords_uses_named_tracks_unicode_slash_chords_and_n_x(tmp_path
         ("markdown", ".md", "text/markdown", b"# song\n"),
         ("pdf", ".pdf", "application/pdf", b"%PDF"),
         ("chordpro", ".cho", "text/plain", b"{title: song}"),
+        ("midi", ".mid", "audio/midi", b"MThd"),
     ],
 )
 def test_download_chords_returns_requested_file_without_zip(
@@ -853,8 +861,8 @@ def test_index_contains_export_control_and_download_contract():
     assert 'id="exportMenu"' in body
     assert 'aria-label="Export the current chord sheet"' in body
     assert 'Export <span aria-hidden="true">▾</span>' in body
-    assert body.count('data-export-format=') == 4
-    for label in ("Markdown", "PDF", "ChordPro", "All formats (.zip)"):
+    assert body.count('data-export-format=') == 5
+    for label in ("Markdown", "PDF", "ChordPro", "MIDI", "All formats (.zip)"):
         assert f">{label}</button>" in body
     assert "#saveButton" in body
     assert "fetch('/download_chords'" in body
@@ -881,3 +889,18 @@ def test_index_save_busy_state_guards_ambiguous_views():
     assert "saveRequestInFlight" in save_update
     assert "trackRequestInFlight" in save_update
     assert "queuedAnalysisPaths.has(loadedMediaPath)" in save_update
+
+
+@pytest.mark.parametrize("export_format", ["midi", "all"])
+def test_download_chords_returns_error_when_midi_generation_fails(tmp_path, monkeypatch, export_format):
+    app_wrapper, client = make_client()
+    _activate(app_wrapper, tmp_path)
+
+    def fail_render(snapshot):
+        raise ValueError("invalid beat interval")
+
+    monkeypatch.setattr("chordflask.app.generate_chord_midi", fail_render)
+    response = client.post("/download_chords", json=_payload(tmp_path, format=export_format))
+    assert response.status_code == 500
+    assert response.content_type == "application/json"
+    assert not response.data.startswith(b"PK")

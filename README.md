@@ -56,7 +56,7 @@ Lyrics sheets. See [the Journal guide](docs/JOURNAL.md) for details.
 
 Automatic chord recognition is not a perfect transcription, especially with dense arrangements or unusual harmony. It is intended as a practical starting point for playing, orientation, and improvisation. When the analysis is close but not quite right, you can correct it beat by beat instead of starting over.
 
-Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, or ChordPro.
+Optional workflows extend this further. Add synchronized lyrics from local LRC files, embedded lyrics, or LRCLIB; prepare Demucs stems to mute vocals or instruments for practice; and export analyses as Markdown, PDF, ChordPro, or MIDI.
 
 On desktop (1024 px and wider), a compact **Prepare** menu can run the
 available optional producers for the currently loaded song. Depending on the
@@ -73,7 +73,7 @@ At a glance, ChordFlask lets you:
 - add synchronized lyrics from LRC, embedded metadata, or LRCLIB;
 - keep per-song notes and observations in the Journal;
 - prepare Demucs stems for karaoke and instrument practice; and
-- export analyses as Markdown, PDF, or ChordPro.
+- export analyses as Markdown, PDF, ChordPro, or MIDI.
 
 <!-- standalone-download:start -->
 ## Download
@@ -365,13 +365,18 @@ chordflask-export song.mp3
 chordflask-export --format pdf song.mp3
 chordflask-export --format markdown song.mp3
 chordflask-export --format chordpro song.mp3
+chordflask-export --format midi song.mp3
+chordflask-export --format all song.mp3
 ```
 
 - Markdown is an editable leadsheet representation.
 - PDF is a printable A4 layout.
 - ChordPro is a reusable chord-grid or lyric-bearing song sheet.
+- MIDI is an editable piano chord sequence from the displayed beat grid, with
+  a tempo map matching the analyzed beat times. It retains the selected track,
+  edits, and transposition; it is not a full music transcription.
 
-The browser **Export** menu offers Markdown, PDF, ChordPro, or **All formats
+The browser **Export** menu offers Markdown, PDF, ChordPro, MIDI, or **All formats
 (.zip)**. Individual formats download directly; only **All formats** produces a
 ZIP. Browser exports may include existing local Lyrics and romanization;
 `chordflask-export` remains chord-only. Journal entries are not exported. The

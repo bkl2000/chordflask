@@ -28,6 +28,7 @@ from .client_state import ClientRegistry, PathLockRegistry
 from .chord_chordpro import format_export_chordpro
 from .chord_export_sheet import build_export_sheet
 from .lyrics_paths import lyrics_path
+from .chord_midi import generate_chord_midi
 from .chordpro_song import ChordProSongError, read_chordpro, sheet_rhythm_status
 from .chord_markdown import download_track_slug, format_export_markdown
 from .chord_sheet_pdf import ChordSheetPdfRenderer
@@ -1111,7 +1112,7 @@ class FlaskMP4App:
             return error_response
         export_format = data.get("format", "all")
         if not isinstance(export_format, str) or export_format not in {
-            "markdown", "pdf", "chordpro", "all"
+            "markdown", "pdf", "chordpro", "midi", "all"
         }:
             return jsonify(error="Unknown chord export format."), 400
         state = self._client()
@@ -1140,6 +1141,13 @@ class FlaskMP4App:
                 logging.warning("Ignoring invalid Song sidecar during export: %s", sidecar)
         sheet = build_export_sheet(media_or_error.stem, snapshot, song)
         try:
+            if export_format == "midi":
+                return send_file(
+                    BytesIO(generate_chord_midi(snapshot)),
+                    mimetype="audio/midi",
+                    as_attachment=True,
+                    download_name=f"{export_stem}.mid",
+                )
             if export_format == "chordpro":
                 chordpro = format_export_chordpro(sheet)
                 return send_file(
@@ -1168,6 +1176,7 @@ class FlaskMP4App:
             pdf = ChordSheetPdfRenderer().render_markdown(markdown)
             archive = BytesIO()
             with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
+                output.writestr(f"{export_stem}.mid", generate_chord_midi(snapshot))
                 output.writestr(f"{export_stem}.md", markdown.encode("utf-8"))
                 output.writestr(f"{export_stem}.pdf", pdf)
                 output.writestr(f"{export_stem}.cho", chordpro.encode("utf-8"))

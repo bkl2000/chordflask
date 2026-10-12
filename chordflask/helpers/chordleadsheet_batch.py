@@ -4,7 +4,7 @@
 
 This CLI helper is independent of the Flask server. It discovers MP3/MP4/WebM
 media non-recursively, reuses valid analysis JSON, analyzes only missing files
-serially, and writes matching Markdown, PDF, and ChordPro leadsheets into each
+serially, and writes matching Markdown, PDF, ChordPro, and MIDI files into each
 ``.chordflask`` directory.
 
 Exit codes: 0 all exports succeeded, 1 partial or file errors, 2 argparse or
@@ -17,6 +17,7 @@ import sys
 import tempfile
 
 from .batch_core import find_media_files
+from ..chord_midi import generate_chord_midi
 from ..chord_chordpro import format_chordpro
 from ..chord_markdown import download_track_slug, format_chord_markdown
 from ..chord_sheet_pdf import ChordSheetPdfRenderer
@@ -41,7 +42,8 @@ _FORMAT_FILES = {
     "pdf": {"pdf"},
     "both": {"md", "pdf"},
     "chordpro": {"cho"},
-    "all": {"md", "pdf", "cho"},
+    "midi": {"mid"},
+    "all": {"md", "pdf", "cho", "mid"},
 }
 
 
@@ -103,7 +105,7 @@ def add_export_options(parser):
     )
     parser.add_argument(
         "--format",
-        choices=("markdown", "pdf", "both", "chordpro", "all"),
+        choices=("markdown", "pdf", "both", "chordpro", "midi", "all"),
         default="both",
         help="Leadsheet format to write (default: both)",
     )
@@ -287,6 +289,13 @@ def export_file(media_path, args):
                 repeat_mode=args.repeat_mode,
             )
         pdf = ChordSheetPdfRenderer().render_markdown(markdown) if "pdf" in formats else None
+        midi_content = generate_chord_midi({
+            "beats": beats, "beat_times": cd.beat_times, "meter": cd.meter_signature,
+        }) if "mid" in formats else None
+        if "mid" in formats:
+            output_path = f"{output_stem}.mid"
+            _write_atomic(output_path, midi_content)
+            output_paths.append(output_path)
         if "md" in formats:
             output_path = f"{output_stem}.md"
             _write_atomic(output_path, markdown)

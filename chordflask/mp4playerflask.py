@@ -421,7 +421,7 @@ class MP4PlayerFlask:
         }
 
     def chord_download_snapshot(self):
-        """Return the plain display state for a Markdown leadsheet download."""
+        """Return current display chords and audio beat times for exports."""
         cd = self.chord_data
         chord_id = cd.active_chord_track_id
         rhythm_id = cd.active_rhythm_track_id
@@ -456,6 +456,7 @@ class MP4PlayerFlask:
             "meter": cd.meter_signature,
             "repeat_mode": self.playback_view.repeat_mode,
             "beats": beats,
+            "beat_times": list(cd.beat_times),
         }
 
     @staticmethod

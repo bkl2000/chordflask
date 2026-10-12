@@ -128,6 +128,9 @@ def test_browser_and_batch_exports_are_byte_identical(tmp_path):
 
     assert response.status_code == 200
     with ZipFile(BytesIO(response.data)) as archive:
+        assert archive.read("song-chords-chordino.mid") == (
+            analysis_dir / "song-chords-chordino.mid"
+        ).read_bytes()
         assert archive.read("song-chords-chordino.md") == (
             analysis_dir / "song-chords-chordino.md"
         ).read_bytes()
@@ -531,3 +534,72 @@ def test_helper_imports_do_not_load_flask():
     )
     assert result.returncode == 0, result.stderr
     assert "PASS" in result.stdout
+
+
+@pytest.mark.parametrize("track_id", ["chordino", "btc", "user_edited", "reference"])
+def test_midi_cli_and_browser_use_selected_transposed_corrected_track(tmp_path, track_id):
+    import mido
+    from chordflask.helpers import export_cli
+
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media, extra_chord="btc")
+    cd = ChordData(analysis_dir / "song.json")
+    cd.create_beat_aligned_track("user_edited", metadata={"display_name": "Edited"})
+    cd.edit_chord_track_beat("user_edited", 0, "Dmaj7/A")
+    cd.set_chord_track("reference", [{"timestamp": 0, "chord": "Eb9/Bb"}])
+    cd.save_to_file(analysis_dir / "song.json")
+    before = (analysis_dir / "song.json").read_bytes()
+    legacy = analysis_dir / "song.mid"
+    legacy.write_bytes(b"legacy midi must not be copied")
+
+    with pytest.raises(SystemExit) as exit_info:
+        export_cli.main(["--format", "midi", "--chord-track", track_id,
+                         "--transpose", "1", "--unicode", str(media)])
+    assert exit_info.value.code == 0
+    slug = "edited" if track_id == "user_edited" else track_id
+    content = (analysis_dir / f"song-chords-{slug}.mid").read_bytes()
+    parsed = mido.MidiFile(file=BytesIO(content))
+    onsets = [msg.note for msg in parsed.tracks[1] if msg.type == "note_on"]
+    # First bass: C -> Db, F -> Gb, corrected D/A -> Eb/Bb, Eb/Bb -> E/B.
+    assert onsets[0] == {"chordino": 49, "btc": 54, "user_edited": 58, "reference": 59}[track_id]
+    if track_id == "user_edited":
+        assert set(onsets[:5]) == {58, 63, 67, 70, 74}
+
+    file_repr = FileRepr(str(media), create=True)
+    app_wrapper = FlaskMP4App()
+    state = app_wrapper.clients.get_or_create("test-client")
+    state.file_repr = file_repr
+    state.player = MP4PlayerFlask(file_repr, metric_chords=True, use_unicode=True)
+    state.player.select_chord_track(track_id)
+    state.player.set_transpose(1)
+    state.player.set_prefer_flats(True)
+    client = app_wrapper.app.test_client()
+    client.set_cookie("chordflask_client", "test-client")
+    response = client.post("/download_chords", json={
+        "dirname": str(tmp_path), "filename": media.name, "format": "midi",
+    })
+    assert response.status_code == 200
+    assert response.data == content
+    assert (analysis_dir / "song.json").read_bytes() == before
+    assert legacy.read_bytes() == b"legacy midi must not be copied"
+    assert not list(analysis_dir.glob("*.md"))
+
+
+def test_failed_midi_atomic_replace_preserves_previous_output(tmp_path, monkeypatch):
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    analysis_dir = _write_analysis(media)
+    destination = analysis_dir / "song-chords-chordino.mid"
+    destination.write_bytes(b"previous export")
+
+    def fail_replace(*args):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(chordleadsheet_batch.os, "replace", fail_replace)
+    with pytest.raises(LeadsheetExportError, match="replace failed"):
+        export_file(media, _args(format="midi"))
+    assert destination.read_bytes() == b"previous export"
+    assert sorted(path.name for path in analysis_dir.iterdir()) == [
+        "song-chords-chordino.mid", "song.json",
+    ]

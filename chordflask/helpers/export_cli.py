@@ -1,4 +1,4 @@
-"""``chordflask-export`` — export leadsheets (Markdown, PDF, or ChordPro).
+"""``chordflask-export`` — export leadsheets (Markdown, PDF, ChordPro, or MIDI).
 
 The canonical user command for exporting chord leadsheets. It reuses the shared
 Markdown formatter (``chord_markdown``) and PDF renderer (``chord_sheet_pdf``)
@@ -29,6 +29,7 @@ Examples:
   chordflask-export --format pdf /music/videos
   chordflask-export --format both /music/videos
   chordflask-export --format chordpro song.mp4
+  chordflask-export --format midi song.mp3
   chordflask-export --format all /music/videos
 """
 
@@ -36,7 +37,7 @@ Examples:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chordflask-export",
-        description="Export Markdown, PDF, and ChordPro leadsheets for media files.",
+        description="Export Markdown, PDF, ChordPro, and MIDI chords for media files.",
         epilog=_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
