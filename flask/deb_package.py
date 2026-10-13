@@ -53,7 +53,12 @@ def verify(package: Path, version: str, archive: Path | None = None) -> None:
         rf"chordflask-[A-Za-z0-9._-]+-x86_64-py[0-9.]+-v{re.escape(version)}[.]deb", package.name
     ):
         raise ValueError("unexpected Debian package filename")
-    for field, expected in (("Package", "chordflask"), ("Version", version), ("Architecture", "amd64")):
+    for field, expected in (
+        ("Package", "chordflask"),
+        ("Version", version),
+        ("Architecture", "amd64"),
+        ("Depends", "ffmpeg, curl | wget"),
+    ):
         if run("dpkg-deb", "-f", str(package), field) != expected:
             raise ValueError(f"Debian {field} differs from {expected}")
     for field in ("Maintainer", "Description"):
@@ -151,7 +156,7 @@ def build(bundle: Path, output: Path, version: str) -> Path:
         (control / "control").write_text(
             f"Package: chordflask\nVersion: {version}\nArchitecture: amd64\n"
             "Maintainer: ChordFlask Maintainer <git@isarlab.de>\n"
-            "Section: sound\nPriority: optional\nDepends: ffmpeg\n"
+            "Section: sound\nPriority: optional\nDepends: ffmpeg, curl | wget\n"
             f"Installed-Size: {installed_size_kib}\n"
             "Description: Local chord and rhythm analysis with synchronized playback\n"
             " Bundled standalone runtime. Vamp plugins are installed separately.\n"

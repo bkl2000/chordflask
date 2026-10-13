@@ -503,8 +503,6 @@ class FlaskMP4App:
         else:
             if not quiet:
                 print("VAMP_PATH is not set and ~/.vamp does not exist.")
-                print("Install plugins with: bash install_vamp.sh")
-                print("Or set VAMP_PATH to a directory containing the .so files.")
 
         try:
             from .vamp_runtime import require_vamp_plugins

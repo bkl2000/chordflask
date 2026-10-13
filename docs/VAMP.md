@@ -28,10 +28,33 @@ MD5 values published by the upstream projects and never upgrades automatically.
 
 ## Installation
 
+### Debian package
+
+The package provides FFmpeg and either `curl` or `wget` as dependencies. Install
+the plugins with the bundled script:
+
+```bash
+/opt/chordflask/install_vamp.sh
+chordflask --check-vamp
+```
+
+### Portable standalone
+
+Install FFmpeg and either `curl` or `wget` on the host, then run the script from
+the unpacked bundle and verify the result:
+
+```bash
+./install_vamp.sh
+./chordflask --check-vamp
+```
+
+### Source checkout
+
 Install into the standard user plugin directory:
 
 ```bash
 make plugins
+chordflask --check-vamp
 ```
 
 The expected files are:

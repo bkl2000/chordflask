@@ -1,10 +1,11 @@
 import os
 import platform
+import shlex
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
-from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VENDOR_DIR = REPO_ROOT / "vendor" / "vamp" / "linux-x86_64"
@@ -183,6 +184,59 @@ def test_vamp_runtime_reports_missing_plugins_clearly(monkeypatch):
         assert "make plugins" in str(error)
     else:
         raise AssertionError("should raise RuntimeError")
+
+
+def test_vamp_runtime_source_hint_is_executable(monkeypatch):
+    import chordflask.vamp_runtime as vamp_runtime
+
+    monkeypatch.setattr("vamp.list_plugins", lambda: [])
+    monkeypatch.delattr(vamp_runtime.sys, "frozen", raising=False)
+
+    with pytest.raises(RuntimeError) as caught:
+        vamp_runtime.require_vamp_plugins()
+
+    message = str(caught.value)
+    assert "make plugins" in message
+    assert "install_vamp.sh" not in message
+
+
+def test_vamp_runtime_portable_hint_uses_executable_bundle_path(monkeypatch, tmp_path):
+    import chordflask.vamp_runtime as vamp_runtime
+
+    bundle = tmp_path / "portable bundle"
+    bundle.mkdir()
+    executable = bundle / "chordflask"
+    installer = bundle / "install_vamp.sh"
+    executable.touch(mode=0o755)
+    installer.touch(mode=0o755)
+    monkeypatch.setattr("vamp.list_plugins", lambda: [])
+    monkeypatch.setattr(vamp_runtime.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(vamp_runtime.sys, "executable", str(executable))
+
+    with pytest.raises(RuntimeError) as caught:
+        vamp_runtime.require_vamp_plugins()
+
+    message = str(caught.value)
+    assert shlex.quote(str(installer)) in message
+    assert os.access(installer, os.X_OK)
+    assert "make plugins" not in message
+    assert "/opt/chordflask/install_vamp.sh" not in message
+
+
+def test_vamp_runtime_debian_hint_resolves_system_command(monkeypatch):
+    import chordflask.vamp_runtime as vamp_runtime
+
+    monkeypatch.setattr("vamp.list_plugins", lambda: [])
+    monkeypatch.setattr(vamp_runtime.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(vamp_runtime.sys, "executable", "/usr/bin/chordflask")
+    monkeypatch.setattr(vamp_runtime.os.path, "realpath", lambda _path: "/opt/chordflask/chordflask")
+
+    with pytest.raises(RuntimeError) as caught:
+        vamp_runtime.require_vamp_plugins()
+
+    message = str(caught.value)
+    assert "/opt/chordflask/install_vamp.sh" in message
+    assert "make plugins" not in message
 
 
 def test_madmom_analysis_still_preflights_beat_tracker(monkeypatch):

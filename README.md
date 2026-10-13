@@ -113,11 +113,14 @@ same standalone runtime and helper scripts. Replace `<release-package>` with
 the matching download filename:
 
 ```bash
-sudo apt install ./<release-package>.deb
+sudo apt install ./<release-package>
 /opt/chordflask/install_vamp.sh
+chordflask --check-vamp
 chordflask
 ```
 
+The bundled scripts are under `/opt/chordflask/`; Vamp plugins are installed
+separately as shown above. See the [Vamp documentation](docs/VAMP.md) for details.
 Remove with `sudo apt remove chordflask`. The build's Linux/glibc compatibility
 requirements still apply. The package installs the standalone player; its
 separate helper launcher files still require a source-installed ChordFlask
@@ -615,12 +618,11 @@ The public GitHub repository is a curated, functional source snapshot; private
 experiments, internal documentation, and development tools are excluded from
 publication.
 
-ChordFlask has been and continues to be developed through a maintainer-led,
-AI-assisted "vibe coding" workflow. The maintainer defines, leads, and reviews
-all changes, remains responsible for architecture and implementation decisions,
-and retains the testing and release decisions. AI coding tools
-assist with development but are not authors, maintainers, partners, or
-endorsers of the project.
+ChordFlask is developed through human-directed, AI-assisted software
+engineering. The maintainer defines requirements, architecture, scope, quality
+assurance, integration, and releases. AI systems support activities such as
+analysis, implementation, testing, review, and documentation, while the
+maintainer remains responsible for evaluating and accepting their results.
 
 Issues and pull requests are welcome. Accepted contributions may be integrated
 privately and published in subsequent snapshots rather than merged directly on

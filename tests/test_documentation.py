@@ -40,6 +40,19 @@ def test_readme_names_portable_archive_and_complete_guide():
         assert command in guide
 
 
+def test_vamp_installation_commands_match_distribution_contexts():
+    readme = (REPO_ROOT / "README.md").read_text()
+    guide = (REPO_ROOT / "docs" / "VAMP.md").read_text()
+
+    assert "sudo apt install ./<release-package>" in readme
+    assert "./<release-package>.deb" not in readme
+    for command in ("/opt/chordflask/install_vamp.sh", "chordflask --check-vamp"):
+        assert command in readme
+        assert command in guide
+    for requirement in ("FFmpeg", "`curl` or `wget`", "./install_vamp.sh", "make plugins"):
+        assert requirement in guide
+
+
 def test_helpers_doc_documents_portable_launcher_upgrades():
     readme = (REPO_ROOT / "README.md").read_text()
     helpers = (REPO_ROOT / "docs" / "HELPERS.md").read_text()
