@@ -1,8 +1,8 @@
 # Helper Classification
 
-This document classifies files under `chordflask/helpers/`. It does not move files
-or change runtime behavior. The active Flask GUI does not import these helpers
-directly.
+This document classifies supported CLI helpers under `chordflask/helpers/` and
+the separate optional helper packages. It does not move files or change runtime
+behavior. The active Flask GUI does not import these helpers directly.
 
 ## Supported CLI Helpers
 
@@ -107,6 +107,38 @@ These are kept as usable command-line tools and have smoke-test coverage.
   scripts/chordflask-genlyrics --dry-run /music/album
   ```
 
+- `chordflask_score/` - the `chordflask-score` command for **Alpha / experimental**
+  piano transcription. Generation requires valid existing
+  `qm_barbeattracker` rhythm data and the separate Python 3.12 runtime installed
+  by `make setup-score`. `make score-check` diagnoses that runtime without
+  inference or downloads. Wrapper: `scripts/chordflask-score`;
+  `make score SCORE_ARGS="..."` invokes the same wrapper.
+
+  The target is an MP3/MP4 file or a non-recursive directory, preferring MP4
+  over MP3 for matching basenames. Options: `--device auto|cpu|cuda` (default
+  `auto`), `--audio-source original|no-vocals` (default `original`), `--replace`,
+  and `--dry-run`. `no-vocals` uses existing current Demucs stems and never
+  starts Demucs. Current generations are reused; stale ones require
+  `--replace`. Dry-run reports status without writing or running transcription.
+  Batch failures do not stop later files; exit codes are 0 for success, 1 for
+  per-file failures, and 2 for invalid invocation or target.
+
+  ```bash
+  make setup-score
+  make score-check
+  scripts/chordflask-analyze song.mp3
+  scripts/chordflask-score --device cpu song.mp3
+  scripts/chordflask-score --audio-source no-vocals --replace song.mp4
+  make score SCORE_ARGS="--dry-run /path/to/music"
+  ```
+
+  Complete generations are stored under `.chordflask/scores/`. Existing
+  analysis tracks remain unchanged. Desktop source, standalone and `.deb`
+  players can display valid prepared scores without the generation runtime;
+  the standalone excludes the Score CLI/worker and heavy dependencies.
+  Generated notation is not reliably playable. See
+  [Score setup, timing and limits](SCORE_ARCHITECTURE.md).
+
 - `batch_core.py` - shared non-recursive media discovery (MP4/WebM/MP3 with the
   active same-stem priority) used by `analyze_cli.py`, `export_cli.py`, and
   `chordleadsheet_batch.py`; backed by `chordflask/media_library.py`.
@@ -132,6 +164,11 @@ caller's working directory, and run the installed console command. They do not
 infer a source checkout from their own location. When upgrading from an older
 0.9.x installation, copy the launchers again: older copies can still target the
 pre-package source layout.
+
+Score's launcher instead selects `~/.venvs/chordflask-score`, or the runtime
+specified by `CHORDFLASK_SCORE_VENV`. After `make setup-score`, copy or symlink
+`scripts/chordflask-score` into a directory on `PATH` separately. It also
+preserves the caller's working directory and relative arguments.
 
 ## Production Boundary
 

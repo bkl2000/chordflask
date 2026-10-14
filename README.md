@@ -69,20 +69,23 @@ view switch. Two staves follow playback by measure, with automatic scrolling
 only on notation line changes and automatic page selection. Standalone and
 `.deb` players can display valid prepared scores without installing the Score
 runtime. To generate them, run `make setup-score` from a source checkout and
-use **Prepare → Score** explicitly. Score is **Alpha / experimental** and
-requires existing QM rhythm data. Transkun sometimes produces musically convincing
+use **Prepare → Score** or the CLI workflow below explicitly. Score is
+**Alpha / experimental** and requires existing QM rhythm data. Transkun sometimes produces musically convincing
 MIDI transcriptions, but the generated notation is often rhythmically cluttered
 and not reliably readable as music. See [Score setup, timing and limits](docs/SCORE_ARCHITECTURE.md).
 
 At a glance, ChordFlask lets you:
 
 - browse and play local MP3, MP4, and WebM collections;
+- filter and sort the file list, or shuffle the playback order;
 - analyze one song, a browser batch, or an entire directory;
+- compare the default Chordino result with an optional BTC chord track;
 - follow detected chords and beats during playback;
 - transpose chords, repeat difficult passages with A/B loops, and correct detected chords;
 - add synchronized lyrics from LRC, embedded metadata, or LRCLIB;
 - keep per-song notes and observations in the Journal;
-- prepare Demucs stems for karaoke and instrument practice; and
+- prepare Demucs stems for karaoke and instrument practice;
+- display prepared experimental piano scores on desktop; and
 - export analyses as Markdown, PDF, ChordPro, or MIDI.
 
 <!-- standalone-download:start -->
@@ -235,6 +238,12 @@ playback, queue, track, and persistence behavior.
 4. Set **A** and **B** around a difficult section and repeat it with **⟳**.
 5. Pause and use **Edit** if a detected chord needs correction.
 
+Filter filenames and sort by name, size, or modification time in the file
+browser; **Shuffle** randomizes the file list and playback order. On desktop,
+drag the panel divider to adjust the layout and select **Dark** or **Light**
+for the chord panel. **Reanalyze** refreshes Chordino/QM analysis while preserving
+Edited chords. See [playback controls](docs/ANALYSIS.md#playback-controls).
+
 ### Prepare an album or directory
 
 In the browser, open the directory, choose a value for **Next**, and select
@@ -371,6 +380,32 @@ chordflask-maintain stems remove song.mp3
 See [docs/DEMUCS.md](docs/DEMUCS.md) for CPU/CUDA setup, preparation status,
 storage, browser behavior, and limitations.
 
+### Prepare an experimental piano Score
+
+Score is **Alpha / experimental**. Generation accepts MP3/MP4 and requires
+valid existing QM rhythm analysis plus a separate optional runtime. From a
+source checkout:
+
+```bash
+make setup-score
+make score-check
+scripts/chordflask-analyze song.mp3
+scripts/chordflask-score --device cpu song.mp3
+make score SCORE_ARGS="--dry-run ~/Music/Album"
+```
+
+`make setup-score` installs the isolated Python 3.12 runtime; `make score-check`
+diagnoses it without inference or downloads. `make score SCORE_ARGS="..."`
+invokes the same helper; `--dry-run` previews a file or non-recursive directory
+without writing or running transcription. Use `--replace` to regenerate
+an existing score deliberately.
+
+Open the prepared song and select **Score** on desktop. Valid prepared scores
+can be displayed in source, standalone and `.deb` players without the generation
+runtime. The notation is not reliably playable; see
+[Score setup and limitations](docs/SCORE_ARCHITECTURE.md) for installation,
+CPU/CUDA options, existing no-vocals stems, and timing constraints.
+
 ### Export a leadsheet
 
 ```bash
@@ -409,11 +444,16 @@ Options, track selection, naming, and storage locations are documented in
 ## Command-line tools
 
 The `chordflask` player is available in each installation (the archive uses
-`./chordflask.sh`). The separate `chordflask-*` helpers are installed by the
+`./chordflask.sh`). Most separate `chordflask-*` helpers are installed by the
 source setup; in a checkout, use the matching `scripts/chordflask-*` launchers.
 The standalone archive and `.deb` provide the player and browser workflows,
 but their helper launcher files cannot run without a separate source-installed
 ChordFlask virtual environment.
+
+The portable `scripts/chordflask-score` launcher uses the separate runtime
+installed by `make setup-score`. Copy or symlink it to a directory on `PATH`
+to use `chordflask-score` from any working directory. See
+[Score installation](docs/SCORE_ARCHITECTURE.md#audio-and-runtime).
 
 | Command | Purpose |
 | --- | --- |
@@ -423,6 +463,7 @@ ChordFlask virtual environment.
 | `chordflask-export` | Export analysis data |
 | `chordflask-genlyrics` | Generate lyric/chord sidecars |
 | `chordflask-maintain` | Diagnose and maintain generated data |
+| `chordflask-score` | Generate Alpha piano scores using the optional Score runtime |
 
 Typical calls:
 
@@ -500,12 +541,22 @@ separate.
 
 ## Experimental research
 
-These research projects are separate from stable release features. This section
-does not add experimental functionality to the current release download.
+These features and research projects remain experimental. Availability differs:
+optional producers need their own runtimes, and private prototypes are not part
+of the normal distribution.
 
+- **Score (Alpha):** optional Transkun piano transcription and QM-aligned
+  notation. Desktop displays valid prepared scores without the generation
+  runtime; notation is often rhythmically cluttered and not reliably playable.
+  See [the Score guide](docs/SCORE_ARCHITECTURE.md).
 - **Lyrics V2:** experimental local vocal transcription and synchronization with
   Qwen3-ASR and Qwen3-ForcedAligner. Initial practical results are available;
   reliability and hardware requirements are still being investigated.
+- **Chord Analysis V3:** a private experimental analyzer selected through
+  `chordflask-analyze --analyzer chordflask-v3`. It requires a configured private
+  runtime and adds a separate chord track; stored results remain displayable
+  without that runtime. It is not distributed with normal installations. See
+  [V3 analysis](docs/ANALYSIS.md#experimental-chordflask-v3-analyzer).
 - **Chord Analysis V4:** an experimental ML approach to reranking existing chord
   candidates. A private research prototype includes offline evaluations and
   listening tools; musical usefulness is still under investigation. It is not
@@ -622,6 +673,7 @@ are documented in [docs/STANDALONE.md](docs/STANDALONE.md).
 - [Per-song Journal: notes, information, and Agent observations](docs/JOURNAL.md)
 - [Lyrics, LRC, embedded lyrics, LRCLIB, and romanization](docs/LYRICS.md)
 - [Demucs stems and practice workflows](docs/DEMUCS.md)
+- [Experimental piano Score: setup, display, MIDI and limitations](docs/SCORE_ARCHITECTURE.md)
 - [Maintenance and storage](docs/MAINTENANCE.md)
 - [Standalone bundle](docs/STANDALONE.md)
 - [Platform and Python compatibility](docs/COMPATIBILITY.md)

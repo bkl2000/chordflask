@@ -105,9 +105,12 @@ conservatively; generic maintenance must not delete them as chord export caches.
 CURRENT means inputs, code/notation settings, optional runtime identity and artifact
 hashes/structure match. TODO means no completion manifest. STALE means changed
 inputs/settings/pipeline or missing/changed artifacts. ERROR means invalid
-prerequisites, malformed manifests or unsafe content/paths. Dry-run never creates
-storage or requires the optional runtime; existing artifacts can be inspected
-without it. Replacement requires `--replace`. Batch failures do not stop later
+prerequisites, malformed manifests or unsafe content/paths. CLI dry-run never
+creates storage or invokes the optional worker; a source-installed
+`chordflask-score --dry-run` can inspect existing artifacts without that runtime.
+The portable `scripts/chordflask-score` launcher and `make score` still require
+the command installed in the Score venv, even for dry-run.
+Replacement requires `--replace`. Batch failures do not stop later
 files; exit 1 reports processing/classification failures, exit 2 invalid invocation.
 Requested/used devices and CUDA availability remain provenance; changing the
 device selection alone does not invalidate an otherwise CURRENT generation.
