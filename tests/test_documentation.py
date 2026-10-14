@@ -161,6 +161,30 @@ def test_helpers_doc_describes_export_options_and_exit_codes():
     assert ".pdf" in helpers
 
 
+def test_score_midi_examples_match_cli_and_document_alpha_limits():
+    from chordflask.helpers.export_cli import build_parser
+
+    parser = build_parser()
+    assert parser.parse_args(["SONG.mp3"]).format == "both"
+    help_text = parser.format_help()
+    documents = [
+        (REPO_ROOT / name).read_text()
+        for name in ("README.md", "docs/ANALYSIS.md", "docs/HELPERS.md", "docs/SCORE_ARCHITECTURE.md")
+    ]
+    for format in ("midi", "score-midi", "all"):
+        assert parser.parse_args(["--format", format, "SONG.mp3"]).format == format
+        assert format in help_text
+        for document in documents:
+            assert f"--format {format}" in document
+    for document in documents:
+        assert "Chord MIDI" in document
+        assert "Score MIDI" in document
+        assert "Alpha / experimental" in document
+    for document in (documents[0], documents[-1]):
+        assert "rhythmically cluttered" in document
+        assert "not reliably" in document
+
+
 def test_analysis_doc_describes_leadsheet_save_output():
     analysis = (REPO_ROOT / "docs" / "ANALYSIS.md").read_text()
 

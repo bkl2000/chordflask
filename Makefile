@@ -16,6 +16,7 @@ TEST_ARGS ?=
 EXTRA_TEST_ARGS ?=
 ANALYZE_ARGS ?=
 DEMUCS_ARGS ?=
+SCORE_ARGS ?=
 EXPORT_ARGS ?=
 MAINTAIN_ARGS ?=
 EXTRA_TEST_DIRS ?=
@@ -27,7 +28,7 @@ EXTRA_PYTHONPATH ?=
 .PHONY: help all install setup setup-runtime setup-dev setup-recreate \
 	fix-permissions test check lint run worker standalone deb standalone-run \
 	plugins analyze demucs export maintain setup-lyrics lyrics-check setup-qwen3-asr qwen3-asr-check setup-btc \
-	btc-check setup-demucs demucs-check status clean clean-report
+	btc-check setup-demucs demucs-check setup-score score-check score status clean clean-report
 
 help:
 	@printf '%s\n' \
@@ -47,6 +48,7 @@ help:
 		'  make worker              Start only the analysis worker' \
 		'  make analyze             Analyze media (chordflask-analyze)' \
 		'  make demucs              Create Demucs FLAC stem sets (optional runtime)' \
+		'  make score               Create piano scores (optional runtime, existing QM rhythm)' \
 		'  make export              Export leadsheets (chordflask-export)' \
 		'  make maintain            Maintain data/installation (chordflask-maintain)' \
 		'  make setup-lyrics        Set up the optional Lyrics runtime [installs]' \
@@ -57,6 +59,8 @@ help:
 		'  make btc-check           Diagnose the optional BTC analyzer runtime' \
 		'  make setup-demucs        Set up the optional Demucs runtime [installs]' \
 		'  make demucs-check        Diagnose the optional Demucs runtime' \
+		'  make setup-score         Set up the optional Python 3.12 piano runtime [installs]' \
+		'  make score-check         Diagnose Score without inference/downloads' \
 		'  make standalone          Check, build, and package the standalone release [long]' \
 		'  make deb                 Package the standalone runtime as a Debian .deb [long]' \
 		'  make standalone-run      Start an already-built standalone release' \
@@ -71,6 +75,7 @@ help:
 		'  PYTHON_BIN=python3.12     Interpreter used to create a virtual environment' \
 		'  TEST_ARGS="-q -k name"    Additional pytest arguments' \
 		'  DEMUCS_ARGS="--dry-run videos"  Arguments for make demucs' \
+		'  SCORE_ARGS="--dry-run videos"   Arguments for make score' \
 		'  --port=5050               Choose the web app port (chordflask --port 5050)' \
 		'' \
 		'Examples:' \
@@ -109,14 +114,14 @@ check: test lint
 	@"$(VENV_PYTHON)" -m compileall -q "$(ROOT_DIR)/chordflask" "$(ROOT_DIR)/flask" "$(ROOT_DIR)/scripts" \
 		"$(ROOT_DIR)/tests" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
 		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
-		"$(ROOT_DIR)/chordflask_lyrics" $(EXTRA_SRC_DIRS)
+		"$(ROOT_DIR)/chordflask_lyrics" "$(ROOT_DIR)/chordflask_score" $(EXTRA_SRC_DIRS)
 	@git -C "$(ROOT_DIR)" diff --check
 
 lint:
 	@"$(VENV_PYTHON)" -m ruff check "$(ROOT_DIR)/chordflask" "$(ROOT_DIR)/flask" "$(ROOT_DIR)/tests" \
 		"$(ROOT_DIR)/scripts" "$(ROOT_DIR)/chordflask_base" "$(ROOT_DIR)/chordflask_maintain" \
 		"$(ROOT_DIR)/chordflask_btc" "$(ROOT_DIR)/chordflask_demucs" \
-		"$(ROOT_DIR)/chordflask_lyrics" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
+		"$(ROOT_DIR)/chordflask_lyrics" "$(ROOT_DIR)/chordflask_score" $(EXTRA_SRC_DIRS) $(EXTRA_TEST_DIRS)
 
 run:
 	@CHORDFLASK_VENV="$(VENV_DIR)" bash "$(ROOT_DIR)/scripts/chordflask.sh"
@@ -153,6 +158,15 @@ setup-demucs:
 
 demucs-check:
 	@bash "$(ROOT_DIR)/scripts/demucs-check.sh"
+
+setup-score:
+	@bash "$(ROOT_DIR)/scripts/setup-score.sh"
+
+score-check:
+	@bash "$(ROOT_DIR)/scripts/score-check.sh"
+
+score:
+	@bash "$(ROOT_DIR)/scripts/chordflask-score" $(SCORE_ARGS)
 
 standalone: check
 	@PATH="$(VENV_DIR)/bin:$$PATH" bash "$(ROOT_DIR)/flask/build_standalone.sh"

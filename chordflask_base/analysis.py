@@ -147,6 +147,16 @@ def _cached_source_identity(path, stamp):
     return identity
 
 
+def cached_media_source_identity(media_path):
+    """Reuse the verified digest only while the complete filesystem stamp matches."""
+    path = Path(media_path).resolve(strict=True)
+    stamp = _source_stamp(path.stat())
+    identity = _cached_source_identity(path, stamp)
+    if _source_stamp(path.stat()) != stamp:
+        raise RuntimeError("Media changed during source verification; retry")
+    return dict(identity)
+
+
 def canonical_source_status(chord_data, media_path, *, identity=None, cache_identity=False):
     """Return current/stale/legacy independently of schema validity/completeness.
 
@@ -175,11 +185,7 @@ def canonical_source_status(chord_data, media_path, *, identity=None, cache_iden
         if identity is not None:
             current = identity
         elif cache_identity:
-            path = Path(media_path).resolve(strict=True)
-            stamp = _source_stamp(path.stat())
-            current = _cached_source_identity(path, stamp)
-            if _source_stamp(path.stat()) != stamp:
-                raise RuntimeError("Media changed during source verification; retry")
+            current = cached_media_source_identity(media_path)
         else:
             current = media_source_identity(media_path)
     except (OSError, RuntimeError):

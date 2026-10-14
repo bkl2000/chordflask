@@ -14,6 +14,7 @@ User workflows belong in the feature guides rather than this developer map:
 - [lyrics generation and synchronized sheets](LYRICS.md);
 - [per-song Journal](JOURNAL.md);
 - [optional Demucs stems](DEMUCS.md);
+- [optional piano Score backend](SCORE_ARCHITECTURE.md);
 - [maintenance and storage operations](MAINTENANCE.md); and
 - [source/standalone installation differences](STANDALONE.md).
 
@@ -108,6 +109,11 @@ chordflask-demucs
    -> chordflask_demucs orchestration
    -> dedicated Demucs venv subprocess
    -> separate FLAC stem set under .chordflask
+
+chordflask-score + existing qm_barbeattracker rhythm
+   -> lightweight chordflask_score CLI
+   -> dedicated Score venv subprocess (Transkun/music21/Verovio)
+   -> independent MIDI/MusicXML/SVG/measure-map generation under .chordflask/scores
 ```
 
 ## Main components
@@ -172,6 +178,18 @@ Framework-free inspection, validation, migration, storage cleanup, stem
 cleanup, and installation diagnostics exposed as `chordflask-maintain`. It
 depends on the standard library and `chordflask_base`, not the Flask app or
 analysis engines, so maintenance does not load the media-analysis stack.
+
+### `chordflask_score`
+
+Optional piano producer with its own external runtime and portable helper.
+It reads the existing QM rhythm and original audio or current instrumental
+Demucs stems without changing analysis tracks or chord exports. Complete,
+validated Score generations use their own atomic completion manifests. The
+producer CLI/worker are excluded from the standalone. The lightweight reader
+validates persisted generations for desktop SVG display and follows the
+existing playback clock. Prepare delegates generation to the external runtime.
+Timing, persistence, security and setup are specified in
+[SCORE_ARCHITECTURE.md](SCORE_ARCHITECTURE.md).
 
 ### `scripts`
 

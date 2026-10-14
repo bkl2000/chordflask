@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Portable: preserve cwd; never infer repository paths from this script.
+VENV_DIR="${CHORDFLASK_SCORE_VENV:-${HOME}/.venvs/chordflask-score}"
+SCORE_BIN="${VENV_DIR}/bin/chordflask-score"
+if [[ ! -x "$SCORE_BIN" ]]; then
+    printf 'Score command missing: %s. Run make setup-score.\n' "$SCORE_BIN" >&2
+    exit 1
+fi
+exec "$SCORE_BIN" "$@"

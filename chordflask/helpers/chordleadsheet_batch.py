@@ -6,6 +6,8 @@ This CLI helper is independent of the Flask server. It discovers MP3/MP4/WebM
 media non-recursively, reuses valid analysis JSON, analyzes only missing files
 serially, and writes matching Markdown, PDF, ChordPro, and MIDI files into each
 ``.chordflask`` directory.
+Score MIDI is copied only from an existing validated active Score generation;
+an explicit Score MIDI export never creates analysis or runs inference.
 
 Exit codes: 0 all exports succeeded, 1 partial or file errors, 2 argparse or
 invalid invocation.
@@ -105,9 +107,12 @@ def add_export_options(parser):
     )
     parser.add_argument(
         "--format",
-        choices=("markdown", "pdf", "both", "chordpro", "midi", "all"),
+        choices=("markdown", "pdf", "both", "chordpro", "midi", "score-midi", "all"),
         default="both",
-        help="Leadsheet format to write (default: both)",
+        help=("Export format (default: both). midi: chord accompaniment; score-midi: "
+              "existing validated Transkun notes, error if unavailable, no analysis; "
+              "all: chord formats plus optional Score MIDI. Score MIDI ignores chord/display options "
+              "and needs no Transkun runtime"),
     )
     return parser
 
@@ -217,6 +222,21 @@ def export_file(media_path, args):
     analysis_action = None
     output_paths = []
     try:
+        export_format = getattr(args, "format", "both")
+        if export_format == "score-midi":
+            from ..score import read_score_midi
+
+            content = read_score_midi(media_path)
+            if content is None:
+                raise ValueError("Score MIDI is missing, stale or invalid (requires a CURRENT Score).")
+            output_path = os.path.join(file_repr.datapath, f"{file_repr.basename}-score.mid")
+            _write_atomic(output_path, content)
+            output_paths.append(output_path)
+            return {
+                "media": str(media_path), "ok": True, "analysis_action": None,
+                "analysis_path": json_path, "exported": True,
+                "output_paths": output_paths, "error": None,
+            }
         if not os.path.isfile(json_path):
             _analyze_media(media_path)
             if not os.path.isfile(json_path):
@@ -308,6 +328,14 @@ def export_file(media_path, args):
             output_path = f"{output_stem}.cho"
             _write_atomic(output_path, chordpro)
             output_paths.append(output_path)
+        if export_format == "all":
+            from ..score import read_score_midi
+
+            content = read_score_midi(media_path)
+            if content is not None:
+                output_path = os.path.join(file_repr.datapath, f"{file_repr.basename}-score.mid")
+                _write_atomic(output_path, content)
+                output_paths.append(output_path)
     except LeadsheetExportError:
         raise
     except Exception as error:

@@ -90,7 +90,7 @@ def clear_capability_cache() -> None:
         _capability_cache.clear()
 
 
-def _run_helper(action: str, command: list[str]) -> int:
+def _run_helper(action: str, command: list[str], *, env=None) -> int:
     logging.info("Starting %s preparation for %s", action, command[-1])
     try:
         result = subprocess.run(
@@ -101,6 +101,7 @@ def _run_helper(action: str, command: list[str]) -> int:
             text=True,
             check=False,
             shell=False,
+            env=env,
         )
     except OSError:
         logging.exception("Could not start %s preparation", action)
@@ -141,6 +142,44 @@ def run_btc_preparation(media_path: Path) -> int:
     return 0
 
 
+
+def score_command() -> Path | None:
+    runtime = Path(os.environ.get("CHORDFLASK_SCORE_VENV", "~/.venvs/chordflask-score")).expanduser()
+    helper = runtime / "bin/chordflask-score"
+    return helper if helper.is_file() and os.access(helper, os.X_OK) else None
+
+
+def score_capability() -> dict:
+    def probe():
+        helper = score_command()
+        if helper is None:
+            return _unavailable("The external Score runtime is not installed. Run make setup-score")
+        from chordflask_demucs.runtime import clean_environment
+
+        try:
+            result = subprocess.run(
+                [str(helper.parent / "python"), "-I", "-m", "chordflask_score.worker", "--check"],
+                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, check=False,
+                env=clean_environment(),
+            )
+            if result.returncode:
+                return _unavailable("Score runtime is incomplete. Run make setup-score")
+        except (OSError, subprocess.TimeoutExpired):
+            return _unavailable("Score runtime check failed. Run make setup-score")
+        return {"available": True, "cuda": False, "reason": ""}
+    return _cached_capability("score", probe)
+
+
+def run_score_preparation(media_path: Path) -> int:
+    helper = score_command()
+    if helper is None:
+        raise RuntimeError("The external Score runtime is not installed. Run make setup-score")
+    from chordflask_demucs.runtime import clean_environment
+
+    return _run_helper("Score", [str(helper.parent / "python"), "-I", str(helper), "--replace", str(media_path)],
+                       env=clean_environment())
+
+
 __all__ = [
     "CAPABILITY_TTL_SECONDS",
     "DEFAULT_LYRICS_VENV",
@@ -148,6 +187,9 @@ __all__ = [
     "clear_capability_cache",
     "lyrics_capability",
     "lyrics_command",
+    "score_capability",
+    "score_command",
+    "run_score_preparation",
     "run_btc_preparation",
     "run_lyrics_preparation",
 ]

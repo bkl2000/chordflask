@@ -2957,12 +2957,16 @@ def test_song_view_uses_existing_chord_area_and_desktop_only_switch():
     assert '<button id="gridViewButton"' in body
     assert '<button id="songViewButton"' in body
     assert '<button id="songViewButton" type="button" aria-pressed="false">Lyrics</button>' in body
-    assert "chordViewTitle.textContent = showSong ? 'Lyrics' : 'Grid'" in body
+    assert "chordViewTitle.textContent = showScore ? 'Score' : showSong ? 'Lyrics' : 'Grid'" in body
     assert '<div id="songSheet" hidden></div>' in callback
     assert body.index('<div id="songSheet" hidden></div>') < body.index('</aside>')
     assert re.search(r"#songViewSwitch\s*\{\s*display: none;\s*\}", narrow_rule)
     assert "window.matchMedia('(min-width: 801px)')" in body
-    assert "const usable = songViewAvailable && desktopSongView.matches" in controller
+    assert "(songViewAvailable && desktopSongView.matches)" in controller
+    assert "(scoreViewAvailable && desktopPrepare.matches)" in controller
+    assert "scoreViewButton.hidden = !scoreViewAvailable || !desktopPrepare.matches" in controller
+    assert '<div id="scoreSheet" hidden></div>' in callback
+    assert '<button id="scoreViewButton"' in body
     assert "songViewSwitch.hidden = !usable" in controller
     viewport = javascript_function(body, "handleSongViewportChange")
     assert "desktopSongView.matches" in viewport
@@ -3196,7 +3200,7 @@ def test_position_updates_preserve_song_dom_and_scroll():
 
     assert "renderBeatGrid(dataDict.display_grid, dataDict.active_index)" in renderer
     grid_renderer = javascript_function(body, "renderBeatGrid")
-    assert "if (songViewMode !== 'song')" in grid_renderer
+    assert "if (songViewMode === 'grid') callbackContainer.scrollTop = 0" in grid_renderer
     assert "callbackContainer.scrollTop = 0" in grid_renderer
     assert "songSheet" not in renderer
 

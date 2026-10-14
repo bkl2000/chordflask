@@ -89,6 +89,16 @@ renderBeatGrid(grid, 2);
 assert.equal(replacements, 4);
 assert.equal(callbackOutput.children.length, 8);
 assert(!callbackOutput.children.some(c => /[\[\]]/.test(c.children[0].textContent)));
+// Background Grid updates also preserve Score scrolling while maintaining playhead state.
+songViewMode = 'score'; callbackContainer.scrollTop = 73;
+renderBeatGrid(nextGrid, 8);
+assert.equal(callbackContainer.scrollTop, 73);
+const scoreBackgroundGrid = [...callbackOutput.children];
+renderBeatGrid(nextGrid, 9);
+assert.deepEqual(callbackOutput.children, scoreBackgroundGrid);
+assert(!scoreBackgroundGrid[0].classes.has('current-beat'));
+assert(scoreBackgroundGrid[1].classes.has('current-beat'));
+assert.equal(callbackContainer.scrollTop, 73);
 '''
     result = subprocess.run([node, '-e', script], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr

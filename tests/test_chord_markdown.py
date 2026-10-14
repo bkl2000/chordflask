@@ -861,8 +861,8 @@ def test_index_contains_export_control_and_download_contract():
     assert 'id="exportMenu"' in body
     assert 'aria-label="Export the current chord sheet"' in body
     assert 'Export <span aria-hidden="true">▾</span>' in body
-    assert body.count('data-export-format=') == 5
-    for label in ("Markdown", "PDF", "ChordPro", "MIDI", "All formats (.zip)"):
+    assert body.count('data-export-format=') == 6
+    for label in ("Markdown", "PDF", "ChordPro", "Chord MIDI", "Score MIDI", "All formats (.zip)"):
         assert f">{label}</button>" in body
     assert "#saveButton" in body
     assert "fetch('/download_chords'" in body

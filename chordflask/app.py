@@ -47,6 +47,8 @@ from .ffmpeg_runtime import require_system_ffmpeg
 from .media_library import preferred_media_files
 from .media_preparation import (
     btc_capability,
+    score_capability,
+    run_score_preparation,
     lyrics_capability,
     run_btc_preparation,
     run_lyrics_preparation,
@@ -207,6 +209,9 @@ class FlaskMP4App:
             capability_probe=btc_capability,
             runner=run_btc_preparation,
             label="BTC",
+        )
+        self.score_preparation = BackgroundPreparationManager(
+            capability_probe=score_capability, runner=run_score_preparation, label="Score",
         )
         self.allowed_roots = self._parse_allowed_roots(roots)
         self._resolve_ffmpeg()
@@ -534,6 +539,10 @@ class FlaskMP4App:
         self.app.add_url_rule('/prepare_btc', 'prepare_btc', self.prepare_btc, methods=['POST'])
         self.app.add_url_rule('/btc_preparation_status', 'btc_preparation_status', self.btc_preparation_status, methods=['GET'])
         self.app.add_url_rule('/refresh_btc', 'refresh_btc', self.refresh_btc, methods=['POST'])
+        self.app.add_url_rule('/score', 'score_metadata', self.score_metadata)
+        self.app.add_url_rule('/score/page/<int:page>', 'score_page', self.score_page)
+        self.app.add_url_rule('/prepare_score', 'prepare_score', self.prepare_score, methods=['POST'])
+        self.app.add_url_rule('/score_preparation_status', 'score_preparation_status', self.score_preparation_status)
         self.app.add_url_rule('/get_song_sheet', 'get_song_sheet', self.get_song_sheet)
         self.app.add_url_rule('/get_callback_output', 'get_callback_output', self.get_callback_output, methods=['GET'])
         self.app.add_url_rule('/set_position', 'set_position', self.set_position, methods=['POST'])
@@ -1110,7 +1119,7 @@ class FlaskMP4App:
             return error_response
         export_format = data.get("format", "all")
         if not isinstance(export_format, str) or export_format not in {
-            "markdown", "pdf", "chordpro", "midi", "all"
+            "markdown", "pdf", "chordpro", "midi", "score-midi", "all"
         }:
             return jsonify(error="Unknown chord export format."), 400
         state = self._client()
@@ -1118,6 +1127,16 @@ class FlaskMP4App:
             media_or_error = self._active_editing_media(state, data)
             if not isinstance(media_or_error, Path):
                 return media_or_error
+            if export_format == "score-midi":
+                from .score import read_score_midi
+
+                content = read_score_midi(media_or_error)
+                if content is None:
+                    return jsonify(error="Score MIDI is missing, stale or invalid (requires a CURRENT Score)."), 404
+                return send_file(
+                    BytesIO(content), mimetype="audio/midi", as_attachment=True,
+                    download_name=f"{media_or_error.stem}-score.mid",
+                )
             snapshot = state.player.chord_download_snapshot()
         if not snapshot["beats"]:
             return jsonify(error="The active analysis has no beat grid to export."), 409
@@ -1172,12 +1191,17 @@ class FlaskMP4App:
                 )
             chordpro = format_export_chordpro(sheet)
             pdf = ChordSheetPdfRenderer().render_markdown(markdown)
+            from .score import read_score_midi
+
             archive = BytesIO()
             with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
                 output.writestr(f"{export_stem}.mid", generate_chord_midi(snapshot))
                 output.writestr(f"{export_stem}.md", markdown.encode("utf-8"))
                 output.writestr(f"{export_stem}.pdf", pdf)
                 output.writestr(f"{export_stem}.cho", chordpro.encode("utf-8"))
+                score_midi = read_score_midi(media_or_error)
+                if score_midi is not None:
+                    output.writestr(f"{media_or_error.stem}-score.mid", score_midi)
             archive.seek(0)
         except Exception:  # noqa: BLE001 - preserve the all-or-nothing download contract
             logging.exception("Could not render the chord leadsheet export")
@@ -1328,6 +1352,82 @@ class FlaskMP4App:
         )
         return response
 
+
+    @staticmethod
+    def _score_ready(_state, media):
+        from .score import read_score
+        try:
+            read_score(media)
+            return True
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError):
+            return False
+
+    def prepare_score(self):
+        data, error = self._json_body()
+        if error:
+            return error
+        state = self._client()
+        with state.lock:
+            media = self._active_editing_media(state, data)
+            if not isinstance(media, Path):
+                return media
+        # Hashing and parsing complete generations must not hold playback's lock.
+        ready = self._score_ready(state, media)
+        return self._prepare_current_media(self.score_preparation, lambda _state, _media: ready)
+
+    def score_preparation_status(self):
+        state = self._client()
+        with state.lock:
+            if state.file_repr is None:
+                return jsonify(state="idle", available=False, message="")
+            media = Path(state.file_repr.get())
+        ready = self._score_ready(state, media)
+        status = self.score_preparation.status(media)
+        with state.lock:
+            if state.file_repr is None or Path(state.file_repr.get()) != media:
+                return jsonify(error="Active song changed."), 409
+        if ready:
+            status["state"] = "ready"
+        elif status["state"] == "ready":
+            status["state"] = "error"
+            status["message"] = "Score is missing, stale or invalid. Prepare it again."
+        response = jsonify(status)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    def score_metadata(self):
+        return self._score_response()
+
+    def score_page(self, page):
+        return self._score_response(page)
+
+    def _score_response(self, page=None):
+        from .score import read_page, read_score, read_score_midi
+        state = self._client()
+        with state.lock:
+            if state.file_repr is None:
+                return jsonify(error="No active media file."), 409
+            media = Path(state.file_repr.get())
+            if request.args.get("media") != str(media):
+                return jsonify(error="Active song changed."), 409
+        try:
+            if page is None:
+                _, metadata = read_score(media)
+                metadata["score_midi_available"] = read_score_midi(media) is not None
+                response = jsonify(metadata)
+            else:
+                content = read_page(media, page, request.args.get("generation"))
+                response = make_response(content)
+                response.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
+                response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+                response.headers["X-Content-Type-Options"] = "nosniff"
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError):
+            return jsonify(error="Score is missing, stale or invalid."), 404
+        with state.lock:
+            if state.file_repr is None or Path(state.file_repr.get()) != media:
+                return jsonify(error="Active song changed."), 409
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     def prepare_stems(self):
         """Start background Demucs stem preparation for the active media.

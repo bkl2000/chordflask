@@ -522,7 +522,7 @@ def test_helper_imports_do_not_load_flask():
     probe = (
         "import sys\n"
         "import chordflask.helpers.chordleadsheet_batch as chordleadsheet_batch\n"
-        "for name in ('flask', 'moviepy', 'vamp', 'librosa'):\n"
+        "for name in ('flask', 'moviepy', 'vamp', 'librosa', 'chordflask_score', 'chordflask_demucs'):\n"
         "    assert name not in sys.modules, name\n"
         "print('PASS')\n"
     )

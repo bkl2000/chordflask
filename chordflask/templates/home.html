@@ -479,6 +479,9 @@
 
     #lyricsVersionSelect[hidden],
     #songViewSwitch[hidden],
+    #scoreSheet[hidden],
+    #scoreViewButton[hidden],
+    #songViewButton[hidden],
     #songSheet[hidden] {
       display: none;
     }
@@ -512,6 +515,15 @@
 
     .chord-panel.song-view-active [data-grid-only] {
       display: none !important;
+    }
+
+    .chord-panel.score-view-active .display-tools { display: none; }
+    #scoreSheet { padding: 12px; background: #fff; color: #222; }
+    #scoreSheet object { display: block; width: 100%; height: auto; aspect-ratio: 0.707; }
+    .score-pages { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+    .score-pages button { width: auto; }
+    @media (max-width: 1023px) {
+      #scoreSheet, #scoreViewButton { display: none !important; }
     }
 
     #songSheet {
@@ -2353,6 +2365,7 @@
               <span id="songViewSwitch" role="group" aria-label="Chord panel view" hidden>
                 <button id="gridViewButton" type="button" aria-pressed="true">Grid</button>
                 <button id="songViewButton" type="button" aria-pressed="false">Lyrics</button>
+                <button id="scoreViewButton" type="button" aria-pressed="false" hidden>Score</button>
               </span>
               <select id="lyricsVersionSelect" aria-label="Lyrics version" hidden></select>
             </span>
@@ -2417,7 +2430,9 @@
                     <button class="prepare-action export-action" role="menuitem" type="button"
                             data-export-format="chordpro">ChordPro</button>
                     <button class="prepare-action export-action" role="menuitem" type="button"
-                            data-export-format="midi">MIDI</button>
+                            data-export-format="midi">Chord MIDI</button>
+                    <button id="scoreMidiExport" class="prepare-action export-action" role="menuitem" type="button"
+                            data-export-format="score-midi" hidden>Score MIDI</button>
                     <button class="prepare-action export-action" role="menuitem" type="button"
                             data-export-format="all">All formats (.zip)</button>
                   </span>
@@ -2448,6 +2463,12 @@
                       <span class="prepare-check" aria-hidden="true" hidden>✓</span>
                       <span class="prepare-name">BTC</span>
                       <span id="prepareBtcState" class="prepare-state">Prepare</span>
+                    </button>
+                    <button id="prepareScoreButton" class="prepare-action" role="menuitem"
+                            type="button" hidden onclick="prepareCurrent('score')">
+                      <span class="prepare-check" aria-hidden="true" hidden>✓</span>
+                      <span class="prepare-name">Score</span>
+                      <span id="prepareScoreState" class="prepare-state">Prepare</span>
                     </button>
                     <button id="prepareStemsButton" class="prepare-action" role="menuitem"
                             type="button" hidden title="Prepare vocal and instrument stems for the current song"
@@ -2510,6 +2531,7 @@
         <div id="callbackContainer">
           <div id="callbackOutput" role="list" aria-label="Chord beats"></div>
           <div id="songSheet" hidden></div>
+          <div id="scoreSheet" hidden></div>
           <div id="editGridContainer" hidden>
             <div id="editGrid"></div>
           </div>
@@ -2760,6 +2782,7 @@
     })();
   </script>
 
+  <script src="{{ url_for('static', filename='score.js') }}"></script>
   <script>
     let dirnameInput = document.getElementById('dirname');
     let videoPlayer = document.getElementById('videoPlayer');
@@ -2923,12 +2946,28 @@
       lyricsVersionSelect.hidden = !desktopSongView.matches || songViewMode !== 'song' || lyricsVersions.length < 2;
     }
 
+    const scoreViewButton = document.getElementById('scoreViewButton');
+    const scoreSheet = document.getElementById('scoreSheet');
+    let scoreViewAvailable = false;
+    const scoreDisplay = new ScoreDisplay(scoreSheet, () => video.currentTime, available => {
+      scoreViewAvailable = available;
+      document.getElementById('scoreMidiExport').hidden = !available || !scoreDisplay.metadata?.score_midi_available;
+      if (available) prepareActions.score.state = 'ready';
+      else if (prepareActions.score.state === 'ready') prepareActions.score.state = 'error';
+      updatePrepareButtons();
+      if (!available && songViewMode === 'score') songViewMode = 'grid';
+      if (available && preferredSongViewMode === 'score' && desktopPrepare.matches && !editMode) {
+        songViewMode = 'score';
+      }
+      applySongViewMode();
+      if (songViewMode === 'score') scoreDisplay.sync();
+    });
     let songViewAvailable = false;
     let songViewMode = 'grid';
     let preferredSongViewMode = (
       localStorage.getItem(storageKeys.preferredSongView) === 'lyrics'
         ? 'song'
-        : 'grid'
+        : localStorage.getItem(storageKeys.preferredSongView) === 'score' ? 'score' : 'grid'
     );
     let songSheetCache = null;
     let songSheetRequestInFlight = false;
@@ -2974,7 +3013,15 @@
     let stemMixerStem = null;
     let prepareTransientStatus = '';
     let prepareStatusTimer = null;
+    const prepareScoreButton = document.getElementById('prepareScoreButton');
     const prepareActions = {
+      score: {
+        label: 'Score', button: prepareScoreButton,
+        check: prepareScoreButton.querySelector('.prepare-check'),
+        status: document.getElementById('prepareScoreState'),
+        startUrl: '/prepare_score', statusUrl: '/score_preparation_status',
+        available: false, state: 'idle', pollTimer: null, requestInFlight: false,
+      },
       lyrics: {
         label: 'Lyrics', button: prepareLyricsButton,
         check: prepareLyricsButton.querySelector('.prepare-check'),
@@ -3253,8 +3300,12 @@
     }
 
     function updateSongViewControl() {
-      const usable = songViewAvailable && desktopSongView.matches;
+      const usable = (songViewAvailable && desktopSongView.matches) || (scoreViewAvailable && desktopPrepare.matches);
       songViewSwitch.hidden = !usable;
+      songViewButton.hidden = !songViewAvailable;
+      scoreViewButton.hidden = !scoreViewAvailable || !desktopPrepare.matches;
+      scoreViewButton.disabled = editMode || editRequestInFlight;
+      scoreViewButton.setAttribute('aria-pressed', String(songViewMode === 'score'));
       lyricsVersionSelect.hidden = !desktopSongView.matches || songViewMode !== 'song' || lyricsVersions.length < 2;
       gridViewButton.setAttribute('aria-pressed', String(songViewMode === 'grid'));
       songViewButton.setAttribute('aria-pressed', String(songViewMode === 'song'));
@@ -3264,20 +3315,29 @@
 
     function applySongViewMode() {
       const showSong = songViewMode === 'song';
-      if (showSong) setExportMenuOpen(false);
-      chordPanel.classList.toggle('song-view-active', showSong);
-      chordViewTitle.textContent = showSong ? 'Lyrics' : 'Grid';
-      callbackOutput.hidden = showSong || editMode;
-      document.getElementById('editGridContainer').hidden = showSong || !editMode;
-      document.getElementById('editTools').hidden = showSong || !editMode;
+      const showScore = songViewMode === 'score';
+      if (showSong || showScore) setExportMenuOpen(false);
+      chordPanel.classList.toggle('song-view-active', showSong || showScore);
+      chordPanel.classList.toggle('score-view-active', showScore);
+      chordViewTitle.textContent = showScore ? 'Score' : showSong ? 'Lyrics' : 'Grid';
+      callbackOutput.hidden = showSong || showScore || editMode;
+      document.getElementById('editGridContainer').hidden = showSong || showScore || !editMode;
+      document.getElementById('editTools').hidden = showSong || showScore || !editMode;
       songSheet.hidden = !showSong;
+      scoreSheet.hidden = !showScore;
       updateSongViewControl();
     }
 
-    function resetSongView(available) {
+    function resetSongView(available, resetScore = true) {
+      if (resetScore) {
+        scoreViewAvailable = false;
+        document.getElementById('scoreMidiExport').hidden = true;
+        scoreDisplay.reset();
+        if (lyricsMedia && desktopPrepare.matches) scoreDisplay.load(lyricsMedia);
+      }
       songViewGeneration += 1;
       songViewAvailable = available === true;
-      songViewMode = (
+      songViewMode = !resetScore && songViewMode === 'score' ? 'score' : (
         preferredSongViewMode === 'song'
         && songViewAvailable
         && desktopSongView.matches
@@ -3450,6 +3510,15 @@
     }
 
     function setSongViewMode(mode) {
+      if (mode === 'score') {
+        if (!scoreViewAvailable || !desktopPrepare.matches || editMode || editRequestInFlight) return;
+        preferredSongViewMode = 'score';
+        localStorage.setItem(storageKeys.preferredSongView, 'score');
+        songViewMode = 'score';
+        applySongViewMode();
+        scoreDisplay.sync();
+        return;
+      }
       if (mode === 'song') {
         if (
           !songViewAvailable || !desktopSongView.matches
@@ -3467,7 +3536,7 @@
       }
       preferredSongViewMode = 'grid';
       localStorage.setItem(storageKeys.preferredSongView, 'grid');
-      const returningToGrid = songViewMode === 'song';
+      const returningToGrid = songViewMode !== 'grid';
       songViewMode = 'grid';
       applySongViewMode();
       if (returningToGrid) syncPlaybackPosition(true);
@@ -3543,7 +3612,8 @@
     }
 
     function handleSongViewportChange() {
-      const nextMode = (
+      if (desktopPrepare.matches && lyricsMedia && scoreDisplay.media !== lyricsMedia) scoreDisplay.load(lyricsMedia);
+      const nextMode = preferredSongViewMode === 'score' && scoreViewAvailable && desktopPrepare.matches ? 'score' : (
         preferredSongViewMode === 'song'
         && songViewAvailable
         && desktopSongView.matches
@@ -3552,10 +3622,11 @@
         updateSongViewControl();
         return;
       }
-      const returningToGrid = songViewMode === 'song';
+      const returningToGrid = songViewMode !== 'grid';
       songViewMode = nextMode;
       applySongViewMode();
       if (songViewMode === 'song') loadSongSheet();
+      if (songViewMode === 'score') scoreDisplay.sync();
       if (returningToGrid || songViewMode === 'song') syncPlaybackPosition(true);
     }
 
@@ -4544,11 +4615,13 @@
         updatePrepareButtons();
         return;
       }
+      const statusMedia = lyricsMedia;
       fetch(action.statusUrl, {
         headers: { 'Cache-Control': 'no-store' }
       })
       .then(response => response.ok ? response.json() : null)
       .then(data => {
+        if (name === 'score' && statusMedia !== lyricsMedia) return;
         if (!data) {
           updatePrepareButtons();
           return;
@@ -4597,6 +4670,7 @@
       const action = prepareActions[name];
       if (!desktopPrepare.matches) return;
       if (!loadedMediaPath || action.requestInFlight || action.state === 'ready') return;
+      const actionMedia = lyricsMedia;
       action.requestInFlight = true;
       updatePrepareButtons();
       fetch(action.startUrl, {
@@ -4606,9 +4680,10 @@
       })
       .then(response => response.json().then(data => ({ ok: response.ok, data })))
       .then(({ ok, data }) => {
+        if (name === 'score' && actionMedia !== lyricsMedia) return;
         if (!ok) {
           console.error(`${action.label} preparation rejected:`, data.error || data.status);
-          showPrepareToolbarStatus(`${action.label} preparation unavailable`);
+          showPrepareToolbarStatus(name === 'score' ? (data.error || 'Score runtime unavailable') : `${action.label} preparation unavailable`);
           action.state = data.status === 'unavailable' ? 'idle' : 'error';
           return;
         }
@@ -4641,6 +4716,11 @@
     function prepareStems() { prepareCurrent('stems'); }
 
     function finishPreparation(name) {
+      if (name === 'score') {
+        scoreDisplay.load(lyricsMedia);
+        updatePrepareButtons();
+        return;
+      }
       const preparationMedia = lyricsMedia;
       const action = prepareActions[name];
       if (action.pollTimer) clearTimeout(action.pollTimer);
@@ -4660,8 +4740,8 @@
         if (name === 'lyrics') {
           if (preparationMedia !== lyricsMedia) return;
           lyricsMedia = data.mp4_file || lyricsMedia;
-        updateLyricsVersions(data.lyrics_versions);
-        resetSongView(data.song_view_available);
+          updateLyricsVersions(data.lyrics_versions);
+          resetSongView(data.song_view_available, false);
         } else if (name === 'btc') {
           updateTrackSelectors(data);
         } else {
@@ -4981,6 +5061,11 @@
       // switch songs, before its load response can arrive.
       songViewGeneration += 1;
       songSheetRequestInFlight = false;
+      scoreDisplay.reset();
+      scoreViewAvailable = false;
+      document.getElementById('scoreMidiExport').hidden = true;
+      if (songViewMode === 'score') songViewMode = 'grid';
+      applySongViewMode();
 
       localStorage.setItem(storageKeys.dirname, dirname);
       localStorage.setItem(storageKeys.filter, document.getElementById('matchstring').value.trim());
@@ -5091,6 +5176,9 @@
         updateReanalyzeButton();
         updateEditControls();
         updateNavigationButtons();
+        if (!loadIntentQueue.length && desktopPrepare.matches && lyricsMedia && scoreDisplay.media !== lyricsMedia) {
+          scoreDisplay.load(lyricsMedia);
+        }
         processNextLoadIntent();
       });
     }
@@ -5667,7 +5755,7 @@
         }
         callbackOutput.replaceChildren(fragment);
         displayedGridKey = key;
-        if (songViewMode !== 'song') callbackContainer.scrollTop = 0;
+        if (songViewMode === 'grid') callbackContainer.scrollTop = 0;
       }
       const next = gridCells.get(activeIndex) || null;
       if (next === activeGridCell) return;
@@ -5818,6 +5906,7 @@
         return;
       }
       updateJournalHighlight();
+      scoreDisplay.sync();
       const gridMode = isDesktopChordGrid() ? 'desktop' : 'compact';
       if (playbackFallbackData && playbackFallbackData.gridMode !== gridMode) {
         invalidatePlaybackFallbackGeneration();
@@ -6252,6 +6341,8 @@
       setPreferFlats(preferFlats);
       gridViewButton.addEventListener('click', () => setSongViewMode('grid'));
       songViewButton.addEventListener('click', () => setSongViewMode('song'));
+      scoreViewButton.addEventListener('click', () => setSongViewMode('score'));
+      desktopPrepare.addEventListener('change', handleSongViewportChange);
       desktopSongView.addEventListener('change', handleSongViewportChange);
       resetSongView(false);
       reanalyzeButton.addEventListener('click', reanalyzeCurrentFile);

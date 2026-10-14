@@ -6,6 +6,7 @@ chordflask-demucs
 chordflask-export
 chordflask-maintain
 chordflask-genlyrics
+chordflask-score
 VERSION
 README.md
 LICENSE

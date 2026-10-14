@@ -72,6 +72,11 @@ def test_source_only_lyrics_generator_is_rejected():
     assert module.find_offenders(_listing(*names)) == list(names)
 
 
+def test_score_producer_and_heavy_dependencies_are_rejected():
+    names = ("chordflask_score.cli", "chordflask_score.worker", "transkun", "verovio._verovio", "pretty_midi")
+    assert module.find_offenders(_listing(*names)) == list(names)
+
+
 def test_source_only_romanization_dependencies_are_rejected():
     names = ("pythainlp", "pythainlp.transliterate", "onnxruntime", "tltk.nlp")
     assert module.find_offenders(_listing(*names)) == list(names)
@@ -109,3 +114,9 @@ def test_packaging_rejects_research_and_external_binaries():
         "imageio_ffmpeg/binaries/ffmpeg-linux64-v7", "vendor/vamp/linux-x86_64/chordino.so",
     )
     assert module.find_offenders(_listing(*names)) == list(names)
+
+
+def test_score_readers_are_allowed():
+    names = ("music21", "music21.midi", "chordflask_score", "chordflask_score.storage", "chordflask_score.svg",
+             "chordflask_score.timing", "chordflask_score.notation", "chordflask_score.runtime")
+    assert module.find_offenders(_listing(*names)) == []

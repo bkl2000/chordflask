@@ -16,6 +16,7 @@ chordflask-export = "chordflask.helpers.export_cli:main"
 chordflask-genlyrics = "chordflask_lyrics.cli:main"
 chordflask-maintain = "chordflask_maintain.cli:main"
 chordflask-demucs = "chordflask_demucs.cli:main"
+chordflask-score = "chordflask_score.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -32,6 +33,8 @@ include = [
     "chordflask_lyrics.*",
     "chordflask_maintain",
     "chordflask_maintain.*",
+    "chordflask_score",
+    "chordflask_score.*",
 ]
 namespaces = false
 
@@ -43,6 +46,7 @@ dependencies = {file = ["requirements-core.txt"]}
 chordflask_btc = ["model/BTC-LICENSE.txt"]
 chordflask = [
     "templates/*.html",
+    "static/*.js",
     "assets/fonts/*.ttf",
     "assets/fonts/LICENSE.txt",
 ]

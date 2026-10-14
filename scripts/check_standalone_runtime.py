@@ -20,10 +20,11 @@ import sys
 
 # Anchored so ``chordflask_demucs`` and the scipy/sklearn
 # ``...array_api_compat.torch`` shims are not mistaken for the heavy runtime.
-HEAVY_PACKAGE = re.compile(r"^(?:torch|torchaudio|torchcodec|demucs)(?:[./-]|$)")
+HEAVY_PACKAGE = re.compile(r"^(?:torch|torchaudio|torchcodec|demucs|transkun|verovio|pretty_midi)(?:[./-]|$)")
 MODEL_WEIGHT = re.compile(r"\.(?:pt|pth|th|onnx|safetensors|ckpt)$")
 MODEL_CACHE = re.compile(r"(?:^|/)(?:htdemucs|htdemucs_ft|mdx_extra)(?:[./-]|$)")
 EXTERNAL_LYRICS_PACKAGE = re.compile(r"^chordflask_lyrics(?:[./-]|$)")
+EXTERNAL_SCORE_PACKAGE = re.compile(r"^chordflask_score[./-](?:cli|worker)(?:[./-]|$)")
 BTC_MODEL_PACKAGE = re.compile(r"^chordflask_btc[./-]model(?:[./-]|$)")
 PRIVATE_RESEARCH = re.compile(r"^(?:chordflask_v4|training|listening_lab|listening|[.]agents)(?:[./-]|$)")
 PROHIBITED_BINARY = re.compile(r"(?:imageio_ffmpeg/binaries/[^/]*ffmpeg[^/]*|(?:vamp_plugins|vendor/vamp)/.*[.]so)$")
@@ -58,6 +59,7 @@ def find_offenders(listing: str) -> list[str]:
             or MODEL_WEIGHT.search(name)
             or MODEL_CACHE.search(name)
             or EXTERNAL_LYRICS_PACKAGE.match(name)
+            or EXTERNAL_SCORE_PACKAGE.match(name)
             or BTC_MODEL_PACKAGE.match(name)
             or PRIVATE_V3_PACKAGE.match(name)
             or PRIVATE_RESEARCH.match(name)

@@ -26,6 +26,7 @@ def test_pyproject_keeps_version_file_canonical():
     assert 'version = {file = ["VERSION"]}' in text
     assert '[tool.setuptools.package-data]' in text
     assert '"templates/*.html"' in text
+    assert '"static/*.js"' in text
     assert '"assets/fonts/*.ttf"' in text
     assert '"assets/fonts/LICENSE.txt"' in text
 
@@ -76,3 +77,9 @@ def test_installed_distribution_uses_version_and_entry_points():
     for name in ENTRY_POINTS:
         assert (Path(sys.executable).parent / name).is_file()
         assert callable(scripts[name].load())
+
+
+def test_standalone_includes_score_javascript():
+    script = (REPO_ROOT / "flask/build_standalone.sh").read_text()
+    assert '--add-data "${PROJECT_ROOT}/chordflask/static:chordflask/static"' in script
+    assert (REPO_ROOT / "chordflask/static/score.js").is_file()

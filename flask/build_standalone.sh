@@ -97,10 +97,16 @@ pyinstaller \
     --exclude-module=chordflask_v3 \
     --exclude-module=chordflask_btc.model \
     --exclude-module=chordflask_lyrics \
+    --exclude-module=chordflask_score.cli \
+    --exclude-module=chordflask_score.worker \
+    --exclude-module=pretty_midi \
+    --exclude-module=transkun \
+    --exclude-module=verovio \
     --exclude-module=pythainlp \
     --exclude-module=onnxruntime \
     --exclude-module=tltk \
     --exclude-module=chordflask.helpers.chordleadsheet_batch \
+    --add-data "${PROJECT_ROOT}/chordflask/static:chordflask/static" \
     --add-data "${PROJECT_ROOT}/chordflask/templates:chordflask/templates" \
     --add-data "${PROJECT_ROOT}/chordflask/assets:chordflask/assets" \
     "${PROJECT_ROOT}/chordflask/__main__.py"

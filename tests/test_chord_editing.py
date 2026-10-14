@@ -1332,8 +1332,8 @@ def test_edit_tools_visible_only_in_active_grid_edit_mode():
 
     body = client.get("/").get_data(as_text=True)
 
-    # Song view and leaving Edit mode both keep the tools hidden.
-    assert "document.getElementById('editTools').hidden = showSong || !editMode;" in body
+    # Lyrics/Score views and leaving Edit mode keep the tools hidden.
+    assert "document.getElementById('editTools').hidden = showSong || showScore || !editMode;" in body
     assert "document.getElementById('editTools').hidden = true;" in body
 
     editing_state = body[body.index("function applyChordEditingState(data)"):]

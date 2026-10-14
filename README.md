@@ -24,7 +24,7 @@ Desktop playback with the chord Grid and optional stems.
 
 The standalone stays deliberately lean while providing the complete core
 playback workflow and built-in Chordino chord and QM beat/bar analysis. Heavy
-optional producers such as Lyrics generation, BTC, and Demucs remain in
+optional producers such as Lyrics generation, BTC, Demucs, and Score remain in
 separate external runtimes rather than becoming core or standalone
 dependencies. When those runtimes are installed and usable, ChordFlask detects
 their capabilities and reaches them through narrow helper/subprocess
@@ -60,9 +60,19 @@ Optional workflows extend this further. Add synchronized lyrics from local LRC f
 
 On desktop (1024 px and wider), a compact **Prepare** menu can run the
 available optional producers for the currently loaded song. Depending on the
-installation, it can prepare Lyrics, BTC analysis, or Demucs stems. Only
-installed capabilities are shown. Tablet and phone layouts have no Prepare
+installation, it can prepare Lyrics, BTC analysis, Demucs stems, or an
+experimental piano Score. Only installed capabilities are shown. Tablet and phone layouts have no Prepare
 controls; directory and batch preparation remains a CLI workflow.
+
+Prepared piano scores add **Score** to the desktop **Grid | Lyrics | Score**
+view switch. Two staves follow playback by measure, with automatic scrolling
+only on notation line changes and automatic page selection. Standalone and
+`.deb` players can display valid prepared scores without installing the Score
+runtime. To generate them, run `make setup-score` from a source checkout and
+use **Prepare → Score** explicitly. Score is **Alpha / experimental** and
+requires existing QM rhythm data. Transkun sometimes produces musically convincing
+MIDI transcriptions, but the generated notation is often rhythmically cluttered
+and not reliably readable as music. See [Score setup, timing and limits](docs/SCORE_ARCHITECTURE.md).
 
 At a glance, ChordFlask lets you:
 
@@ -369,20 +379,29 @@ chordflask-export --format pdf song.mp3
 chordflask-export --format markdown song.mp3
 chordflask-export --format chordpro song.mp3
 chordflask-export --format midi song.mp3
+chordflask-export --format score-midi song.mp3
 chordflask-export --format all song.mp3
 ```
 
 - Markdown is an editable leadsheet representation.
 - PDF is a printable A4 layout.
 - ChordPro is a reusable chord-grid or lyric-bearing song sheet.
-- MIDI is an editable piano chord sequence from the displayed beat grid, with
+- Chord MIDI (`--format midi`) is an editable piano chord sequence from the displayed beat grid, with
   a tempo map matching the analyzed beat times. It retains the selected track,
   edits, and transposition; it is not a full music transcription.
+- Score MIDI (`--format score-midi`) contains Transkun's recognized individual
+  notes from the valid active Score generation, saved as `<song>-score.mid`.
+  It copies the original MIDI without generating analysis or transcription;
+  missing, stale or invalid Score data produce an error.
 
-The browser **Export** menu offers Markdown, PDF, ChordPro, MIDI, or **All formats
+The browser **Export** menu offers Markdown, PDF, ChordPro, Chord MIDI, or **All formats
 (.zip)**. Individual formats download directly; only **All formats** produces a
-ZIP. Browser exports may include existing local Lyrics and romanization;
-`chordflask-export` remains chord-only. Journal entries are not exported. The
+ZIP. **Score MIDI** is shown only for a valid current Score generation. **All
+formats** includes the previous files plus Score MIDI when available; the CLI's
+`--format all` does the same for separate files, ignoring unavailable Score MIDI.
+Existing Score MIDI exports need no Transkun runtime, including in standalone
+and `.deb` players. Browser exports may include existing local Lyrics and romanization;
+`chordflask-export` does not include lyrics. Journal entries are not exported. The
 CLI prints each output path and reports when it had to create missing analysis.
 Options, track selection, naming, and storage locations are documented in
 [docs/ANALYSIS.md](docs/ANALYSIS.md#command-line-export).

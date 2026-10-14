@@ -1,0 +1,9 @@
+# Optional runtime only; never add these requirements to core/standalone.
+transkun==2.0.1
+torch==2.10.0
+torchaudio==2.10.0
+music21==10.5.0
+verovio==6.3.0
+pretty_midi==0.2.11.post0
+# The official Transkun console entry point still imports pkg_resources.
+setuptools==80.9.0

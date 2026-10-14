@@ -16,7 +16,7 @@ def test_export_help_is_user_facing(capsys):
         export_cli.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "--format {markdown,pdf,both,chordpro,midi,all}" in out
+    assert "--format {markdown,pdf,both,chordpro,midi,score-midi,all}" in out
     assert "chordflask-export" in out
 
 

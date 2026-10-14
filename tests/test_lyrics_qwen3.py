@@ -215,6 +215,7 @@ def test_worker_bridge_validates_results_and_reports_input_language(tmp_path, mo
 def test_gui_switch_and_late_responses_preserve_playback():
     import shutil
     import subprocess
+    from pathlib import Path
     from test_flask_app import javascript_function
 
     node = shutil.which("node")
@@ -232,9 +233,13 @@ const handlers = {};
 const select = { value: '', hidden: true, children: [],
   replaceChildren() { this.children = []; }, appendChild(o) { this.children.push(o); },
   addEventListener(name, callback) { handlers[name] = callback; } };
-const document = { getElementById: () => select, createElement: () => ({}) };
+const scoreContainer = { replaceChildren() {} };
+const scoreButton = { setAttribute() {} };
+const document = { getElementById: id => id === 'scoreSheet' ? scoreContainer
+  : id === 'scoreViewButton' ? scoreButton : select, createElement: () => ({}) };
 const window = { addEventListener() {} };
 const desktopSongView = { matches: true };
+const desktopPrepare = { matches: true };
 const video = { currentTime: 42.5, paused: false };
 let songSheetCache = null, songSheetRequestInFlight = false, songViewGeneration = 0;
 let songViewMode = 'song';
@@ -249,7 +254,8 @@ function renderSongSheet(data) { rendered = data; }
 function renderSongError(error) { throw new Error(error); }
 function appendSongText() {}
 '''
-    script += declarations + "\n" + functions
+    score_js = (Path(__file__).resolve().parents[1] / "chordflask/static/score.js").read_text()
+    script += score_js + "\n" + declarations + "\n" + functions
     script += r'''
 (async () => {
   updateLyricsVersions([]); assert.equal(select.hidden, true);

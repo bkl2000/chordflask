@@ -18,12 +18,12 @@ These are kept as usable command-line tools and have smoke-test coverage.
 
 - `export_cli.py` - the `chordflask-export` command. It exports one media file
   or a whole directory as playable Markdown, print-ready A4 PDF, or lyric-free
-  ChordPro leadsheets.
+  ChordPro leadsheets, Chord MIDI, or existing Score MIDI.
   It reuses valid analysis JSON, analyzes only missing files serially, and
-  writes matching `.chordflask/<name>-chords-<track>.md`, `.pdf`, and/or `.cho`
+  writes matching `.chordflask/<name>-chords-<track>.md`, `.pdf`, `.cho`, and/or `.mid`
   files. One failing file does not stop later files. Exit code 0 means all exports
   succeeded, 1 means partial or per-file errors, and 2 means invalid invocation
-  or a missing directory. Options: `--format markdown|pdf|both|chordpro|all` (default
+  or a missing directory. Options: `--format markdown|pdf|both|chordpro|midi|score-midi|all` (default
   `both`), `--chord-track auto|original|edited|TRACK_ID` (default `auto` =
   Edited when present, otherwise Chordino), `--rhythm-track TRACK_ID` (default
   `qm_barbeattracker`), `--transpose N`, `--sharps`, `--unicode`,
@@ -36,7 +36,24 @@ These are kept as usable command-line tools and have smoke-test coverage.
 
   ```bash
   scripts/chordflask-export /path/to/collection
+  scripts/chordflask-export --format midi SONG.mp3
+  scripts/chordflask-export --format score-midi SONG.mp3
+  scripts/chordflask-export --format all /path/to/collection
   ```
+
+  `--format midi` preserves the existing Chord MIDI accompaniment from the
+  selected chord beat grid; it does not transcribe performed individual notes.
+  `--format score-midi` copies Transkun's original MIDI from the valid active
+  Score manifest to `.chordflask/<name>-score.mid`. It never creates analysis
+  or runs inference and needs no installed Transkun runtime. Missing, stale or
+  invalid Score data produce a clear per-file error. Chord track, transposition
+  and other chord display options do not alter this original MIDI.
+  `--format all` writes the previous four formats plus optional Score MIDI;
+  absent or invalid Score MIDI is skipped without a failure, including in
+  directories with mixed availability. Directory traversal is non-recursive;
+  explicit Score MIDI continues after per-file errors and exits 1 if any fail.
+  Score is **Alpha / experimental**; transcription MIDI and generated notation
+  have different quality limits. See [Score architecture and limits](SCORE_ARCHITECTURE.md).
 
 - `chordflask_lyrics/` - the externally runnable
   `chordflask-genlyrics` command. Its default lyrics priority is

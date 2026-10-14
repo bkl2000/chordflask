@@ -46,8 +46,9 @@ def test_flask_app_import_is_producer_lazy():
         from chordflask.app import FlaskMP4App
 
         leaked = [
-            name for name in ("torch", "demucs", "chordflask_demucs")
-            if name in sys.modules
+            name for name in sys.modules
+            if name in {"torch", "demucs", "chordflask_demucs", "chordflask_score"}
+            or name.startswith(("torch.", "demucs.", "chordflask_demucs.", "chordflask_score."))
         ]
         assert leaked == [], leaked
         assert FlaskMP4App is not None
