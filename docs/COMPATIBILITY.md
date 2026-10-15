@@ -73,6 +73,41 @@ To add support for a new Python version:
 5. Optionally add a version-specific constraints file when the combination has
    been reviewed across a full clean setup.
 
+## Optional Python 3.12 with uv
+
+The core supports Python 3.12–3.14, but Score requires **Python 3.12**;
+Lyrics V2/Qwen3 supports **3.10–3.13**, preferably 3.12. On systems such as
+Ubuntu 26.04 or Debian 13, the default Python may differ from these requirements.
+
+If a suitable interpreter is unavailable, you can optionally install Python
+3.12 separately with `uv`. Install uv yourself following its
+[official installation guide](https://docs.astral.sh/uv/getting-started/installation/),
+then explicitly install Python as described in the
+[uv Python guide](https://docs.astral.sh/uv/guides/install-python/):
+
+```bash
+uv python install 3.12
+```
+
+From the source checkout, run the setup for the runtime you need:
+
+```bash
+CHORDFLASK_SCORE_PYTHON="$(uv python find 3.12)" make setup-score
+CHORDFLASK_QWEN3_PYTHON="$(uv python find 3.12)" make setup-qwen3-asr
+```
+
+These interpreter selections apply when creating a new venv. Existing runtime
+venvs (`~/.venvs/chordflask-score` and `~/.venvs/chordflask-qwen3-asr` by default)
+keep their own Python version; rerunning setup does not switch it. If an
+existing venv uses an unsuitable Python, choose a new directory with
+`CHORDFLASK_SCORE_VENV` or `CHORDFLASK_QWEN3_VENV` alongside the corresponding
+interpreter selection. Keep that VENV setting for later checks and runtime use.
+
+uv is a voluntary alternative, not a ChordFlask dependency. ChordFlask does not
+automatically install Python or uv. This workflow leaves the system Python
+unchanged; an already available compatible interpreter can also be selected
+directly via the corresponding `*_PYTHON` variable.
+
 ## Optional BTC Runtime
 
 BTC has a separate Python 3.12–3.14 policy and uses one PyTorch 2.10.0/cu128

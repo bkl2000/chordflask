@@ -73,7 +73,9 @@ time, following existing Demucs conventions; no unexplained timing offset is add
 `make setup-score` installs a self-contained producer in the separate runtime;
 `make score-check` probes versions, weights, CUDA availability and resource
 loading without inference/downloads. `make score SCORE_ARGS="..."` invokes the
-portable installed helper. The Python 3.12 runtime is the verified target.
+portable installed helper. Score requires Python 3.12. If it is unavailable,
+see [optional Python 3.12 installation with uv](COMPATIBILITY.md#optional-python-312-with-uv),
+including how existing runtime venvs are handled.
 CPU and CUDA are explicit devices; `auto` selects available CUDA, otherwise CPU.
 Code, library versions, packaged weights and configuration identify the pipeline.
 The standalone excludes Score's CLI/worker and heavy dependencies; its lightweight

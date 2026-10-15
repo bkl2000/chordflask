@@ -94,7 +94,7 @@ At a glance, ChordFlask lets you:
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.23.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.23/chordflask-mint22-x86_64-py3.12-v0.9.23.tar.gz)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.24.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.24/chordflask-mint22-x86_64-py3.12-v0.9.24.tar.gz)**
 
 The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is based on Ubuntu 24.04.
 
@@ -103,9 +103,9 @@ Vamp plugin binaries are not bundled; see the portable bundle guide for
 requirements.
 
 Recommended Debian-family package for this build platform:
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.23.deb](https://github.com/bkl2000/chordflask/releases/download/v0.9.23/chordflask-mint22-x86_64-py3.12-v0.9.23.deb)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.24.deb](https://github.com/bkl2000/chordflask/releases/download/v0.9.24/chordflask-mint22-x86_64-py3.12-v0.9.24.deb)**
 
-Install: `sudo apt install ./chordflask-mint22-x86_64-py3.12-v0.9.23.deb`. Remove: `sudo apt remove chordflask`.
+Install: `sudo apt install ./chordflask-mint22-x86_64-py3.12-v0.9.24.deb`. Remove: `sudo apt remove chordflask`.
 The archive remains a portable fallback needing no root or system installation.
 <!-- standalone-download:end -->
 
@@ -394,7 +394,9 @@ scripts/chordflask-score --device cpu song.mp3
 make score SCORE_ARGS="--dry-run ~/Music/Album"
 ```
 
-`make setup-score` installs the isolated Python 3.12 runtime; `make score-check`
+`make setup-score` requires Python 3.12 and installs the isolated runtime;
+see [optional Python installation with uv](docs/COMPATIBILITY.md#optional-python-312-with-uv)
+if needed. `make score-check`
 diagnoses it without inference or downloads. `make score SCORE_ARGS="..."`
 invokes the same helper; `--dry-run` previews a file or non-recursive directory
 without writing or running transcription. Use `--replace` to regenerate

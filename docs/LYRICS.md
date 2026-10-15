@@ -95,16 +95,9 @@ Lyrics V2 currently supports Python 3.10–3.13 (Python 3.12 recommended).
 Python 3.14, the default on Ubuntu 26.04, is not yet supported by this optional
 setup.
 
-Advanced users can install a compatible Python version independently, for
-example using [uv](https://docs.astral.sh/uv/), and select it with
-`CHORDFLASK_QWEN3_PYTHON`.
-
-```bash
-uv python install 3.12
-CHORDFLASK_QWEN3_PYTHON="$(uv python find 3.12)" make setup-qwen3-asr
-```
-
-ChordFlask does not install or manage additional Python interpreters.
+For a compatible interpreter, see
+[optional Python 3.12 installation with uv](COMPATIBILITY.md#optional-python-312-with-uv),
+including interpreter selection and existing runtime venvs.
 
 The default venv is `~/.venvs/chordflask-qwen3-asr`, configurable with
 `CHORDFLASK_QWEN3_VENV`. Setup defaults to Python 3.12. It installs `qwen-asr==0.0.6`
