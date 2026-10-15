@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import warnings
 
-from .notation import NoteTimeError
+from .notation import QUANTIZATION, NoteTimeError
 from .runtime import check_python, code_identity
 from .timing import BeatGrid
 
@@ -157,6 +157,7 @@ def main(argv=None):
     parser.add_argument("--rhythm", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    parser.add_argument("--quantization", choices=QUANTIZATION, default="mixed")
     args = parser.parse_args(argv)
     report = check_runtime()
     if args.check:
@@ -176,7 +177,7 @@ def main(argv=None):
         print(f"Invalid transcription data: {error}", file=sys.stderr)
         return 1
     (args.output / "notes.json").write_text(json.dumps(payload, sort_keys=True, allow_nan=False) + "\n")
-    mapping = write_notation(payload, grid, args.output / "score.musicxml")
+    mapping = write_notation(payload, grid, args.output / "score.musicxml", quantization=args.quantization)
     render(args.output / "score.musicxml", args.output, mapping)
     (args.output / "measures.json").write_text(json.dumps(mapping, sort_keys=True, allow_nan=False) + "\n")
     return 0

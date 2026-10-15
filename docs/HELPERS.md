@@ -116,10 +116,15 @@ These are kept as usable command-line tools and have smoke-test coverage.
 
   The target is an MP3/MP4 file or a non-recursive directory, preferring MP4
   over MP3 for matching basenames. Options: `--device auto|cpu|cuda` (default
-  `auto`), `--audio-source original|no-vocals` (default `original`), `--replace`,
+  `auto`), `--audio-source original|no-vocals` (default `original`),
+  `--quantization mixed|binary` (default `mixed`), `--replace`,
   and `--dry-run`. `no-vocals` uses existing current Demucs stems and never
   starts Demucs. Current generations are reused; stale ones require
   `--replace`. Dry-run reports status without writing or running transcription.
+  `mixed` uses sixteenths and eighth-note triplets; `binary` uses sixteenths
+  only, reducing unwanted tuplets but shifting genuine triplets. Use `mixed`
+  for those. Grid changes require `--replace`; old generations, original MIDI,
+  Transkun events and QM playback timing are preserved.
   Batch failures do not stop later files; exit codes are 0 for success, 1 for
   per-file failures, and 2 for invalid invocation or target.
 
@@ -128,6 +133,7 @@ These are kept as usable command-line tools and have smoke-test coverage.
   make score-check
   scripts/chordflask-analyze song.mp3
   scripts/chordflask-score --device cpu song.mp3
+  scripts/chordflask-score --quantization binary --replace song.mp3
   scripts/chordflask-score --audio-source no-vocals --replace song.mp4
   make score SCORE_ARGS="--dry-run /path/to/music"
   ```

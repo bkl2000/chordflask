@@ -102,12 +102,13 @@ def test_real_notation_measure_counts_pickup_and_clefs(tmp_path, numbers, meter,
     assert all(p.midi == 59 for n in score.parts[1].recurse().notes for p in n.pitches)
 
 
-def test_overlap_triplets_and_parsed_determinism_preserve_original(tmp_path):
+@pytest.mark.parametrize("quantization", ["mixed", "binary"])
+def test_overlap_triplets_and_parsed_determinism_preserve_original(tmp_path, quantization):
     payload = {"notes": [event(60, 0, 1), event(60, .5, 1.5), event(59, 1/6, .5)], "controllers": []}
     original = copy.deepcopy(payload)
     first, second = tmp_path / "a.xml", tmp_path / "b.xml"
-    write_notation(payload, grid(), first)
-    write_notation(payload, grid(), second)
+    write_notation(payload, grid(), first, quantization=quantization)
+    write_notation(payload, grid(), second, quantization=quantization)
     assert payload == original
     assert parsed_shape(first) == parsed_shape(second)
     from music21 import converter
@@ -116,11 +117,12 @@ def test_overlap_triplets_and_parsed_determinism_preserve_original(tmp_path):
     assert [float(n.duration.quarterLength) for n in notes] == [2, 2]
 
 
-def test_partial_final_bar_empty_hand_and_coverage(tmp_path):
+@pytest.mark.parametrize("quantization", ["mixed", "binary"])
+def test_partial_final_bar_empty_hand_and_coverage(tmp_path, quantization):
     g = grid((3, 4, 1, 2, 3, 4, 1, 2, 3), times=[i*.5+1 for i in range(9)])
     payload = {"notes": [event(60, 0, .5), event(60, .5, 2)], "controllers": []}
     path = tmp_path / "score.xml"
-    mapping = write_notation(payload, g, path)
+    mapping = write_notation(payload, g, path, quantization=quantization)
     assert mapping["notation_coverage"] == {"omitted_notes": 1, "clipped_notes": 1}
     assert [m[1] for m in parsed_shape(path)[0]] == [2, 4, 2]
     assert mapping["measures"][0]["start_seconds"] == 1
@@ -136,12 +138,37 @@ def test_tempo_marks_come_from_qm_intervals(tmp_path):
     assert [(float(mark.offset), mark.getQuarterBPM()) for mark in marks] == [(0, 120), (4, 60)]
 
 
-def test_tempo_changes_preserve_all_beat_times_without_redundant_labels(tmp_path):
+def test_display_tempo_is_rounded_without_changing_exact_timing(tmp_path):
+    from music21 import tempo
+
+    bpm = 57.421875010093686
+    g = grid(times=[i * 60 / bpm for i in range(9)])
+    payload = {"notes": [event()], "controllers": []}
+    original = copy.deepcopy(payload)
+    score, mapping = build_score(payload, g)
+    mark = score.parts[0].recurse().getElementsByClass(tempo.MetronomeMark).first()
+    assert mark.number == 57
+    assert mark.getQuarterBPM() == bpm
+    path = tmp_path / "score.xml"
+    assert write_notation(payload, g, path) == mapping
+    root = ET.parse(path).getroot()
+    assert root.findtext(".//metronome/per-minute") == "57"
+    assert float(root.find(".//sound[@tempo]").get("tempo")) == pytest.approx(bpm, rel=0, abs=1e-8)
+    assert not root.findtext("movement-title")
+    assert not root.findtext("work/work-title")
+    assert "Music21 Fragment" not in path.read_text()
+    assert mapping["rhythm"] == g.as_dict()
+    assert mapping["measures"] == g.measures()
+    assert payload == original
+
+
+@pytest.mark.parametrize("quantization", ["mixed", "binary"])
+def test_tempo_changes_preserve_all_beat_times_without_redundant_labels(tmp_path, quantization):
     import xml.etree.ElementTree as ET
     from music21 import converter
     g = grid(times=[0, .5, 1, 1.75, 2.25, 3.25, 4.25, 4.75, 5.25])
     path = tmp_path / "score.xml"
-    mapping = write_notation({"notes": [], "controllers": []}, g, path)
+    mapping = write_notation({"notes": [], "controllers": []}, g, path, quantization=quantization)
     root = ET.parse(path).getroot()
     assert len(root.findall(".//metronome")) == 1
     assert len(root.findall(".//sound[@tempo]")) == 5
@@ -268,12 +295,13 @@ def xml_note_events(path, mapping):
     [event(p, 0, 1) for p in (57, 60, 64)],  # existing overlapping staff ranges
     [event(66, 0, 1), event(65, 1, 2), event(70, 2, 3), event(71, 3, 4)],
 ])
-def test_notation_preserves_exact_grid_events_including_tied_segments(tmp_path, notes):
+@pytest.mark.parametrize("quantization", ["mixed", "binary"])
+def test_notation_preserves_exact_grid_events_including_tied_segments(tmp_path, notes, quantization):
     payload = {"notes": notes, "controllers": []}
     original = copy.deepcopy(payload)
     g = grid()
     output = tmp_path / "score.xml"
-    mapping = write_notation(payload, g, output)
+    mapping = write_notation(payload, g, output, quantization=quantization)
     # These fixtures already lie on the notation grid. Raw seconds and quarter
     # positions are different units; no raw/quantized time equality is implied.
     expected = sorted((row["pitch"], g.to_quarter(row["start"]),
@@ -341,6 +369,30 @@ def test_quantized_triplets_and_repeated_pitch_ties_keep_all_events(tmp_path):
         assert result == pytest.approx(reference, abs=1e-6)
 
 
+def test_quantization_modes_keep_attacks_with_expected_grid_and_same_mapping(tmp_path):
+    g = grid()
+    payload = {"notes": [event(60 + i, i / 6, (i + 1) / 6) for i in range(3)],
+               "controllers": [{"number": 64, "value": 127, "time": .123456789}]}
+    original = copy.deepcopy(payload)
+    results = {}
+    mappings = []
+    for mode in (None, "mixed", "binary"):
+        path = tmp_path / f"{mode}.xml"
+        kwargs = {} if mode is None else {"quantization": mode}
+        mapping = write_notation(payload, g, path, **kwargs)
+        results[mode] = xml_note_events(path, mapping)
+        mappings.append(mapping)
+        assert Counter(p for p, _, _ in results[mode]) == Counter(n["pitch"] for n in payload["notes"])
+        assert bool(ET.parse(path).findall(".//time-modification")) == (mode != "binary")
+    assert results[None] == results["mixed"]
+    assert [q for _, q, _ in results["mixed"]] == pytest.approx([0, 1/3, 2/3])
+    assert [q for _, q, _ in results["binary"]] == [0, .25, .75]
+    assert all((duration * 4).is_integer() for _, _, duration in results["binary"])
+    assert mappings[0] == mappings[1] == mappings[2]
+    assert mappings[0]["measures"] == g.measures()
+    assert payload == original
+
+
 @pytest.mark.parametrize(("sharps", "pitch"), [(1, 65), (-1, 71)])
 def test_midi_naturals_allow_key_signatures_to_add_required_accidentals(sharps, pitch):
     from music21 import key, stream
@@ -356,7 +408,8 @@ def test_midi_naturals_allow_key_signatures_to_add_required_accidentals(sharps, 
     assert item.pitch.accidental.displayStatus is True
 
 
-def test_real_verovio_preserves_polyphonic_voice_positions(tmp_path):
+@pytest.mark.parametrize("quantization", ["mixed", "binary"])
+def test_real_verovio_preserves_polyphonic_voice_positions(tmp_path, quantization):
     from chordflask_score.runtime import runtime_python
 
     python = runtime_python()
@@ -370,7 +423,7 @@ def test_real_verovio_preserves_polyphonic_voice_positions(tmp_path):
     }
     original = copy.deepcopy(payload)
     output = tmp_path / "score.xml"
-    write_notation(payload, grid(), output)
+    write_notation(payload, grid(), output, quantization=quantization)
     root = ET.parse(output).getroot()
     pitched_voices = [
         {note.findtext("voice") for note in measure.findall("note") if note.find("pitch") is not None}
@@ -410,6 +463,50 @@ print(json.dumps(sorted(positions)))
     assert payload == original
 
 
+def test_real_verovio_binary_grid_preserves_quantized_triplet_attacks(tmp_path):
+    from chordflask_score.runtime import runtime_python
+
+    python = runtime_python()
+    if not python.is_file():
+        pytest.skip("optional Score runtime is not installed")
+    payload = {"notes": [event(60, i/6, (i+1)/6) for i in range(3)]
+               + [event(48, 0, 3)], "controllers": []}
+    output = tmp_path / "score.xml"
+    mapping = write_notation(payload, grid(), output, quantization="binary")
+    map_path = tmp_path / "mapping.json"
+    map_path.write_text(json.dumps(mapping))
+    root = Path(__file__).resolve().parents[1]
+    code = """
+import json
+from pathlib import Path
+import sys
+import verovio
+from chordflask_score.worker import render
+from chordflask_score.storage import validate_mapping
+xml, output, map_path = map(Path, sys.argv[1:])
+mapping = json.loads(map_path.read_text())
+render(xml, output, mapping)
+validate_mapping(mapping)
+toolkit = verovio.toolkit()
+assert toolkit.loadFile(str(xml))
+positions = []
+for row in toolkit.renderToTimemap():
+    for identifier in row.get("on", []):
+        values = toolkit.getMIDIValuesForElement(identifier)
+        if "pitch" in values:
+            positions.append((values["pitch"], row["qstamp"]))
+print(json.dumps(sorted(positions)))
+"""
+    result = subprocess.run([str(python), "-I", "-c",
+                             f"import sys; sys.path.insert(0, {str(root)!r});\n" + code,
+                             str(output), str(tmp_path), str(map_path)],
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    # Verovio's timemap also reports the bass tie continuation at the bar line.
+    assert json.loads(result.stdout) == [[48, 0], [48, 4], [60, 0], [60, .25], [60, .75]]
+    assert (tmp_path / "page-0001.svg").is_file()
+
+
 def test_real_verovio_keeps_one_visible_tempo_label(tmp_path):
     from chordflask_score.runtime import runtime_python
 
@@ -417,7 +514,7 @@ def test_real_verovio_keeps_one_visible_tempo_label(tmp_path):
     if not python.is_file():
         pytest.skip("optional Score runtime is not installed")
     root = Path(__file__).resolve().parents[1]
-    g = grid(times=[0, .5, 1, 1.75, 2.25, 3.25, 4.25, 4.75, 5.25])
+    g = grid(times=[0, 60 / 57.421875010093686, 2, 2.75, 3.25, 4.25, 5.25, 5.75, 6.25])
     output = tmp_path / "score.xml"
     mapping = write_notation({"notes": [], "controllers": []}, g, output)
     import json
@@ -432,5 +529,10 @@ def test_real_verovio_keeps_one_visible_tempo_label(tmp_path):
     groups = [node for node in ET.parse(tmp_path / "page-0001.svg").getroot().iter()
               if "tempo" in node.get("class", "").split()]
     # Verovio retains empty tempo groups for sound-only directions; no labels.
-    assert len(groups) == 5
+    assert len(groups) == 6
     assert sum(bool("".join(group.itertext()).strip()) for group in groups) == 1
+    label = next("".join(group.itertext()).strip() for group in groups
+                 if "".join(group.itertext()).strip())
+    assert "57" in label
+    assert "57.421875" not in label
+    assert "Music21 Fragment" not in (tmp_path / "page-0001.svg").read_text()

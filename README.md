@@ -400,6 +400,13 @@ invokes the same helper; `--dry-run` previews a file or non-recursive directory
 without writing or running transcription. Use `--replace` to regenerate
 an existing score deliberately.
 
+`--quantization mixed|binary` selects the notation grid (`mixed` is the default:
+sixteenths and eighth-note triplets). `binary` uses sixteenths only and can reduce
+unwanted tuplets and rests, but shifts genuine triplets; use `mixed` for those.
+For example: `scripts/chordflask-score --quantization binary --replace song.mp3`.
+Changing the grid requires `--replace`; previous generations are retained.
+Original MIDI, Transkun events and QM playback timing remain unchanged.
+
 Open the prepared song and select **Score** on desktop. Valid prepared scores
 can be displayed in source, standalone and `.deb` players without the generation
 runtime. The notation is not reliably playable; see

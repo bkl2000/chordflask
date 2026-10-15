@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 
 from .timing import BeatGrid
 
+QUANTIZATION = {"mixed": (4, 3), "binary": (4,)}
+
 
 class NoteTimeError(ValueError):
     """A note has unusable original timing data."""
@@ -65,11 +67,15 @@ def _reuse_recent_voice(measure, capacity):
         voice.makeRests(inPlace=True, fillGaps=True, refStreamOrTimeRange=(0, capacity))
 
 
-def build_score(payload, grid: BeatGrid):
-    from music21 import chord, clef, layout, meter, note, stream, tempo
+def build_score(payload, grid: BeatGrid, *, quantization="mixed"):
+    from music21 import chord, clef, layout, metadata, meter, note, stream, tempo
 
     validate_notes(payload)
+    divisors = QUANTIZATION[quantization]
     score = stream.Score(id="score")
+    # No work title is supplied by the transcription inputs. An explicit empty
+    # movement name suppresses music21's default "Music21 Fragment" title.
+    score.metadata = metadata.Metadata(movementName="")
     hands = [stream.PartStaff(id="right"), stream.PartStaff(id="left")]
     for part, key in zip(hands, (clef.TrebleClef(), clef.BassClef()), strict=True):
         part.insert(0, key)
@@ -98,13 +104,14 @@ def build_score(payload, grid: BeatGrid):
         if bpm == previous_bpm:
             continue
         # numberSounding exports <sound tempo> without a printed <metronome>.
-        mark = tempo.MetronomeMark(number=bpm) if index == 0 else tempo.MetronomeMark(numberSounding=bpm)
+        mark = (tempo.MetronomeMark(number=round(bpm), numberSounding=bpm) if index == 0
+                else tempo.MetronomeMark(numberSounding=bpm))
         hands[0].insert(grid.first_quarter + index, mark)
         previous_bpm = bpm
 
     expected = grid.measures()
     for part in hands:
-        part.quantize((4, 3), inPlace=True, processOffsets=True, processDurations=True)
+        part.quantize(divisors, inPlace=True, processOffsets=True, processDurations=True)
         # Quantization is bounded by the observed end, avoiding an extra bar.
         for item in part.recurse().notes:
             if item.offset >= grid.last_quarter:
@@ -181,8 +188,8 @@ def build_score(payload, grid: BeatGrid):
                    "notation_coverage": {"omitted_notes": omitted, "clipped_notes": clipped}}
 
 
-def write_notation(payload, grid, destination: Path):
-    score, mapping = build_score(payload, grid)
+def write_notation(payload, grid, destination: Path, *, quantization="mixed"):
+    score, mapping = build_score(payload, grid, quantization=quantization)
     score.write("musicxml", fp=destination, makeNotation=False)
     validate_musicxml(destination.read_bytes(), len(mapping["measures"]))
     return mapping

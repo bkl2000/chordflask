@@ -36,8 +36,18 @@ Tempo directions retain every changed interval exactly, omitting repeated equal
 values. Only the initial metronome label is printed; later changes use music21's
 sound-only tempo marks, avoiding per-beat labels without changing timing.
 
-music21 quantizes to sixteenths and eighth-note triplets, combines equal-onset,
-equal-duration notes into chords, assigns other overlapping notes to voices,
+`--quantization mixed|binary` selects music21's notation quantization:
+`mixed` (default) retains the existing divisors `(4, 3)`, allowing sixteenths
+and eighth-note triplets; `binary` uses `(4,)`, allowing sixteenths only.
+The option applies to derived offsets and durations, using the same existing
+quantization algorithm. There is no automatic grid detection or additional
+duration correction. Binary can reduce unwanted tuplets/rests and avoid known
+tuplet-rendering problems, but shifts genuine triplets onto the binary grid;
+use `mixed` for those. QM beat units, measure grouping, tempo and playback
+mapping, original MIDI and Transkun events remain unchanged.
+
+music21 combines equal-onset, equal-duration notes into chords,
+assigns other overlapping notes to voices,
 fills rests and builds/ties measures. Rest-only extra voices are removed per
 measure and music21 flattens single remaining voices. MIDI pitches <60 go to
 the left hand with bass clef; >=60 to the right hand with treble clef. This is
@@ -81,6 +91,7 @@ make setup-score
 make score-check
 scripts/chordflask-score --dry-run /path/to/music
 scripts/chordflask-score --device cpu /path/to/song.mp3
+scripts/chordflask-score --quantization binary --replace /path/to/song.mp3
 scripts/chordflask-score --audio-source no-vocals --replace /path/to/song.mp4
 make score SCORE_ARGS="--dry-run /path/to/music"
 ```
@@ -112,6 +123,12 @@ The portable `scripts/chordflask-score` launcher and `make score` still require
 the command installed in the Score venv, even for dry-run.
 Replacement requires `--replace`. Batch failures do not stop later
 files; exit 1 reports processing/classification failures, exit 2 invalid invocation.
+The selected quantization divisors are stored in the pipeline identity and
+fingerprint. CURRENT/STALE compares them with the requested mode (including
+dry-run); changing modes requires explicit `--replace`. Existing generations
+are never migrated or overwritten and remain readable under the display/export
+contract below. Replacement follows the normal generation workflow, including
+transcription; the option does not introduce a re-engraving command.
 Requested/used devices and CUDA availability remain provenance; changing the
 device selection alone does not invalidate an otherwise CURRENT generation.
 
@@ -156,8 +173,8 @@ installed external `chordflask-score` helper. Capability checking runs
 `chordflask_score.worker --check` in that runtime's isolated interpreter,
 with the existing 60-second capability cache. Generation uses original audio,
 auto device selection, and explicit replacement of stale output. Advanced
-no-vocals/device choices remain CLI options. A valid prepared score is readable
-without the helper. After a source upgrade, rerun `make setup` to refresh the
+no-vocals/device/quantization choices remain CLI options. A valid prepared score
+is readable without the helper. After a source upgrade, rerun `make setup` to refresh the
 installed package discovery, including the lightweight Score modules.
 
 `GET /score?media=…` returns generation, page count and stored measure intervals.

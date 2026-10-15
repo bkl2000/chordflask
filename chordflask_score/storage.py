@@ -14,7 +14,7 @@ from chordflask_demucs.audio import hash_file, probe_source_timeline
 from chordflask_demucs.constants import AUDIO_SET_ID
 from chordflask_demucs.storage import classify as classify_stems, safe_media_key
 
-from .notation import validate_musicxml, validate_notes
+from .notation import QUANTIZATION, validate_musicxml, validate_notes
 from .runtime import code_identity
 from .svg import validate_svg
 from .timing import BeatGrid, digest
@@ -166,7 +166,7 @@ class ScoreStatus:
     reason: str
 
 
-def classify(media, *, audio_source="original", device="auto", runtime=None):
+def classify(media, *, audio_source="original", device="auto", runtime=None, quantization="mixed"):
     try:
         inputs = input_snapshot(media, audio_source)
         root = score_root(media)
@@ -186,7 +186,7 @@ def classify(media, *, audio_source="original", device="auto", runtime=None):
             return ScoreStatus("STALE", "source, QM rhythm or audio stems changed")
         if pipeline["code"] != code_identity():
             return ScoreStatus("STALE", "Score code changed")
-        if pipeline.get("quantization") != [4, 3] or pipeline.get("hand_split") != 60:
+        if pipeline.get("quantization") != list(QUANTIZATION[quantization]) or pipeline.get("hand_split") != 60:
             return ScoreStatus("STALE", "Score notation settings changed")
         if runtime is not None and {k: v for k, v in pipeline["runtime"].items() if k != "cuda"} != {
                 k: v for k, v in runtime.items() if k != "cuda"}:

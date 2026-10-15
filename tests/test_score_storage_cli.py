@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 import shutil
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -268,6 +269,87 @@ def test_cli_replacement_required(song, staged, monkeypatch):
     song.write_bytes(b"source changed")
     monkeypatch.setattr(cli, "require_runtime", lambda: pytest.fail("stale processing without replacement"))
     assert cli.main([str(song)]) == 1
+
+
+def test_quantization_switch_requires_replacement_and_retains_generations(song, staged, monkeypatch, capsys):
+    manifest = finish(song, staged, monkeypatch)
+    mixed = storage.read_json(manifest)
+    directory = manifest.parent / mixed["generation"]
+    original = {p.name: p.read_bytes() for p in directory.iterdir()}
+    monkeypatch.setattr(cli, "require_runtime", lambda: pytest.fail("unexpected runtime probe"))
+    assert cli.main([str(song), "--quantization", "binary", "--dry-run"]) == 0
+    assert "STALE" in capsys.readouterr().out
+    assert cli.main([str(song), "--quantization", "binary"]) == 1
+    assert "--replace" in capsys.readouterr().err
+    assert storage.read_json(manifest) == mixed
+    with pytest.raises(ValueError, match="--replace"):
+        cli.process_one(song, audio_source="original", device="auto", replace=False,
+                        runtime={"cuda": False}, quantization="binary")
+
+    binary_pipeline = pipeline() | {"quantization": [4]}
+    replacement = manifest.parent / ".binary"
+    shutil.copytree(directory, replacement)
+    storage.publish(song, replacement, mixed["inputs"], binary_pipeline)
+    binary = storage.read_json(manifest)
+    assert binary["generation"] != mixed["generation"]
+    assert binary["pipeline_fingerprint"] != mixed["pipeline_fingerprint"]
+    assert storage.classify(song, quantization="binary").label == "CURRENT"
+    assert storage.classify(song).label == "STALE"
+    assert storage.classify(song, quantization="mixed").label == "STALE"
+    assert cli.main([str(song), "--quantization", "binary", "--dry-run"]) == 0
+    assert "CURRENT" in capsys.readouterr().out
+    monkeypatch.setattr(cli, "execute", lambda *args: pytest.fail("CURRENT reran inference"))
+    assert cli.process_one(song, audio_source="original", device="auto", replace=False,
+                           runtime={"cuda": False}, quantization="binary") is None
+
+    # Identical publication reuses the immutable generation, including its files.
+    binary_dir = manifest.parent / binary["generation"]
+    before = {p.name: (p.stat().st_ino, p.read_bytes()) for p in binary_dir.iterdir()}
+    retry = manifest.parent / ".retry"
+    shutil.copytree(binary_dir, retry)
+    storage.publish(song, retry, mixed["inputs"], binary_pipeline)
+    assert storage.read_json(manifest) == binary
+    assert {p.name: (p.stat().st_ino, p.read_bytes()) for p in binary_dir.iterdir()} == before
+    assert {p.name: p.read_bytes() for p in directory.iterdir()} == original
+
+
+@pytest.mark.parametrize("mode", [None, "mixed", "binary"])
+def test_cli_quantization_reaches_worker_notation_and_manifest(song, staged, monkeypatch, mode):
+    from chordflask.score import read_score, read_score_midi
+    from chordflask_score import worker
+
+    midi = (staged / "original.mid").read_bytes()
+    payload = {"notes": [{"pitch": 60 + i, "velocity": 80, "start": i/6, "end": (i+1)/6}
+                         for i in range(3)], "controllers": []}
+    original = copy.deepcopy(payload)
+    monkeypatch.setattr(cli, "require_runtime", lambda: {"cuda": False})
+    monkeypatch.setattr(cli, "prepare_audio", lambda *args: None)
+    monkeypatch.setattr(storage, "probe_source_timeline", lambda _: {"available": False})
+    monkeypatch.setattr(worker, "check_runtime", lambda: {"cuda": False})
+
+    def transcribe(audio, destination, device):
+        destination.write_bytes(midi)
+        return payload
+
+    def render(xml, output, mapping):
+        for row in mapping["measures"]:
+            row.update({"page": 1, "svg_id": f'right-measure-{row["number"]}'})
+        shutil.copyfile(staged / "page-0001.svg", output / "page-0001.svg")
+
+    monkeypatch.setattr(worker, "transcribe", transcribe)
+    monkeypatch.setattr(worker, "render", render)
+    monkeypatch.setattr(cli, "execute", lambda arguments: worker.main(arguments))
+    arguments = [] if mode is None else ["--quantization", mode]
+    assert cli.main([str(song), *arguments]) == 0
+    manifest = storage.read_json(storage.score_root(song) / "manifest.json")
+    assert manifest["pipeline"]["quantization"] == ([4] if mode == "binary" else [4, 3])
+    directory = storage.score_root(song) / manifest["generation"]
+    assert bool(ET.parse(directory / "score.musicxml").findall(".//time-modification")) == (mode != "binary")
+    assert (directory / "original.mid").read_bytes() == midi
+    assert storage.read_json(directory / "notes.json") == original == payload
+    assert storage.classify(song, quantization=mode or "mixed").label == "CURRENT"
+    assert read_score(song)[1]["generation"] == manifest["generation"]
+    assert read_score_midi(song) == midi
 
 
 def test_missing_no_vocals_stems_have_actionable_error(song):
