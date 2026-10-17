@@ -39,8 +39,9 @@ def _cached_capability(name: str, probe) -> dict:
         if cached and now - cached["at"] < CAPABILITY_TTL_SECONDS:
             return dict(cached["value"])
     value = probe()
-    with _capability_lock:
-        _capability_cache[name] = {"at": time.monotonic(), "value": value}
+    if value["available"] is not None:
+        with _capability_lock:
+            _capability_cache[name] = {"at": time.monotonic(), "value": value}
     return dict(value)
 
 
@@ -48,11 +49,16 @@ def _unavailable(reason: str) -> dict:
     return {"available": False, "cuda": False, "reason": reason}
 
 
-def lyrics_capability() -> dict:
-    """Verify source snapshots; frozen builds retain external-helper detection."""
+def lyrics_capability(*, check_runtime=True) -> dict:
+    """Verify source snapshots; frozen builds retain external-helper detection.
+
+    With check_runtime=False, only resolve the helper; None means not checked.
+    """
     command = lyrics_command()
     if command is None:
         return _unavailable("The external Lyrics runtime is not installed")
+    if not check_runtime:
+        return {"available": None, "cuda": False, "reason": "helper found; runtime not verified"}
     if getattr(sys, "frozen", False):
         return {"available": True, "cuda": False, "reason": ""}
     try:
@@ -149,11 +155,14 @@ def score_command() -> Path | None:
     return helper if helper.is_file() and os.access(helper, os.X_OK) else None
 
 
-def score_capability() -> dict:
+def score_capability(*, check_runtime=True) -> dict:
+    """Reuse a fresh result or probe; False defers subprocesses (available=None)."""
     def probe():
         helper = score_command()
         if helper is None:
             return _unavailable("The external Score runtime is not installed. Run make setup-score")
+        if not check_runtime:
+            return {"available": None, "cuda": False, "reason": "runtime probe deferred"}
         from chordflask_demucs.runtime import clean_environment
 
         try:

@@ -199,6 +199,7 @@ class FlaskMP4App:
         self.max_lines = 23  # Limit to the last 23 lines of callback output
         self.analysis_queue = AnalysisQueue()
         self.worker_supervisor = None
+        self.worker_enabled = True
         self.stem_preparation = StemPreparationManager()
         self.lyrics_preparation = BackgroundPreparationManager(
             capability_probe=lyrics_capability,
@@ -444,10 +445,57 @@ class FlaskMP4App:
         if self.__quiet:
             return
 
+        ffmpeg_available = True
         try:
             require_system_ffmpeg()
         except RuntimeError:
+            ffmpeg_available = False
             print("WARNING: ffmpeg not found — sudo apt install ffmpeg")
+
+        self._print_startup_capabilities(ffmpeg_available=ffmpeg_available)
+
+    def _print_startup_capabilities(self, *, ffmpeg_available):
+        """Describe startup support without launching optional runtime probes."""
+        from .analysis_worker import AnalysisWorker
+        from .startup_capabilities import runtime_status
+
+        def row(label, status):
+            print(f"  {label:<28} {status}")
+
+        worker_running = AnalysisWorker.is_running(self.analysis_queue)
+        if worker_running:
+            worker = "running"
+        elif not self.worker_enabled:
+            worker = "disabled (--no-worker)"
+        elif self.worker_supervisor and self.worker_supervisor.child_running():
+            worker = "starting"
+        else:
+            worker = "not running"
+        if worker_running and not self.worker_enabled:
+            worker += " (external; automatic start disabled)"
+
+        print("\nCapabilities:")
+        row("Playback", "supported (MP3, MP4, WebM; browser codecs)")
+        analysis = "available"
+        if not self.plugins_available:
+            analysis = "unavailable (required Vamp plugins missing)"
+        elif not ffmpeg_available:
+            analysis = "unavailable (FFmpeg missing)"
+        row("Chordino / QM analysis", analysis)
+        row("Analysis worker", worker)
+        row("Chord exports", "available (Markdown, PDF, ChordPro, MIDI)")
+        print()
+        row("Lyrics display", "supported (.cho, .v2.cho)")
+        row("Lyrics V1 generation", runtime_status("lyrics"))
+        row("Lyrics V2 / Qwen generation", runtime_status("qwen"))
+        row("BTC chords", runtime_status("btc"))
+        row("Demucs stem generation", runtime_status("demucs"))
+        row("Existing stem playback", "supported")
+        row("Piano Score display", "supported (experimental)")
+        row("Piano Score generation", runtime_status("score"))
+        print("\nPrepare is available on desktop (>=1024 px); smaller layouts hide controls.")
+        print("Existing generated data can be displayed without its producer runtime.")
+        print("Runtime probes are deferred to use; this overview is a startup snapshot.")
 
     def app_base_dir(self):
         if self.is_frozen():
@@ -1957,6 +2005,7 @@ def main(argv=None):
         raise SystemExit(AnalysisWorker(queue=flask_app.analysis_queue).run_forever())
 
     supervisor = None
+    flask_app.worker_enabled = not args.no_worker
     if not args.no_worker:
         from .analysis_worker import WorkerSupervisor
         supervisor = WorkerSupervisor(flask_app.analysis_queue)

@@ -52,17 +52,21 @@ def _probe_capability_uncached() -> dict:
     }
 
 
-def probe_capability(*, force: bool = False) -> dict:
+def probe_capability(*, force: bool = False, check_runtime: bool = True) -> dict:
     """Return the cached runtime/CUDA capability report.
 
     Only one probe runs at a time; concurrent callers wait and then reuse the
     freshly cached result instead of launching a second runtime probe.
+    check_runtime=False never waits for a probe and returns available=None
+    without caching that unknown result when no fresh report exists.
     """
     now = time.monotonic()
     with _capability_lock:
         cached = _capability_cache["value"]
         if not force and cached is not None and now - _capability_cache["at"] < CAPABILITY_TTL_SECONDS:
             return dict(cached)
+    if not check_runtime:
+        return {"available": None, "cuda": False, "reason": "runtime probe deferred"}
     with _probe_lock:
         with _capability_lock:
             cached = _capability_cache["value"]
@@ -79,9 +83,9 @@ def probe_capability(*, force: bool = False) -> dict:
         return dict(value)
 
 
-def gui_capability() -> dict:
+def gui_capability(*, check_runtime: bool = True) -> dict:
     """PREPARE needs a usable external runtime; CUDA is informational."""
-    capability = probe_capability()
+    capability = probe_capability(check_runtime=check_runtime)
     return {
         "available": capability["available"],
         "cuda": capability["cuda"],

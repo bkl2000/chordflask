@@ -190,6 +190,14 @@ scripts/chordflask
 Open <http://localhost:5000>. The setup uses `~/.venvs/chordflask`; you do not need to
 activate that environment for normal use. Stop the server with `Ctrl+C`.
 
+The server prints a compact capability overview at startup. `supported` describes
+built-in playback/display support; optional runtimes are `available` only with
+a valid cached capability result. Cheap file checks distinguish
+`installed (not verified)` from `not installed`; `not checked` means installation files
+could not be inspected reliably. Full runtime probes remain deferred to use,
+so startup does not wait for ML runtimes. Existing lyrics, stems, and scores can be used
+without their producer runtimes; Prepare controls appear only on desktop (>=1024 px).
+
 ## First use
 
 1. Select **Roots**, then open a directory containing MP3, MP4, or WebM files.
