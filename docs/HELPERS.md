@@ -11,6 +11,13 @@ These are kept as usable command-line tools and have smoke-test coverage.
 - `analyze_cli.py` - the `chordflask-analyze` command. Chordino is the default
   built-in analyzer and runs in-process through the canonical
   `AnalysisWorker`/`ChordAnalyzer` path. Wrapper: `scripts/chordflask-analyze`.
+  DEB and portable bundles use their own `chordflask-analyze` launcher with
+  the bundled executable; core analysis needs no external ChordFlask venv.
+  Use `chordflask-analyze /path/to/song.mp4 --replace` after DEB installation,
+  or `./chordflask-analyze /path/to/song.mp4 --replace` in the extracted archive.
+  System FFmpeg and separately installed Chordino/QM Vamp plugins are still
+  required for new analysis. No user-provided wrapper or manual environment
+  settings are needed. See [standalone installation](STANDALONE.md).
 
   ```bash
   scripts/chordflask-analyze /path/to/collection
@@ -154,6 +161,15 @@ These are kept as usable command-line tools and have smoke-test coverage.
   code should use `chordflask-export` rather than running this module directly.
 
 ### Portable launchers
+
+The bundled `chordflask-analyze` launcher is the core-runtime exception.
+The supplied `chordflask-export`, `chordflask-maintain`, and
+`chordflask-demucs` launchers require a source-installed ChordFlask environment;
+Demucs inference also needs its external Demucs runtime. Lyrics generation
+uses an installed Lyrics CLI (source environment or separate Lyrics runtime),
+and Score generation uses its separate Score runtime. Installing the DEB or
+extracting the archive does not install these optional environments. Existing
+analysis remains displayable without them.
 
 After a source setup, repository launchers can be copied or symlinked into a
 directory on `PATH`:

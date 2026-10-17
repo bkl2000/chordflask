@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -229,6 +230,11 @@ def test_completed_score_becoming_invalid_can_be_prepared_again(display, song, d
     body = {'dirname': str(song.parent), 'filename': song.name}
     assert client.post('/prepare_score', json=body).status_code == 202
     _wait_status(client, '/score_preparation_status', 'ready')
+    # HTTP readiness can precede completion of the background runner.
+    deadline = time.monotonic() + 5
+    while app.score_preparation.status(song)['state'] != 'ready':
+        assert time.monotonic() < deadline, 'Score background preparation did not reach ready'
+        time.sleep(0.01)
     if damage == 'missing':
         path.unlink()
     else:

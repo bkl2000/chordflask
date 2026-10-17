@@ -3,8 +3,41 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("args,code", [(["--help"], 0), (["--dry-run", "missing"], 2)])
+def test_runtime_analyze_dispatch_uses_real_cli(tmp_path, monkeypatch, capsys, args, code):
+    from chordflask.app import main
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    with pytest.raises(SystemExit) as caught:
+        main(["--analyze", *args])
+    assert caught.value.code == code
+    output = capsys.readouterr()
+    if code == 0:
+        assert "usage: chordflask-analyze" in output.out
+    else:
+        assert "not a file or directory" in output.err
+
+
+def test_runtime_analyze_dispatch_reaches_builtin_executor(tmp_path, monkeypatch, capsys):
+    from chordflask.app import main
+
+    media = tmp_path / "song.mp3"
+    media.write_bytes(b"media")
+    calls = []
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr("chordflask.canonical_analysis.analyze_media",
+                        lambda media, **kwargs: calls.append(media))
+    with pytest.raises(SystemExit) as caught:
+        main(["--analyze", str(media)])
+    assert caught.value.code == 0
+    assert calls == [media]
+    assert "analyzed:   1" in capsys.readouterr().out
 
 
 def _install_fake_build_info(monkeypatch, build_version):

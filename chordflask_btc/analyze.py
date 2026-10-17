@@ -36,10 +36,18 @@ def require_btc_runtime_user() -> int:
     print("ERROR: the optional BTC runtime is not installed or is incomplete.", file=sys.stderr)
     for item in state["missing"]:
         print(f"  missing: {item}", file=sys.stderr)
-    print("Check it with:", file=sys.stderr)
-    print("  make btc-check", file=sys.stderr)
-    print("Install it with:", file=sys.stderr)
-    print("  make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1", file=sys.stderr)
+    if getattr(sys, "frozen", False):
+        print(
+            "BTC requires a separately installed external BTC runtime. "
+            "Set CHORDFLASK_BTC_VENV (and CHORDFLASK_BTC_DIR for custom model storage) "
+            "to that installation. See the optional BTC setup in the README.",
+            file=sys.stderr,
+        )
+    else:
+        print("Check it with:", file=sys.stderr)
+        print("  make btc-check", file=sys.stderr)
+        print("Install it with:", file=sys.stderr)
+        print("  make setup-btc BTC_ACKNOWLEDGE_WEIGHTS=1", file=sys.stderr)
     print("Chordino remains available:", file=sys.stderr)
     print("  chordflask-analyze --analyzer chordino TARGET", file=sys.stderr)
     return 2

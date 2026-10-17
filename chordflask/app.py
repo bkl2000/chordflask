@@ -1917,6 +1917,11 @@ def main(argv=None):
     import multiprocessing
     multiprocessing.freeze_support()
 
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["--analyze"]:
+        from .helpers.analyze_cli import main as analyze_main
+        return analyze_main(argv[1:])
+
     args = _parse_cli_args(argv)
 
     if args.debug:

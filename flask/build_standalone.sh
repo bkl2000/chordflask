@@ -84,6 +84,7 @@ pyinstaller \
     --paths "${PROJECT_ROOT}" \
     --paths "${BUILD_INFO_DIR}" \
     --hidden-import=chordflask_build_info \
+    --hidden-import=chordflask.helpers.analyze_cli \
     --hidden-import=numba \
     --hidden-import=numba.core \
     --hidden-import=numba.core.types \
@@ -106,6 +107,7 @@ pyinstaller \
     --exclude-module=onnxruntime \
     --exclude-module=tltk \
     --exclude-module=chordflask.helpers.chordleadsheet_batch \
+    --add-data "${PROJECT_ROOT}/chordflask/ffmpeg-system.sh:chordflask" \
     --add-data "${PROJECT_ROOT}/chordflask/static:chordflask/static" \
     --add-data "${PROJECT_ROOT}/chordflask/templates:chordflask/templates" \
     --add-data "${PROJECT_ROOT}/chordflask/assets:chordflask/assets" \
@@ -143,6 +145,8 @@ for helper in $(grep '^chordflask-' "${SCRIPT_DIR}/standalone-files.txt"); do
     [[ -x "${PROJECT_ROOT}/scripts/$helper" ]] || { echo "Missing standalone helper: $helper" >&2; exit 1; }
     cp "${PROJECT_ROOT}/scripts/$helper" "${RELEASE_DIR}/"
 done
+# Core analysis uses the frozen runtime; the source launcher remains venv-based.
+cp "${SCRIPT_DIR}/chordflask-analyze" "${RELEASE_DIR}/chordflask-analyze"
 cp "${PROJECT_ROOT}/THIRD_PARTY_NOTICES.md" "${RELEASE_DIR}/"
 cp "${PROJECT_ROOT}/chordflask/assets/fonts/LICENSE.txt" "${RELEASE_DIR}/LIBERATION-FONTS-LICENSE.txt"
 printf '%s\n' "$BUILD_VERSION" > "${RELEASE_DIR}/VERSION"

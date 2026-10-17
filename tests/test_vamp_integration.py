@@ -218,6 +218,8 @@ def test_vamp_runtime_portable_hint_uses_executable_bundle_path(monkeypatch, tmp
 
     message = str(caught.value)
     assert shlex.quote(str(installer)) in message
+    assert f"{shlex.quote(str(executable))} --check-vamp" in message
+    assert "Restart ChordFlask" in message
     assert os.access(installer, os.X_OK)
     assert "make plugins" not in message
     assert "/opt/chordflask/install_vamp.sh" not in message
@@ -236,6 +238,9 @@ def test_vamp_runtime_debian_hint_resolves_system_command(monkeypatch):
 
     message = str(caught.value)
     assert "/opt/chordflask/install_vamp.sh" in message
+    assert "Install:\n  /opt/chordflask/install_vamp.sh" in message
+    assert "Verify:\n  chordflask --check-vamp" in message
+    assert "Restart ChordFlask" in message
     assert "make plugins" not in message
 
 

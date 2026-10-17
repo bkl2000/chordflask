@@ -28,7 +28,7 @@ playback has additional browser limits documented in
 
 The setup script (`scripts/setup_venv.sh`) uses `dpkg-query` on Debian-family
 systems to check individual package names. It never reads `/etc/os-release` or
-`VERSION_ID`, so a future Ubuntu 26.04, Mint 23, or Debian 14 is accepted as
+`VERSION_ID`, so releases such as Ubuntu 26.04, Mint 23, or Debian 14 are accepted as
 long as its apt archive provides the same package names (`python3-venv`,
 `ffmpeg`, `vamp-plugin-sdk`, etc.). The non-Debian fallback path checks
 commands and file presence (`command -v`, `pkg-config --exists`, `Python.h`)
@@ -176,6 +176,13 @@ that the `moov atom not found` error pattern and basic audio conversion work
 with the system `ffmpeg`. The standalone build is checked to exclude any
 `imageio_ffmpeg.binaries`.
 
+In frozen Linux runs, FFmpeg is selected before MoviePy is imported. An
+internal launcher restores the host library search path for the external
+FFmpeg child process, avoiding conflicts with PyInstaller's bundled libraries.
+Users do not need to supply a wrapper or set FFmpeg environment variables.
+The Debian package depends on system FFmpeg; the portable archive requires it
+to be installed separately.
+
 ## External Vamp Plugins
 
 ChordFlask requires two Vamp plugin identifiers at runtime:
@@ -223,6 +230,19 @@ newer distribution to an older one can therefore fail before ChordFlask starts.
 Build on the oldest supported target family when one artifact must cover
 several compatible systems. Installation, feature differences, and diagnostic
 steps are in [STANDALONE.md](STANDALONE.md).
+
+Practical target test reported by the maintainer on 17 October 2026: a DEB
+built on Linux Mint 22 with Python 3.12 worked on a separate Lubuntu / Ubuntu
+26.04.1 LTS x86_64 system. Installation used `sudo apt install ./<release-package>.deb`
+and explicit `/opt/chordflask/install_vamp.sh` plugin installation. The normal
+`chordflask-analyze ... --replace` call succeeded without a source installation,
+development venv, user-provided wrapper or manual environment settings. MP4
+conversion, Chordino/QM and JSON/MIDI/MusicXML output succeeded; GUI analysis
+worked after a full process restart. Earlier GUI-worker attempts reported
+`type object 'tqdm' has no attribute '_lock'`; its cause is unproven and this
+test does not establish a separate permanent fix for it. This single target
+test does not establish compatibility with arbitrary distributions or replace
+acceptance of the final release artifacts.
 
 ## Audio Dependencies
 

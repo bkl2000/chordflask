@@ -117,14 +117,16 @@ def _validation_target(target: Path) -> Path:
 
 def _print_chordino_guidance(hints: set[str], target: Path) -> None:
     if "invalid_analysis" in hints:
-        directory = shlex.quote(str(_validation_target(target)))
-        print("Validate the existing analysis with:", file=sys.stderr)
-        print(f"  chordflask-maintain validate {directory}", file=sys.stderr)
+        if getattr(sys, "frozen", False):
+            print("Rebuild invalid analysis (preserving the corrupt JSON) with:", file=sys.stderr)
+            print(f"  chordflask-analyze {shlex.quote(str(target))}", file=sys.stderr)
+        else:
+            directory = shlex.quote(str(_validation_target(target)))
+            print("Validate the existing analysis with:", file=sys.stderr)
+            print(f"  chordflask-maintain validate {directory}", file=sys.stderr)
     if "vamp" in hints:
-        print("Check the installation with:", file=sys.stderr)
-        print("  chordflask-maintain doctor", file=sys.stderr)
-        print("Install the required plugins from a source checkout with:", file=sys.stderr)
-        print("  make plugins", file=sys.stderr)
+        from ..vamp_runtime import vamp_installation_hint
+        print(vamp_installation_hint(), file=sys.stderr)
 
 
 def _chordino_failure_hint(error: Exception) -> str | None:

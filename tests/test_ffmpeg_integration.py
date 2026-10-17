@@ -1,6 +1,11 @@
 import os
+import shlex
+import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +64,157 @@ def test_imageio_ffmpeg_exe_set_at_startup(monkeypatch):
     assert os.environ["IMAGEIO_FFMPEG_EXE"] == subprocess.run(
         ["which", "ffmpeg"], capture_output=True, text=True
     ).stdout.strip() or os.environ["IMAGEIO_FFMPEG_EXE"]
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+@pytest.mark.parametrize("original", [None, "", "/host/lib"])
+def test_ffmpeg_child_environment_preserves_python_runtime(monkeypatch, tmp_path, frozen, original):
+    from chordflask.ffmpeg_runtime import require_system_ffmpeg
+
+    probe = tmp_path / "ffmpeg"
+    probe.write_text(
+        '#!/usr/bin/env bash\n'
+        'printf "%s\\n" "${LD_LIBRARY_PATH-unset}" "$PWD" "$@"\n'
+        'exit 7\n'
+    )
+    probe.chmod(0o755)
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/bundle/lib:/host/lib")
+    monkeypatch.delenv("LD_LIBRARY_PATH_ORIG", raising=False)
+    if original is not None:
+        monkeypatch.setenv("LD_LIBRARY_PATH_ORIG", original)
+    for name in ("IMAGEIO_FFMPEG_EXE", "FFMPEG_BINARY", "CHORDFLASK_SYSTEM_FFMPEG"):
+        monkeypatch.delenv(name, raising=False)
+
+    command = require_system_ffmpeg()
+    result = subprocess.run(
+        [command, "file with spaces.mp4", "$(literal);argument"],
+        cwd=tmp_path, capture_output=True, text=True,
+    )
+
+    expected = (original or "unset") if frozen else "/bundle/lib:/host/lib"
+    assert result.stdout.splitlines() == [
+        expected, str(tmp_path), "file with spaces.mp4", "$(literal);argument",
+    ]
+    assert result.returncode == 7
+    assert os.environ["LD_LIBRARY_PATH"] == "/bundle/lib:/host/lib"
+    assert os.environ.get("LD_LIBRARY_PATH_ORIG") == original
+    assert os.environ["IMAGEIO_FFMPEG_EXE"] == command
+    assert os.environ["FFMPEG_BINARY"] == command
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+def test_system_ffmpeg_is_required_even_with_imageio_override(monkeypatch, tmp_path, frozen):
+    from chordflask.ffmpeg_runtime import require_system_ffmpeg
+
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv("IMAGEIO_FFMPEG_EXE", "/wheel/ffmpeg")
+
+    with pytest.raises(RuntimeError, match="sudo apt install ffmpeg"):
+        require_system_ffmpeg()
+
+
+@pytest.mark.parametrize("entrypoint", ["cli", "worker"])
+def test_frozen_analysis_configures_moviepy_before_import_and_cleans_ffmpeg(
+    tmp_path, entrypoint,
+):
+    """Real MoviePy conversion; acoustic analysis/export are stubbed in a fresh interpreter.
+
+    This simulates frozen state and the missing wheel resource, not a built ELF.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    media = tmp_path / "song with spaces.mp4"
+    subprocess.run(
+        [ffmpeg, "-y", "-f", "lavfi", "-i", "color=size=16x16:duration=0.2",
+         "-f", "lavfi", "-i", "sine=frequency=440:duration=0.2",
+         "-c:v", "mpeg4", "-c:a", "aac", str(media)],
+        check=True, capture_output=True,
+    )
+    # Probe every actual FFmpeg child, including MoviePy's reader and writer.
+    probe_dir = tmp_path / "bin"
+    probe_dir.mkdir()
+    probe = probe_dir / "ffmpeg"
+    probe.write_text(
+        '#!/usr/bin/env bash\nset -euo pipefail\n'
+        'printf "%s\\n" "${LD_LIBRARY_PATH-unset}" >> "$FFMPEG_PROBE_LOG"\n'
+        f'exec {shlex.quote(ffmpeg)} "$@"\n'
+    )
+    probe.chmod(0o755)
+    log = tmp_path / "ffmpeg.log"
+    script = r'''
+import importlib.abc
+import os
+from pathlib import Path
+import sys
+
+class NoBundledFFmpeg(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "imageio_ffmpeg.binaries":
+            raise ModuleNotFoundError(fullname)
+
+sys.meta_path.insert(0, NoBundledFFmpeg())
+import chordflask.app as app
+from chordflask.audio_analyzer import AudioAnalyzer
+from chordflask.chord_exporter import ChordExporter
+from chordflask import vamp_runtime
+from chordflask_base import ChordData, ChordTrackRepository
+from chordflask.filerepr import FileRepr
+
+assert "moviepy" not in sys.modules
+sys.frozen = True
+vamp_runtime.require_vamp_plugins = lambda: None
+def analyze(self, path, **kwargs):
+    assert Path(path).stat().st_size > 100
+    data = ChordData()
+    data.set_chord_track("chordino", [{"timestamp": 0.0, "chord": "C"}])
+    data.set_rhythm_track("qm_barbeattracker", bpm=120, meter_signature=4,
+                         beat_times=[0.0, 0.5], beat_numbers=[1, 2])
+    return data
+AudioAnalyzer.analyze = analyze
+ChordExporter.write_midi_and_musicxml = lambda *args: None
+media = Path(sys.argv[2])
+if sys.argv[1] == "cli":
+    try:
+        app.main(["--analyze", str(media)])
+    except SystemExit as error:
+        assert error.code == 0
+else:
+    from chordflask.analysis_queue import AnalysisQueue
+    from chordflask.analysis_worker import AnalysisWorker
+    queue = AnalysisQueue(media.parent / "queue")
+    queue.enqueue(str(media))
+    assert AnalysisWorker(queue=queue).run_once()
+    assert not queue.peek()
+file_repr = FileRepr(str(media))
+data = ChordTrackRepository().load(file_repr.get("json"))
+assert data.available_chord_track_ids == ["chordino"]
+assert Path(file_repr.get("mp3")).stat().st_size > 100
+from imageio_ffmpeg import get_ffmpeg_exe
+from moviepy.config import FFMPEG_BINARY
+assert get_ffmpeg_exe() == FFMPEG_BINARY == os.environ["IMAGEIO_FFMPEG_EXE"]
+assert os.environ["LD_LIBRARY_PATH"] == "/fake-pyinstaller/lib"
+'''
+    env = os.environ.copy()
+    for name in ("IMAGEIO_FFMPEG_EXE", "FFMPEG_BINARY", "CHORDFLASK_SYSTEM_FFMPEG",
+                 "LD_LIBRARY_PATH_ORIG"):
+        env.pop(name, None)
+    env.update(
+        PATH=str(probe_dir) + os.pathsep + env["PATH"],
+        LD_LIBRARY_PATH="/fake-pyinstaller/lib",
+        FFMPEG_PROBE_LOG=str(log),
+        CHORDFLASK_QUEUE_DIR=str(tmp_path / "queue"),
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, entrypoint, str(media)],
+        cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    paths = log.read_text().splitlines()
+    assert len(paths) >= 3
+    assert set(paths) == {"unset"}
 
 
 def test_chordflask_startup_fails_without_ffmpeg(monkeypatch):
@@ -189,6 +345,13 @@ def test_build_script_excludes_embedded_ffmpeg():
     assert "pyi-archive_viewer -l" in content
     assert "prohibited FFmpeg or Vamp executable" in content
     assert "sudo apt install ffmpeg" in content
+    assert '--add-data "${PROJECT_ROOT}/chordflask/ffmpeg-system.sh:chordflask"' in content
+    assert os.access(REPO_ROOT / "chordflask" / "ffmpeg-system.sh", os.X_OK)
+
+    import tomllib
+
+    package_data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    assert "ffmpeg-system.sh" in package_data["tool"]["setuptools"]["package-data"]["chordflask"]
 
 
 def test_build_script_excludes_batch_helper_but_keeps_shared_formatter():

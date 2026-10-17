@@ -438,7 +438,61 @@ def test_chordino_vamp_failure_has_one_canonical_hint_for_batch(
     assert exc.value.code == 1
     err = capsys.readouterr().err
     assert err.count("make plugins") == 1
-    assert err.count("chordflask-maintain doctor") == 1
+    assert err.count("chordflask --check-vamp") == 1
+    assert "chordflask-maintain doctor" not in err
+
+
+def test_real_builtin_path_reports_deb_plugins_before_conversion(tmp_path, monkeypatch, capsys):
+    media = tmp_path / "song.mp4"
+    media.write_bytes(b"not decoded")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/opt/chordflask/chordflask")
+    monkeypatch.setattr("vamp.list_plugins", lambda: [])
+    monkeypatch.setattr("chordflask.media_converter.MediaConverter.ensure_mp3",
+                        lambda *args: pytest.fail("conversion started without plugins"))
+    with pytest.raises(SystemExit) as caught:
+        analyze_cli.main([str(media)])
+    assert caught.value.code == 1
+    error = capsys.readouterr().err
+    assert "Chord analysis is unavailable: required Vamp plugins are missing." in error
+    assert "/opt/chordflask/install_vamp.sh" in error
+    assert "chordflask --check-vamp" in error
+    assert "make plugins" not in error
+    assert "make setup" not in error
+    assert "chordflask-maintain doctor" not in error
+
+
+def test_frozen_invalid_analysis_guidance_uses_bundled_command(tmp_path, monkeypatch, capsys):
+    from chordflask_base import analysis_json_path
+
+    media = tmp_path / "song.mp3"
+    media.touch()
+    path = analysis_json_path(media)
+    path.parent.mkdir()
+    path.write_text("{broken")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    with pytest.raises(SystemExit) as caught:
+        analyze_cli.main(["--dry-run", str(media)])
+    assert caught.value.code == 0
+    error = capsys.readouterr().err
+    assert f"chordflask-analyze {media}" in error
+    assert "chordflask-maintain" not in error
+    assert path.read_text() == "{broken"
+
+
+def test_frozen_btc_missing_runtime_does_not_require_core_source_install(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr("chordflask_btc.analyze.detect_btc_runtime",
+                        lambda: {"complete": False, "missing": ["external BTC wrapper"]})
+    media = tmp_path / "song.mp3"
+    media.touch()
+    with pytest.raises(SystemExit) as caught:
+        analyze_cli.main(["--analyzer", "btc", str(media)])
+    assert caught.value.code == 2
+    error = capsys.readouterr().err
+    assert "CHORDFLASK_BTC_VENV" in error
+    assert "make setup" not in error
+    assert "--analyzer chordino" in error
 
 
 def test_chordino_invalid_target_exits_two(monkeypatch, capsys, tmp_path):

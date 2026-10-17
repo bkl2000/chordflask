@@ -714,6 +714,104 @@ def test_analysis_queue_status_reports_stopped_and_running_worker(tmp_path):
     assert running["worker"] == {"running": True, "managed": False}
 
 
+@pytest.mark.parametrize("missing_plugins", [True, False])
+def test_worker_error_remains_visible_in_selected_song_status(tmp_path, monkeypatch, missing_plugins):
+    import json
+    import shutil
+    from chordflask.vamp_runtime import REQUIRED_PLUGINS
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required for the queue error display regression")
+    wrapper, client = make_client()
+    media = tmp_path / "broken.mp4"
+    media.write_bytes(b"not decoded")
+    queue = AnalysisQueue(tmp_path / "queue")
+    queue.enqueue(media)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/opt/chordflask/chordflask")
+    monkeypatch.setattr("vamp.list_plugins", lambda: [] if missing_plugins else list(REQUIRED_PLUGINS))
+    conversion_calls = []
+
+    def fail_conversion(self, file_repr):
+        conversion_calls.append(file_repr.get())
+        raise RuntimeError('Cannot decode media: <img src=x onerror="unsafe()">')
+
+    monkeypatch.setattr("chordflask.media_converter.MediaConverter.ensure_mp3", fail_conversion)
+    assert AnalysisWorker(queue=queue).run_once()
+    # Read back persisted errors, as on reload after the transient notice expired.
+    wrapper.analysis_queue = AnalysisQueue(queue.queue_dir)
+    payload = client.get("/analysis_queue_status").get_json()
+    error = payload["failed"][0]["error"]
+    if missing_plugins:
+        assert conversion_calls == []
+        assert "Chord analysis is unavailable: required Vamp plugins are missing." in error
+        assert "/opt/chordflask/install_vamp.sh" in error
+        assert "chordflask --check-vamp" in error
+        assert "make plugins" not in error
+    else:
+        assert len(conversion_calls) == 1
+        assert "Cannot decode media" in error
+        assert "Vamp" not in error
+    assert not (tmp_path / ".chordflask/broken.json").exists()
+    assert not list((tmp_path / ".chordflask").glob(".broken.analyze-*"))
+
+    body = client.get("/").get_data(as_text=True)
+    functions = "\n".join(javascript_function(body, name) for name in (
+        "renderAnalysisQueueStatus", "renderAnalysisError", "showQueueStatus",
+        "resumeAfterAnalysis", "pathBasename", "mediaPath",
+    ))
+    harness = """
+const assert = require('node:assert/strict');
+const payload = JSON.parse(process.argv[1]);
+const path = payload.failed[0].path;
+let currentDirectory = path.slice(0, path.lastIndexOf('/'));
+let selectedFileName = 'broken.mp4';
+let loadedFileName = 'previous.mp3', loadedMediaPath = currentDirectory + '/previous.mp3';
+let pendingAnalysisLoad = { path, filename: selectedFileName, reason: 'manual' };
+let loadRequestInFlight = false, reanalysisQueuedPath = null;
+let knownFailureKeys = new Set(), previousQueuePaths = new Set(), queuedAnalysisPaths = new Set();
+let queueStatusInitialized = false, failureNotice = null, completedQueueNotice = null;
+let failedAnalysisItems = [], currentDirectories = [], currentFiles = [];
+const queueStatus = {};
+const notice = { textContent: '', hidden: true };
+Object.defineProperty(notice, 'innerHTML', { set() { throw Error('Unsafe HTML rendering'); } });
+const document = { getElementById: id => { assert.equal(id, 'analysisError'); return notice; } };
+const fileStatus = {};
+function updateReanalyzeButton() {}
+function updateEditControls() {}
+function renderBrowserTable() {}
+function updateNavigationButtons() {}
+renderAnalysisQueueStatus(payload);
+assert.equal(pendingAnalysisLoad, null);
+assert.equal(selectedFileName, 'broken.mp4');
+assert.equal(notice.hidden, false);
+assert.ok(notice.textContent.includes(payload.failed[0].error));
+assert.ok(notice.textContent.includes('click the song in the file browser to retry'));
+assert.ok(notice.textContent.includes('Prepare → Reanalyze'));
+const originalText = notice.textContent;
+Date.now = () => 9e12;
+renderAnalysisQueueStatus(payload);
+assert.equal(notice.textContent, originalText);
+selectedFileName = 'other.mp3';
+pendingAnalysisLoad = { path, dirname: currentDirectory, filename: 'broken.mp4', reason: 'manual' };
+renderAnalysisError();
+assert.equal(notice.hidden, true);
+pendingAnalysisLoad = null;
+selectedFileName = 'broken.mp4';
+renderAnalysisError();
+assert.equal(notice.textContent, originalText);
+renderAnalysisQueueStatus({ pending: [{ path, status: 'pending' }], failed: [] });
+assert.equal(notice.hidden, true);
+assert.equal(notice.textContent, '');
+"""
+    result = subprocess.run(
+        [node, "-e", functions + harness, json.dumps(payload)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_index_contains_accessible_file_sorting_controls():
     _, client = make_client()
 
@@ -1670,6 +1768,23 @@ def test_ready_media_without_song_sidecar_reports_unavailable(tmp_path):
     assert response.status_code == 200
     assert response.get_json()["status"] == "ready"
     assert response.get_json()["song_view_available"] is False
+
+
+def test_existing_analysis_and_song_sheet_work_without_vamp(tmp_path, monkeypatch):
+    wrapper, client = make_client()
+    monkeypatch.setattr("vamp.list_plugins", lambda: [])
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/opt/chordflask/chordflask")
+    wrapper.setup_vamp_plugins()
+    assert wrapper.plugins_available is False
+    (tmp_path / "song.cho").write_text("{title: Existing song}\n[C]Still playable\n", encoding="utf-8")
+    media, response = load_ready_media(client, tmp_path)
+    assert response.get_json()["status"] == "ready"
+    assert response.get_json()["song_view_available"] is True
+    assert client.get("/get_song_sheet").status_code == 200
+    assert client.post("/set_position", json={"position": 0}).status_code == 200
+    assert client.get("/video").data == media.read_bytes()
+    assert wrapper.analysis_queue.status() == {"pending": [], "failed": []}
 
 
 def test_song_sidecar_requires_lowercase_cho_regular_file(tmp_path):

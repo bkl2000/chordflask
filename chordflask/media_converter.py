@@ -2,9 +2,15 @@ import os
 import tempfile
 from pathlib import Path
 
-from moviepy.video.io.VideoFileClip import VideoFileClip
-
 from .ffmpeg_runtime import require_system_ffmpeg
+
+
+def VideoFileClip(path):
+    # MoviePy resolves ImageIO's executable at import time. Keep that import
+    # behind ensure_mp3's configuration for both direct CLI and worker analysis.
+    from moviepy.video.io.VideoFileClip import VideoFileClip as clip
+
+    return clip(path)
 
 
 class MediaConverter:

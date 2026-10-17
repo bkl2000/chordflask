@@ -94,7 +94,7 @@ At a glance, ChordFlask lets you:
 A prebuilt Linux x86_64 bundle is available for users who do not want to
 build ChordFlask themselves:
 
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.24.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.24/chordflask-mint22-x86_64-py3.12-v0.9.24.tar.gz)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.25.tar.gz](https://github.com/bkl2000/chordflask/releases/download/v0.9.25/chordflask-mint22-x86_64-py3.12-v0.9.25.tar.gz)**
 
 The Mint 22 build is also suitable for Ubuntu 24.04, since Linux Mint 22 is based on Ubuntu 24.04.
 
@@ -103,9 +103,9 @@ Vamp plugin binaries are not bundled; see the portable bundle guide for
 requirements.
 
 Recommended Debian-family package for this build platform:
-**[Download chordflask-mint22-x86_64-py3.12-v0.9.24.deb](https://github.com/bkl2000/chordflask/releases/download/v0.9.24/chordflask-mint22-x86_64-py3.12-v0.9.24.deb)**
+**[Download chordflask-mint22-x86_64-py3.12-v0.9.25.deb](https://github.com/bkl2000/chordflask/releases/download/v0.9.25/chordflask-mint22-x86_64-py3.12-v0.9.25.deb)**
 
-Install: `sudo apt install ./chordflask-mint22-x86_64-py3.12-v0.9.24.deb`. Remove: `sudo apt remove chordflask`.
+Install: `sudo apt install ./chordflask-mint22-x86_64-py3.12-v0.9.25.deb`. Remove: `sudo apt remove chordflask`.
 The archive remains a portable fallback needing no root or system installation.
 <!-- standalone-download:end -->
 
@@ -118,8 +118,8 @@ excluded features, and glibc compatibility.
 
 ### Debian / Ubuntu / Mint package
 
-For future releases, the recommended download on compatible Debian-family
-systems, matching the standalone build platform, is
+The recommended download on compatible Debian-family systems, matching the
+standalone build platform, is
 `chordflask-<platform>-x86_64-py<X.Y>-v<VERSION>.deb` from the
 [release assets](https://github.com/bkl2000/chordflask/releases). It installs the
 same standalone runtime and helper scripts. Replace `<release-package>` with
@@ -135,9 +135,12 @@ chordflask
 The bundled scripts are under `/opt/chordflask/`; Vamp plugins are installed
 separately as shown above. See the [Vamp documentation](docs/VAMP.md) for details.
 Remove with `sudo apt remove chordflask`. The build's Linux/glibc compatibility
-requirements still apply. The package installs the standalone player; its
-separate helper launcher files still require a source-installed ChordFlask
-virtual environment. See the [bundle guide](docs/STANDALONE.md).
+requirements still apply. FFmpeg is a package dependency. Browser playback and
+the core `chordflask-analyze` command use the bundled runtime without a source
+checkout or ChordFlask virtual environment. New Chordino/QM analysis requires
+the plugins installed above; existing analyses and `.cho` files remain usable
+without them. Other helper launchers still require their documented external
+environments. See the [bundle guide](docs/STANDALONE.md).
 
 ### Portable standalone archive
 
@@ -157,9 +160,11 @@ Open <http://localhost:5000>. Stop the server with `Ctrl+C`. FFmpeg must be
 installed on the host; the complete procedure is in
 [docs/STANDALONE.md](docs/STANDALONE.md).
 
-Like the Debian package, the archive runs the player and its browser workflows.
-The separate `chordflask-*` CLI helpers require a source installation; launcher
-files included with the bundle do not install their Python commands.
+Like the Debian package, the archive runs the player and core Chordino/QM CLI
+analysis with its bundled runtime: `./chordflask-analyze /path/to/song.mp4 --replace`.
+No development venv, user-provided wrapper, or manually set environment
+variables are needed. Other CLI helpers still require their documented source
+installation or external runtimes; see [CLI helpers](docs/HELPERS.md).
 
 ### From source
 
@@ -455,9 +460,13 @@ Options, track selection, naming, and storage locations are documented in
 The `chordflask` player is available in each installation (the archive uses
 `./chordflask.sh`). Most separate `chordflask-*` helpers are installed by the
 source setup; in a checkout, use the matching `scripts/chordflask-*` launchers.
-The standalone archive and `.deb` provide the player and browser workflows,
-but their helper launcher files cannot run without a separate source-installed
-ChordFlask virtual environment.
+The standalone archive and `.deb` also provide core `chordflask-analyze` through
+the bundled runtime, without a source installation. Use `./chordflask-analyze`
+in the extracted archive or `chordflask-analyze` after DEB installation.
+`chordflask-export`, `chordflask-maintain`, and the Demucs CLI launcher still
+need a source-installed ChordFlask environment; optional producers additionally
+need their respective external runtimes. Browser display of existing analyses
+does not require those optional runtimes.
 
 The portable `scripts/chordflask-score` launcher uses the separate runtime
 installed by `make setup-score`. Copy or symlink it to a directory on `PATH`
@@ -595,6 +604,10 @@ network. `--roots` limits which media directories the server exposes.
 
 ### General diagnosis
 
+For DEB and standalone analysis prerequisites, use `chordflask --check-vamp`
+(or `./chordflask --check-vamp` in the portable directory).
+For a source installation's complete core dependency check:
+
 ```bash
 chordflask-maintain doctor
 ```
@@ -623,6 +636,13 @@ From an unpacked standalone bundle:
 ```bash
 ./install_vamp.sh
 ```
+
+For a DEB installation, run `/opt/chordflask/install_vamp.sh` as your normal
+user. Verify with `chordflask --check-vamp` (portable: `./chordflask --check-vamp`).
+Restart the running application after installation, then click the song in the
+file browser to retry; for existing analysis use **Prepare → Reanalyze**.
+The CLI can simply be run again. Analysis errors for the selected song remain
+visible until retried or another song is selected.
 
 ### Port 5000 is already in use
 

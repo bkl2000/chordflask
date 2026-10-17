@@ -106,6 +106,7 @@ def run_playback():
       let fetch;
       const loads = [];
       function renderDirectoryRow() {}
+      function renderAnalysisError() {} // Error display is covered in test_flask_app.py.
       function updateSortHeaders() {}
       function updateBatchButton() {}
       function updateCurrentPath() {}

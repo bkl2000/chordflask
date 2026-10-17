@@ -232,6 +232,14 @@
       display: none;
     }
 
+    #analysisError {
+      padding: 6px 12px;
+      color: #d8b45e;
+      font-size: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
     .prepare-toolbar-status {
       display: none;
       color: #7fc4ff;
@@ -2482,6 +2490,7 @@
               </span>
             </span>
           </div>
+          <div id="analysisError" role="status" hidden></div>
           <div class="stem-toggles" id="stemTogglesRow" hidden>
             <span class="stem-label">Stems</span>
             <span class="stem-chip stem-on" id="stemVocalsChip">
@@ -2884,6 +2893,7 @@
     let completedQueueNotice = null;
     let knownFailureKeys = new Set();
     let failureNotice = null;
+    let failedAnalysisItems = [];
     let sortKey = 'name';
     let sortDirection = 'asc';
     const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -3721,6 +3731,20 @@
       queueStatus.title = detail;
     }
 
+    function renderAnalysisError() {
+      const waiting = pendingAnalysisLoad;
+      const path = selectedFileName
+        ? (waiting?.filename === selectedFileName && waiting.dirname === currentDirectory
+          ? waiting.path : mediaPath(currentDirectory, selectedFileName))
+        : loadedMediaPath;
+      const failure = failedAnalysisItems.find(item => item.path === path);
+      const notice = document.getElementById('analysisError');
+      notice.textContent = failure
+        ? `Analysis failed: ${pathBasename(failure.path)}\n${failure.error || 'No error details were recorded.'}\n\nAfter fixing the problem, click the song in the file browser to retry. For an existing analysis, use Prepare → Reanalyze.`
+        : '';
+      notice.hidden = !failure;
+    }
+
     function updateReanalyzeButton() {
       const hasCurrentAnalysis = Boolean(loadedMediaPath) && loadedAnalysisValid;
       reanalyzeButton.hidden = !hasCurrentAnalysis;
@@ -3885,7 +3909,7 @@
           setContinue(false);
         } else {
           pendingAnalysisLoad = null;
-          selectedFileName = loadedFileName;
+          selectedFileName = waiting.filename;
           renderBrowserTable(currentDirectories, currentFiles);
         }
         fileStatus.innerText = `Analysis failed: ${waiting.filename}`;
@@ -3908,6 +3932,7 @@
     function renderAnalysisQueueStatus(payload) {
       const pending = payload.pending || [];
       const failed = payload.failed || [];
+      failedAnalysisItems = failed;
       const currentPaths = new Set(pending.map(item => item.path));
       const failedPaths = new Set(failed.map(item => item.path));
       const failureKey = item => `${item.job_id || item.path}:${item.failed_at || ''}`;
@@ -3955,6 +3980,7 @@
       updateReanalyzeButton();
       updateEditControls();
       resumeAfterAnalysis(currentPaths, failed);
+      renderAnalysisError();
 
       const processing = pending.find(item => item.status === 'processing');
       const waitingCount = pending.filter(item => item.status !== 'processing').length;
@@ -4235,6 +4261,7 @@
     }
 
     function renderBrowserTable(directories, files) {
+      renderAnalysisError();
       fileTableBody.innerHTML = '';
       if (currentDirectory) {
         renderDirectoryRow('.', currentDirectory, 'Reload current directory');

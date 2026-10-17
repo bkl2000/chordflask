@@ -16,11 +16,12 @@ REQUIRED_PLUGINS = {
 DEBIAN_INSTALLER = Path("/opt/chordflask/install_vamp.sh")
 
 
-def _install_hint():
+def vamp_installation_hint():
     if not getattr(sys, "frozen", False):
         return (
-            "From a ChordFlask source checkout, install the required Vamp plugins with: "
-            "make plugins"
+            "Install from a ChordFlask source checkout:\n  make plugins\n\n"
+            "Verify:\n  chordflask --check-vamp\n\n"
+            "Restart ChordFlask after installation, then retry the analysis."
         )
 
     executable = Path(os.path.realpath(sys.executable))
@@ -29,7 +30,12 @@ def _install_hint():
         if executable.parent == DEBIAN_INSTALLER.parent
         else executable.with_name("install_vamp.sh")
     )
-    return "Install the required Vamp plugins with: {}".format(shlex.quote(str(installer)))
+    verify = "chordflask" if installer == DEBIAN_INSTALLER else shlex.quote(str(executable))
+    return (
+        f"Install:\n  {shlex.quote(str(installer))}\n\n"
+        f"Verify:\n  {verify} --check-vamp\n\n"
+        "Restart ChordFlask after installation, then retry the analysis."
+    )
 
 
 def require_vamp_plugins():
@@ -43,12 +49,13 @@ def require_vamp_plugins():
     missing = sorted(REQUIRED_PLUGINS - available)
     if missing:
         vamp_path = os.environ.get("VAMP_PATH", "")
-        hint = _install_hint()
+        hint = vamp_installation_hint()
         if vamp_path:
             hint += " (current VAMP_PATH={})".format(vamp_path)
         raise RuntimeError(
-            "Required Vamp plugins not found: {}. {}".format(
-                ", ".join(missing), hint,
+            "Chord analysis is unavailable: required Vamp plugins are missing.\n\n"
+            "{}\n\nRequired Vamp plugins not found: {}".format(
+                hint, ", ".join(missing),
             )
         )
     return list(available)

@@ -65,6 +65,7 @@ On a compatible Debian / Ubuntu / Mint machine:
 ```bash
 sudo apt install ./<release-package>.deb
 /opt/chordflask/install_vamp.sh
+chordflask --check-vamp
 chordflask
 ```
 
@@ -72,6 +73,21 @@ Remove with `sudo apt remove chordflask`. The complete bundle lives in
 `/opt/chordflask`; commands are linked into `/usr/bin`. The package has the same
 glibc constraints and external Vamp requirement as the archive. It does not
 install the optional helper virtual environments.
+
+FFmpeg is installed as a package dependency. The core Chordino/QM analyzer uses
+the bundled runtime; no source checkout or ChordFlask virtual environment is
+needed. Vamp plugins are neither bundled nor installed automatically by apt;
+run the installer above explicitly as your normal user:
+
+```bash
+chordflask-analyze --help
+chordflask-analyze --dry-run /path/to/music
+chordflask-analyze /path/to/song.mp3
+```
+
+The dry run needs no plugins. Actual new analysis requires the separately
+installed Vamp plugins. Existing analyses and `.cho` files can still be used
+without plugins.
 
 ## Install the portable archive on the target machine
 
@@ -84,6 +100,7 @@ sudo apt install --no-install-recommends ffmpeg curl
 tar -xzf chordflask-debian13-x86_64-py3.12-vX.Y.Z.tar.gz
 cd chordflask-debian13-x86_64-py3.12-vX.Y.Z
 ./install_vamp.sh
+./chordflask --check-vamp
 ./chordflask --version
 ./chordflask.sh
 ```
@@ -101,6 +118,18 @@ control as the source run. Its default batch size is 50 (configurable from 1 to
 `install_vamp.sh` requires no root access. It downloads checksum-pinned
 Chordino and QM plugin archives, installs them into `~/.vamp`, and verifies both
 plugin identifiers using the bundled ChordFlask runtime.
+
+Use `./chordflask-analyze --help`, `./chordflask-analyze --dry-run /path/to/music`
+or `./chordflask-analyze /path/to/song.mp3` for core batch analysis. Like the
+DEB command, this uses the sibling frozen runtime and preserves your working
+directory. Explicit `CHORDFLASK_PYTHON`, `CHORDFLASK_VENV` or legacy
+`CHORDIFIER_VENV` settings select an external installation instead; unset them
+to use the bundle.
+
+The normal CLI and GUI conversion paths use system FFmpeg automatically,
+including in the frozen runtime. No user-provided FFmpeg wrapper or manually
+set environment variables are required. The runtime isolates external FFmpeg
+from conflicting bundled library paths.
 
 For a different user-writable plugin directory:
 
@@ -141,6 +170,7 @@ before exposing it beyond localhost.
 | --- | --- | --- |
 | Browser playback, Chordino/QM analysis, batch queue, editing, export download | Included | Included |
 | Python runtime | External project venv | Bundled in executable |
+| Core `chordflask-analyze` CLI | Installed in project venv | Uses bundled executable |
 | FFmpeg | System installation | System installation |
 | Vamp plugins | Installed separately with `make plugins` | Installed separately with `install_vamp.sh` |
 | Display existing `.cho` / `.v2.cho` Lyrics | Included | Included |
@@ -148,7 +178,8 @@ before exposing it beyond localhost.
 | Display romanization already stored in `.cho` | Included | Included |
 | BTC model runtime and generation | Optional external BTC venv | Lightweight connector bundled; model runtime remains external |
 | Demucs runtime/model | Optional external Demucs venv | Not bundled; an existing compatible external runtime can serve desktop Prepare |
-| Maintenance and separate helper commands | Installed console commands | Supplied launcher scripts require a source-installed ChordFlask virtual environment |
+| `chordflask-export`, `chordflask-maintain`, Demucs CLI launcher | Installed console commands | Require a source-installed ChordFlask virtual environment; Demucs inference also needs its external runtime |
+| Score generation | Optional external Score runtime | Not bundled; usable external runtime required |
 
 The standalone can use previously generated analysis and `.cho` data that
 travel with the media collection. It can also prepare Lyrics or BTC when their
@@ -236,6 +267,17 @@ runtime. ChordFlask intentionally does not ship their binaries. The pinned
 plugin installer and diagnostic procedure are documented in
 [VAMP.md](VAMP.md).
 
+On 17 October 2026, a DEB built on Linux Mint 22 with Python 3.12 was
+successfully tested on a separate Lubuntu / Ubuntu 26.04.1 LTS x86_64 machine.
+After apt installation and explicit Vamp plugin installation, the normal
+`chordflask-analyze` command converted an MP4, ran Chordino/QM, and produced
+JSON, MIDI and MusicXML without a source installation, development venv,
+user-provided wrapper or manual environment settings (`analyzed: 1`,
+`failed: 0`). GUI analysis also succeeded after a full process restart.
+This is one tested installation, not a guarantee for arbitrary distributions
+or proof that every transient worker error has been fixed. See the
+[compatibility record](COMPATIBILITY.md#pyinstaller-standalone).
+
 ## Files in the archive
 
 - `chordflask` — application executable
@@ -245,14 +287,19 @@ plugin installer and diagnostic procedure are documented in
 - `README.md` — this guide
 - `THIRD_PARTY_NOTICES.md` — dependency licences and provenance
 - `LICENSE` and `LIBERATION-FONTS-LICENSE.txt` — application and bundled font licenses
-- `chordflask-analyze`, `chordflask-demucs`, `chordflask-export`,
+- `chordflask-analyze` — core Chordino/QM batch CLI using the bundled runtime;
+  BTC and V3 remain optional external analyzers.
+- `chordflask-demucs`, `chordflask-export`,
   `chordflask-maintain`, `chordflask-genlyrics` — the existing helper scripts;
   these are not commands implemented by the standalone executable. They select
   a configured/default external virtual environment, preserve the caller's
   directory and arguments, and report a missing installation explicitly.
-  Running them requires a ChordFlask source installation (`make setup`, with
-  the relevant optional runtime setup where needed). Copying or installing the
-  scripts does not install ChordFlask or bundle any external runtime.
+  Export, maintenance and the Demucs CLI launcher require a ChordFlask source
+  installation (`make setup`); Demucs inference also needs its external runtime.
+  Lyrics can use the source-installed CLI or the separate Lyrics runtime
+  (`make setup-lyrics`), invoked directly or selected with `CHORDFLASK_VENV`.
+  Copying or installing the scripts does not install their Python commands or
+  any external runtime.
 
 The standalone reads and displays same-stem lowercase `.cho` song sheets in
 the Lyrics view, including chord-follow synchronization. It does not include
@@ -268,11 +315,19 @@ remains Grid-only.
 - **`ffmpeg` is missing:** install it with `sudo apt install ffmpeg`, verify
   `ffmpeg -version`, and start the launcher again.
 - **Chord or beat analysis reports missing Vamp plugins:** rerun
-  `./install_vamp.sh`. Use `./chordflask --check-vamp` to verify the two plugin
-  identifiers without starting the web UI.
+  `./install_vamp.sh` (DEB: `/opt/chordflask/install_vamp.sh`) as your normal
+  user. Use `./chordflask --check-vamp` (DEB: `chordflask --check-vamp`) to verify
+  the two plugin identifiers without starting the web UI. Restart the running
+  application, then click the song in the file browser to retry, or use
+  **Prepare → Reanalyze** for an existing analysis. The CLI can simply be run
+  again. The selected song's error stays visible until retry or selection change.
 - **The installer cannot download a plugin:** check network access and rerun.
   The installer tries its pinned sources and refuses an archive whose checksums
   do not match; do not bypass that failure with an unverified binary.
+- **Analysis fails for another reason:** the selected song's GUI error shows
+  the recorded failure details and retry instructions. Check the terminal or
+  CLI output as well. After correcting the cause, retry the song; existing
+  analyses remain available independently of optional generation runtimes.
 - **`GLIBC_* not found`:** the build host was newer than the target. Follow
   [Compatibility and glibc](#compatibility-and-glibc).
 - **The browser cannot connect:** confirm the terminal still shows a running

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Package/portable launcher. Resolve /usr/bin symlinks to the bundle, not a checkout.
+if [[ -n "${CHORDFLASK_PYTHON:-}" ]]; then
+    if [[ ! -x "$CHORDFLASK_PYTHON" ]]; then
+        echo "Configured ChordFlask Python interpreter not found: ${CHORDFLASK_PYTHON}" >&2
+        exit 1
+    fi
+    exec "$CHORDFLASK_PYTHON" -m chordflask.helpers.analyze_cli "$@"
+fi
+
+if [[ -n "${CHORDFLASK_VENV:-${CHORDIFIER_VENV:-}}" ]]; then
+    analyzer="${CHORDFLASK_VENV:-${CHORDIFIER_VENV}}/bin/chordflask-analyze"
+    if [[ ! -x "$analyzer" ]]; then
+        echo "Configured ChordFlask analyzer not found: ${analyzer}" >&2
+        echo "Unset CHORDFLASK_VENV and CHORDIFIER_VENV to use the bundled analyzer." >&2
+        exit 1
+    fi
+    exec "$analyzer" "$@"
+fi
+
+bundle_dir="$(dirname "$(readlink -f "$0")")"
+if [[ ! -x "${bundle_dir}/chordflask" ]]; then
+    echo "Bundled ChordFlask runtime missing: ${bundle_dir}/chordflask" >&2
+    echo "Reinstall the package or extract the complete standalone archive." >&2
+    exit 1
+fi
+exec "${bundle_dir}/chordflask" --analyze "$@"

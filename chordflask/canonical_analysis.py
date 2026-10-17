@@ -156,6 +156,8 @@ def analyze_media(media_path, *, force=False, discard_edits=False, analyzer_cls=
     def run(staged):
         factory = analyzer_cls
         if factory is None:
+            from .vamp_runtime import require_vamp_plugins
+            require_vamp_plugins()
             from .chordanalyzer import ChordAnalyzer
             factory = ChordAnalyzer
         analyzer = factory(str(staged.get()), staged.datapath)

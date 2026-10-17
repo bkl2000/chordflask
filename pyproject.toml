@@ -45,6 +45,7 @@ dependencies = {file = ["requirements-core.txt"]}
 [tool.setuptools.package-data]
 chordflask_btc = ["model/BTC-LICENSE.txt"]
 chordflask = [
+    "ffmpeg-system.sh",
     "templates/*.html",
     "static/*.js",
     "assets/fonts/*.ttf",
